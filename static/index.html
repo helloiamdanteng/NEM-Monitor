@@ -1,0 +1,794 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>NEM Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e2d45;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --accent3: #7cfc3c;
+    --text: #e2e8f0;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+    --red: #ff4757;
+    --green: #2ed573;
+    --yellow: #ffd32a;
+    --qld: #f39c12;
+    --nsw: #3498db;
+    --vic: #9b59b6;
+    --sa:  #e74c3c;
+    --tas: #1abc9c;
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overscroll-behavior: none;
+  }
+
+  /* Header */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,14,26,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 10px; }
+
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .pulse-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  .pulse-dot.loading { background: var(--yellow); }
+  .pulse-dot.error { background: var(--red); animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .last-updated {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .refresh-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .refresh-btn:active { background: var(--surface2); }
+
+  /* Main layout */
+  .main { padding: 12px 12px 80px; max-width: 600px; margin: 0 auto; }
+
+  /* Section titles */
+  .section-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 20px 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Price cards */
+  .price-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+
+  .price-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 6px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s;
+  }
+  .price-card:active { transform: scale(0.97); }
+  .price-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .price-card.qld::before { background: var(--qld); }
+  .price-card.nsw::before { background: var(--nsw); }
+  .price-card.vic::before { background: var(--vic); }
+  .price-card.sa::before  { background: var(--sa); }
+  .price-card.tas::before { background: var(--tas); }
+
+  .price-card .region {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .price-card.qld .region { color: var(--qld); }
+  .price-card.nsw .region { color: var(--nsw); }
+  .price-card.vic .region { color: var(--vic); }
+  .price-card.sa  .region { color: var(--sa); }
+  .price-card.tas .region { color: var(--tas); }
+
+  .price-card .price {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .price-card .price.negative { color: var(--green); }
+  .price-card .price.low      { color: var(--text); }
+  .price-card .price.medium   { color: var(--yellow); }
+  .price-card .price.high     { color: var(--accent2); }
+  .price-card .price.vhigh    { color: var(--red); }
+
+  .price-card .unit {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Demand grid */
+  .demand-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+
+  .demand-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+  .demand-card .region {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .demand-card .value {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .demand-card .unit {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Chart cards */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+
+  .chart-card .chart-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    letter-spacing: 0.05em;
+  }
+
+  .chart-container { position: relative; height: 180px; }
+  .chart-container.tall { height: 220px; }
+
+  /* Interconnectors */
+  .ic-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .ic-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ic-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 120px;
+  }
+
+  .ic-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    margin: 0 12px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .ic-bar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .ic-bar.positive { background: var(--accent); left: 50%; }
+  .ic-bar.negative { background: var(--accent2); right: 50%; }
+
+  .ic-midpoint {
+    position: absolute;
+    top: -3px; left: 50%;
+    width: 2px; height: 12px;
+    background: var(--border);
+    transform: translateX(-50%);
+  }
+
+  .ic-value {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 65px;
+    text-align: right;
+  }
+  .ic-value.positive { color: var(--accent); }
+  .ic-value.negative { color: var(--accent2); }
+
+  /* Loading / error states */
+  .state-msg {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .state-msg .icon { font-size: 36px; margin-bottom: 12px; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(10,14,26,0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    z-index: 100;
+  }
+
+  .nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 12px;
+    border-radius: 8px;
+    transition: all 0.2s;
+    color: var(--text-muted);
+  }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn .icon { font-size: 20px; }
+  .nav-btn .label { font-size: 10px; font-family: var(--font-mono); letter-spacing: 0.05em; }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Skeleton loader */
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 6px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Scrollable table */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
+  th {
+    text-align: left;
+    padding: 6px 10px;
+    color: var(--text-muted);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(30,45,69,0.5);
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-left">
+    <div class="logo">⚡ NEM</div>
+    <div class="pulse-dot loading" id="statusDot"></div>
+  </div>
+  <div class="last-updated" id="lastUpdated">Loading…</div>
+  <button class="refresh-btn" onclick="fetchData()">↻</button>
+</header>
+
+<main class="main" id="mainContent">
+  <div class="state-msg">
+    <div class="icon">⚡</div>
+    <div>Fetching NEM data…</div>
+  </div>
+</main>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" onclick="showPanel('prices')" id="nav-prices">
+    <span class="icon">💲</span><span class="label">Prices</span>
+  </button>
+  <button class="nav-btn" onclick="showPanel('generation')" id="nav-generation">
+    <span class="icon">⚡</span><span class="label">Gen</span>
+  </button>
+  <button class="nav-btn" onclick="showPanel('demand')" id="nav-demand">
+    <span class="icon">📊</span><span class="label">Demand</span>
+  </button>
+  <button class="nav-btn" onclick="showPanel('interconnectors')" id="nav-interconnectors">
+    <span class="icon">🔗</span><span class="label">Links</span>
+  </button>
+</nav>
+
+<script>
+const REGIONS = ['QLD1','NSW1','VIC1','SA1','TAS1'];
+const REGION_SHORT = { QLD1:'QLD', NSW1:'NSW', VIC1:'VIC', SA1:'SA', TAS1:'TAS' };
+const REGION_CLASS = { QLD1:'qld', NSW1:'nsw', VIC1:'vic', SA1:'sa', TAS1:'tas' };
+const REGION_COLORS = {
+  QLD1: '#f39c12', NSW1: '#3498db', VIC1: '#9b59b6', SA1: '#e74c3c', TAS1: '#1abc9c'
+};
+
+let currentPanel = 'prices';
+let charts = {};
+let latestData = null;
+
+function priceClass(rrp) {
+  if (rrp < 0)    return 'negative';
+  if (rrp < 100)  return 'low';
+  if (rrp < 300)  return 'medium';
+  if (rrp < 1000) return 'high';
+  return 'vhigh';
+}
+
+function fmt(n, decimals=0) {
+  if (n === undefined || n === null) return '—';
+  return Number(n).toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtPrice(n) {
+  if (n === undefined || n === null) return '—';
+  const v = Number(n);
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(2);
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('en-AU', { hour:'2-digit', minute:'2-digit', timeZone:'Australia/Sydney' }) + ' AEST';
+  } catch { return iso; }
+}
+
+function showPanel(name) {
+  currentPanel = name;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-' + name)?.classList.add('active');
+  if (latestData) renderPanel(name, latestData);
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderPrices(data) {
+  const prices = data.prices || {};
+  const demand = data.demand || {};
+
+  let html = '<div class="section-title">Spot Prices ($/MWh)</div>';
+  html += '<div class="price-grid">';
+  for (const r of REGIONS) {
+    const p = prices[r];
+    const cls = p !== undefined ? priceClass(p) : 'low';
+    html += `<div class="price-card ${REGION_CLASS[r]}">
+      <div class="region">${REGION_SHORT[r]}</div>
+      <div class="price ${cls}">${p !== undefined ? fmtPrice(p) : '—'}</div>
+      <div class="unit">$/MWh</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  html += '<div class="section-title">Total Demand (MW)</div>';
+  html += '<div class="demand-grid">';
+  for (const r of REGIONS) {
+    const d = demand[r];
+    html += `<div class="demand-card">
+      <div class="region" style="color:${REGION_COLORS[r]}">${REGION_SHORT[r]}</div>
+      <div class="value">${d !== undefined ? fmt(d) : '—'}</div>
+      <div class="unit">MW</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  // Price bar chart
+  html += '<div class="section-title">Price Comparison</div>';
+  html += '<div class="chart-card"><div class="chart-title">Spot Price by Region</div><div class="chart-container"><canvas id="priceChart"></canvas></div></div>';
+
+  return html;
+}
+
+function renderGeneration(data) {
+  const gen = data.generation || {};
+  const rawSummary = data.raw_summary || {};
+
+  let html = '<div class="section-title">Generation & Supply</div>';
+  html += '<div class="chart-card"><div class="chart-title">Dispatched Generation by Region (MW)</div><div class="chart-container tall"><canvas id="genChart"></canvas></div></div>';
+
+  // Table
+  html += '<div class="chart-card">';
+  html += '<div class="chart-title">Generation Summary</div>';
+  html += '<div class="table-wrap"><table>';
+  html += '<tr><th>Region</th><th>Scheduled</th><th>Semi-Sched</th><th>Net Int.</th></tr>';
+  for (const r of REGIONS) {
+    const g = gen[r] || {};
+    const raw = rawSummary[r] || {};
+    html += `<tr>
+      <td style="color:${REGION_COLORS[r]};font-weight:700">${REGION_SHORT[r]}</td>
+      <td>${fmt(g.Scheduled ?? raw.DISPATCHABLEGENERATION)} MW</td>
+      <td>${fmt(g['Semi-Scheduled'] ?? raw.SEMISCHEDULEDGENERATION)} MW</td>
+      <td style="color:${(g['Net Interchange'] ?? raw.NETINTERCHANGE ?? 0) >= 0 ? '#00d4ff' : '#ff6b35'}">${fmt(g['Net Interchange'] ?? raw.NETINTERCHANGE)} MW</td>
+    </tr>`;
+  }
+  html += '</table></div></div>';
+
+  return html;
+}
+
+function renderDemand(data) {
+  const demand = data.demand || {};
+  const rawSummary = data.raw_summary || {};
+
+  let html = '<div class="section-title">Demand Overview</div>';
+  html += '<div class="chart-card"><div class="chart-title">Total Demand by Region (MW)</div><div class="chart-container tall"><canvas id="demandChart"></canvas></div></div>';
+
+  html += '<div class="chart-card">';
+  html += '<div class="chart-title">Demand Details</div>';
+  html += '<div class="table-wrap"><table>';
+  html += '<tr><th>Region</th><th>Total Demand</th><th>Forecast</th><th>Initial Supply</th></tr>';
+  for (const r of REGIONS) {
+    const raw = rawSummary[r] || {};
+    const dem = demand[r] ?? raw.TOTALDEMAND;
+    html += `<tr>
+      <td style="color:${REGION_COLORS[r]};font-weight:700">${REGION_SHORT[r]}</td>
+      <td>${fmt(dem)} MW</td>
+      <td>${fmt(raw.DEMANDFORECAST)} MW</td>
+      <td>${fmt(raw.INITIALSUPPLY)} MW</td>
+    </tr>`;
+  }
+  html += '</table></div></div>';
+
+  return html;
+}
+
+function renderInterconnectors(data) {
+  const ics = data.interconnectors || {};
+
+  let html = '<div class="section-title">Interconnector Flows</div>';
+
+  if (Object.keys(ics).length === 0) {
+    html += '<div class="state-msg"><div class="icon">🔗</div><div>No interconnector data available</div></div>';
+    return html;
+  }
+
+  // Chart
+  html += '<div class="chart-card"><div class="chart-title">MW Flow (positive = export)</div><div class="chart-container tall"><canvas id="icChart"></canvas></div></div>';
+
+  html += '<div class="ic-list">';
+  // Sort by absolute flow
+  const sorted = Object.entries(ics).sort((a,b) => Math.abs(b[1].flow) - Math.abs(a[1].flow));
+  const maxFlow = Math.max(...sorted.map(([,v]) => Math.abs(v.flow)), 1);
+
+  for (const [id, val] of sorted) {
+    const flow = val.flow || 0;
+    const pct = Math.min(Math.abs(flow) / maxFlow * 50, 50);
+    const isPos = flow >= 0;
+    html += `<div class="ic-row">
+      <div class="ic-name">${id}</div>
+      <div class="ic-bar-wrap">
+        <div class="ic-midpoint"></div>
+        <div class="ic-bar ${isPos ? 'positive' : 'negative'}" style="width:${pct}%"></div>
+      </div>
+      <div class="ic-value ${isPos ? 'positive' : 'negative'}">${flow > 0 ? '+' : ''}${fmt(flow)} <span style="font-size:9px;opacity:0.6">MW</span></div>
+    </div>`;
+  }
+  html += '</div>';
+
+  return html;
+}
+
+function drawPriceChart(data) {
+  destroyChart('price');
+  const ctx = document.getElementById('priceChart');
+  if (!ctx) return;
+  const prices = data.prices || {};
+  const vals = REGIONS.map(r => prices[r] ?? null);
+
+  charts.price = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: REGIONS.map(r => REGION_SHORT[r]),
+      datasets: [{
+        data: vals,
+        backgroundColor: REGIONS.map((r, i) => {
+          const v = vals[i];
+          if (v === null) return '#1e2d45';
+          if (v < 0) return '#2ed573';
+          if (v < 100) return REGION_COLORS[r] + 'bb';
+          if (v < 300) return '#ffd32a';
+          if (v < 1000) return '#ff6b35';
+          return '#ff4757';
+        }),
+        borderColor: REGIONS.map(r => REGION_COLORS[r]),
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => ' $' + (ctx.raw ?? 0).toFixed(2) + '/MWh' }
+      }},
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 11 } }, grid: { color: '#1e2d45' } },
+        y: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
+              callback: v => '$' + v.toFixed(0) },
+             grid: { color: '#1e2d45' } }
+      }
+    }
+  });
+}
+
+function drawGenChart(data) {
+  destroyChart('gen');
+  const ctx = document.getElementById('genChart');
+  if (!ctx) return;
+  const gen = data.generation || {};
+  const raw = data.raw_summary || {};
+
+  const scheduled = REGIONS.map(r => gen[r]?.Scheduled ?? raw[r]?.DISPATCHABLEGENERATION ?? null);
+  const semiSched = REGIONS.map(r => gen[r]?.['Semi-Scheduled'] ?? raw[r]?.SEMISCHEDULEDGENERATION ?? null);
+
+  charts.gen = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: REGIONS.map(r => REGION_SHORT[r]),
+      datasets: [
+        { label: 'Scheduled', data: scheduled, backgroundColor: REGIONS.map(r => REGION_COLORS[r] + 'cc'), borderRadius: 4 },
+        { label: 'Semi-Scheduled', data: semiSched, backgroundColor: REGIONS.map(r => REGION_COLORS[r] + '55'), borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 }, boxWidth: 12 } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 11 } }, grid: { color: '#1e2d45' } },
+        y: { stacked: true, ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
+              callback: v => v.toLocaleString() + ' MW' },
+             grid: { color: '#1e2d45' } }
+      }
+    }
+  });
+}
+
+function drawDemandChart(data) {
+  destroyChart('demand');
+  const ctx = document.getElementById('demandChart');
+  if (!ctx) return;
+  const demand = data.demand || {};
+  const raw = data.raw_summary || {};
+  const vals = REGIONS.map(r => demand[r] ?? raw[r]?.TOTALDEMAND ?? null);
+
+  charts.demand = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: REGIONS.map(r => REGION_SHORT[r]),
+      datasets: [{
+        label: 'Total Demand',
+        data: vals,
+        backgroundColor: REGIONS.map(r => REGION_COLORS[r] + 'bb'),
+        borderColor: REGIONS.map(r => REGION_COLORS[r]),
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 11 } }, grid: { color: '#1e2d45' } },
+        y: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
+              callback: v => v.toLocaleString() + ' MW' },
+             grid: { color: '#1e2d45' } }
+      }
+    }
+  });
+}
+
+function drawIcChart(data) {
+  destroyChart('ic');
+  const ctx = document.getElementById('icChart');
+  if (!ctx) return;
+  const ics = data.interconnectors || {};
+  const entries = Object.entries(ics).sort((a,b) => Math.abs(b[1].flow) - Math.abs(a[1].flow));
+
+  charts.ic = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: entries.map(([k]) => k),
+      datasets: [{
+        data: entries.map(([,v]) => v.flow || 0),
+        backgroundColor: entries.map(([,v]) => (v.flow || 0) >= 0 ? '#00d4ff88' : '#ff6b3588'),
+        borderColor: entries.map(([,v]) => (v.flow || 0) >= 0 ? '#00d4ff' : '#ff6b35'),
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => ' ' + (ctx.raw > 0 ? '+' : '') + ctx.raw.toFixed(0) + ' MW' }
+      }},
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
+              callback: v => v.toLocaleString() + ' MW' },
+             grid: { color: '#1e2d45' } },
+        y: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 } }, grid: { color: '#1e2d45' } }
+      }
+    }
+  });
+}
+
+function renderPanel(panel, data) {
+  const main = document.getElementById('mainContent');
+  let html = '';
+
+  switch(panel) {
+    case 'prices':        html = renderPrices(data); break;
+    case 'generation':    html = renderGeneration(data); break;
+    case 'demand':        html = renderDemand(data); break;
+    case 'interconnectors': html = renderInterconnectors(data); break;
+  }
+
+  main.innerHTML = html;
+
+  // Draw charts after DOM update
+  requestAnimationFrame(() => {
+    switch(panel) {
+      case 'prices':        drawPriceChart(data); break;
+      case 'generation':    drawGenChart(data); break;
+      case 'demand':        drawDemandChart(data); break;
+      case 'interconnectors': drawIcChart(data); break;
+    }
+  });
+}
+
+async function fetchData() {
+  const dot = document.getElementById('statusDot');
+  const updated = document.getElementById('lastUpdated');
+  dot.className = 'pulse-dot loading';
+
+  try {
+    const resp = await fetch('/api/data');
+    if (resp.status === 503 || resp.status === 202) {
+      updated.textContent = 'Loading data…';
+      setTimeout(fetchData, 5000);
+      return;
+    }
+    const data = await resp.json();
+    if (data.error && !data.prices) {
+      throw new Error(data.error);
+    }
+    latestData = data;
+    dot.className = 'pulse-dot';
+    updated.textContent = data.last_updated ? fmtTime(data.last_updated) : 'Just now';
+    renderPanel(currentPanel, data);
+  } catch (err) {
+    console.error(err);
+    dot.className = 'pulse-dot error';
+    updated.textContent = 'Error loading';
+    document.getElementById('mainContent').innerHTML = `
+      <div class="state-msg">
+        <div class="icon">⚠️</div>
+        <div>Could not load NEM data</div>
+        <div style="margin-top:8px;font-size:11px;color:#475569">${err.message}</div>
+      </div>`;
+  }
+}
+
+// Auto-refresh every 5 minutes
+fetchData();
+setInterval(fetchData, 300000);
+</script>
+</body>
+</html>
