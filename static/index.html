@@ -565,8 +565,31 @@ function renderDemand(data) {
   const demand = data.demand || {};
   const rawSummary = data.raw_summary || {};
 
-  let html = '<div class="section-title">Demand Overview</div>';
-  html += '<div class="chart-card"><div class="chart-title">Total Demand by Region (MW)</div><div class="chart-container tall"><canvas id="demandChart"></canvas></div></div>';
+  let html = '<div class="section-title">Latest Demand (MW)</div>';
+  html += '<div class="demand-grid">';
+  for (const r of REGIONS) {
+    const d = demand[r];
+    html += `<div class="demand-card">
+      <div class="region" style="color:${REGION_COLORS[r]}">${REGION_SHORT[r]}</div>
+      <div class="value">${d !== undefined ? fmt(d) : '—'}</div>
+      <div class="unit">MW</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  html += '<div class="section-title">Today\'s Demand + Predispatch</div>';
+  html += '<div class="chart-card">';
+  html += '<div class="chart-title">Demand (MW) — Actual (solid) · Predispatch (dashed)</div>';
+  html += '<div class="chart-container" style="height:260px"><canvas id="demandHistoryChart"></canvas></div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px">';
+  for (const r of REGIONS) {
+    html += `<button onclick="toggleDemandRegion('${r}')" id="drgn-${r}"
+      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
+             border:1px solid ${REGION_COLORS[r]};background:${REGION_COLORS[r]}33;
+             color:${REGION_COLORS[r]};cursor:pointer;transition:all 0.2s"
+      data-active="true">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div></div>';
 
   html += '<div class="chart-card">';
   html += '<div class="chart-title">Demand Details</div>';
@@ -585,6 +608,23 @@ function renderDemand(data) {
   html += '</table></div></div>';
 
   return html;
+}
+
+function toggleDemandRegion(region) {
+  if (!charts.demandHistory) return;
+  const btn = document.getElementById('drgn-' + region);
+  const isActive = btn.dataset.active === 'true';
+  const newActive = !isActive;
+  btn.dataset.active = newActive;
+  btn.style.background = newActive ? REGION_COLORS[region] + '33' : 'transparent';
+  btn.style.opacity = newActive ? '1' : '0.4';
+  const chart = charts.demandHistory;
+  chart.data.datasets.forEach((ds, i) => {
+    if (ds.regionId === region) {
+      chart.getDatasetMeta(i).hidden = !newActive;
+    }
+  });
+  chart.update();
 }
 
 function renderInterconnectors(data) {
@@ -800,36 +840,131 @@ function drawGenChart(data) {
 }
 
 function drawDemandChart(data) {
-  destroyChart('demand');
-  const ctx = document.getElementById('demandChart');
+  destroyChart('demandHistory');
+  const ctx = document.getElementById('demandHistoryChart');
   if (!ctx) return;
-  const demand = data.demand || {};
-  const raw = data.raw_summary || {};
-  const vals = REGIONS.map(r => demand[r] ?? raw[r]?.TOTALDEMAND ?? null);
 
-  charts.demand = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: REGIONS.map(r => REGION_SHORT[r]),
-      datasets: [{
-        label: 'Total Demand',
-        data: vals,
-        backgroundColor: REGIONS.map(r => REGION_COLORS[r] + 'bb'),
-        borderColor: REGIONS.map(r => REGION_COLORS[r]),
-        borderWidth: 1,
-        borderRadius: 6,
-      }]
-    },
+  const historical = data.demand_history || {};
+  const predispatch = data.predispatch_demand || {};
+
+  const labelSet = new Set();
+  for (const r of REGIONS) {
+    (historical[r] || []).forEach(pt => labelSet.add(pt.interval));
+    (predispatch[r] || []).forEach(pt => labelSet.add(pt.interval));
+  }
+  const labels = Array.from(labelSet).sort();
+
+  const nowStr = new Date().toLocaleTimeString('en-AU', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Sydney'
+  });
+  const nowIndex = labels.findIndex(l => l >= nowStr);
+
+  const datasets = [];
+  for (const r of REGIONS) {
+    const color = REGION_COLORS[r];
+    const histMap = {};
+    (historical[r] || []).forEach(pt => { histMap[pt.interval] = pt.demand; });
+    const pdMap = {};
+    (predispatch[r] || []).forEach(pt => { pdMap[pt.interval] = pt.demand; });
+
+    const actualData = labels.map(l => histMap[l] !== undefined ? histMap[l] : null);
+    const pdData = labels.map((l, i) => {
+      if (pdMap[l] !== undefined) return pdMap[l];
+      if (i === nowIndex && i > 0 && actualData[i - 1] !== null) return actualData[i - 1];
+      return null;
+    });
+
+    datasets.push({
+      label: REGION_SHORT[r],
+      regionId: r,
+      data: actualData,
+      borderColor: color,
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.3,
+      borderDash: [],
+      spanGaps: false,
+    });
+
+    datasets.push({
+      label: REGION_SHORT[r] + ' (PD)',
+      regionId: r,
+      data: pdData,
+      borderColor: color + '99',
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      tension: 0.3,
+      spanGaps: false,
+    });
+  }
+
+  charts.demandHistory = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: item => item.raw !== null,
+          callbacks: {
+            label: ctx => {
+              if (ctx.raw === null) return null;
+              const isPD = ctx.dataset.label.includes('(PD)');
+              return ` ${ctx.dataset.label.replace(' (PD)','')}${isPD ? ' ⋯' : ''}: ${fmt(ctx.raw)} MW`;
+            }
+          },
+          backgroundColor: '#111827',
+          borderColor: '#1e2d45',
+          borderWidth: 1,
+          titleColor: '#94a3b8',
+          bodyColor: '#e2e8f0',
+          titleFont: { family: 'Space Mono', size: 10 },
+          bodyFont: { family: 'Space Mono', size: 11 },
+        },
+      },
       scales: {
-        x: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 11 } }, grid: { color: '#1e2d45' } },
-        y: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
-              callback: v => v.toLocaleString() + ' MW' },
-             grid: { color: '#1e2d45' } }
+        x: {
+          ticks: { color: '#64748b', font: { family: 'Space Mono', size: 9 }, maxTicksLimit: 8, maxRotation: 0 },
+          grid: { color: '#1e2d4544' },
+        },
+        y: {
+          ticks: {
+            color: '#94a3b8',
+            font: { family: 'Space Mono', size: 10 },
+            callback: v => v.toLocaleString() + ' MW',
+          },
+          grid: { color: '#1e2d45' },
+        }
       }
-    }
+    },
+    plugins: [{
+      id: 'nowLineDemand',
+      afterDraw(chart) {
+        if (nowIndex < 0) return;
+        const { ctx: c, chartArea, scales } = chart;
+        const x = scales.x.getPixelForValue(nowIndex);
+        c.save();
+        c.beginPath();
+        c.moveTo(x, chartArea.top);
+        c.lineTo(x, chartArea.bottom);
+        c.strokeStyle = 'rgba(255,255,255,0.25)';
+        c.lineWidth = 1;
+        c.setLineDash([3, 3]);
+        c.stroke();
+        c.fillStyle = 'rgba(255,255,255,0.5)';
+        c.font = '9px Space Mono';
+        c.fillText('NOW', x + 3, chartArea.top + 12);
+        c.restore();
+      }
+    }]
   });
 }
 
