@@ -128,9 +128,6 @@ tr:last-child td { border-bottom:none; }
   <button class="nav-btn" onclick="showPanel('generation')" id="nav-generation">
     <span class="icon">⚡</span><span class="label">Gen</span>
   </button>
-  <button class="nav-btn" onclick="showPanel('demand')" id="nav-demand">
-    <span class="icon">📊</span><span class="label">Demand</span>
-  </button>
   <button class="nav-btn" onclick="showPanel('interconnectors')" id="nav-interconnectors">
     <span class="icon">🔗</span><span class="label">Links</span>
   </button>
@@ -257,6 +254,17 @@ function renderPrices(data) {
       <div class="unit">MW</div></div>`;
   }
   html += '</div>';
+  html += '<div class="section-title">Demand History + Predispatch</div>';
+  html += '<div class="chart-card"><div class="chart-title">Total Demand — Actual (bright) · Predispatch (faded)</div>';
+  html += '<div class="chart-container" style="height:220px"><canvas id="demandHistChart"></canvas></div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  for (const r of REGIONS) {
+    html += `<button onclick="toggleDemandRegion('${r}')" id="dr-${r}" data-on="1"
+      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
+      border:1px solid ${REGION_COLORS[r]};background:${REGION_COLORS[r]}33;color:${REGION_COLORS[r]};cursor:pointer"
+      >${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div></div>';
   return html;
 }
 
@@ -300,14 +308,14 @@ function drawPriceChart(data) {
       label: REGION_SHORT[r], regionId: r, isPD: false,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor: color, backgroundColor:'transparent',
-      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false
+      borderWidth:3, pointRadius:0, tension:0.3, spanGaps:false
     });
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r, isPD: true,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor: color+'99', backgroundColor:'transparent',
+      borderColor: color+'55', backgroundColor:'transparent',
       borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[5,4]
+      borderDash:[4,4]
     });
   }
   charts.priceHist = new Chart(ctx, {
@@ -522,14 +530,14 @@ function drawDemandChart(data) {
       label: REGION_SHORT[r], regionId: r,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor:color, backgroundColor:'transparent',
-      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false
+      borderWidth:3, pointRadius:0, tension:0.3, spanGaps:false
     });
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor:color+'99', backgroundColor:'transparent',
+      borderColor:color+'55', backgroundColor:'transparent',
       borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[5,4]
+      borderDash:[4,4]
     });
   }
   charts.demandHist = new Chart(ctx, {
@@ -723,7 +731,7 @@ function renderPanel(panel, data) {
   main.innerHTML = html;
   requestAnimationFrame(() => {
     try {
-      if (panel === 'prices')        drawPriceChart(data);
+      if (panel === 'prices')        { drawPriceChart(data); drawDemandChart(data); }
       else if (panel === 'generation') selectGenRegion(currentGenRegion);
       else if (panel === 'demand')   drawDemandChart(data);
       else if (panel === 'interconnectors') drawIcChart(data);
