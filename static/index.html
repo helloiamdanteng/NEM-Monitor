@@ -394,26 +394,55 @@ function drawGenChart(data) {
     }
   }
   const labels = Object.keys(nemMap).sort();
+
+  // If OpenNEM fuel mix isn't available, fall back to dispatch_history (scheduled+semi by region)
   if (labels.length === 0) {
-    // Fallback: show current snapshot as a bar chart by fuel/region
-    destroyChart('gen');
-    const gen = data.generation || {}, raw = data.raw_summary || {};
-    const barDatasets = [
-      { label: 'Scheduled',     data: REGIONS.map(r => (gen[r] || raw[r] || {}).Scheduled || (raw[r] || {}).DISPATCHABLEGENERATION || 0),     backgroundColor: '#4a4a6acc', borderColor: '#4a4a6a', borderWidth:1 },
-      { label: 'Semi-Scheduled',data: REGIONS.map(r => (gen[r] || {})['Semi-Scheduled'] || (raw[r] || {}).SEMISCHEDULEDGENERATION || 0), backgroundColor: '#4bc0c0cc', borderColor: '#4bc0c0', borderWidth:1 },
-    ];
+    const dispHist = data.dispatch_history || {};
+    const pdGen = data.predispatch_gen || {};
+    const dLabelSet = new Set();
+    for (const r of REGIONS) {
+      (dispHist[r] || []).forEach(p => dLabelSet.add(p.interval));
+      (pdGen[r]    || []).forEach(p => dLabelSet.add(p.interval));
+    }
+    const dLabels = Array.from(dLabelSet).sort();
+    if (dLabels.length === 0) {
+      ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Generation data loading…';
+      ctx.style.display = 'none';
+      return;
+    }
+    const now2 = nowAEST();
+    const nowIdx2 = dLabels.findIndex(l => l >= now2);
+    const dDatasets = [];
+    for (const r of REGIONS) {
+      const color = REGION_COLORS[r];
+      const hm = {}; (dispHist[r] || []).forEach(p => { if (p.scheduled !== null) hm[p.interval] = (p.scheduled || 0) + (p.semi || 0); });
+      const pm = {}; (pdGen[r] || []).forEach(p => { pm[p.interval] = (p.Scheduled || 0) + (p.SemiScheduled || 0); });
+      dDatasets.push({ label: REGION_SHORT[r], regionId: r, stack: 'actual',
+        data: dLabels.map(l => hm[l] !== undefined ? hm[l] : null),
+        backgroundColor: color + '99', borderColor: color, borderWidth: 1,
+        fill: true, pointRadius: 0, tension: 0.2, spanGaps: true });
+      dDatasets.push({ label: REGION_SHORT[r] + ' PD', regionId: r, stack: 'pd',
+        data: dLabels.map(l => pm[l] !== undefined ? pm[l] : null),
+        backgroundColor: color + '44', borderColor: color + '66', borderWidth: 1,
+        fill: true, pointRadius: 0, tension: 0.2, spanGaps: false, borderDash: [4, 4] });
+    }
     charts.gen = new Chart(ctx, {
-      type: 'bar',
-      data: { labels: REGIONS.map(r => REGION_SHORT[r]), datasets: barDatasets },
-      options: { ...CHART_DEFAULTS,
-        plugins: { ...CHART_DEFAULTS.plugins, legend: { display: true, labels: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 } } } },
+      type: 'line', data: {labels: dLabels, datasets: dDatasets},
+      options: {...CHART_DEFAULTS,
+        plugins: {...CHART_DEFAULTS.plugins, legend: {display: false},
+          tooltip: {...CHART_DEFAULTS.plugins.tooltip,
+            filter: i => i.raw !== null && i.raw > 0 && !i.dataset.label.endsWith(' PD'),
+            callbacks: {label: c => ` ${c.dataset.label}: ${fmt(c.raw)} MW`}
+          }
+        },
         scales: {
-          x: { stacked: true, ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 } }, grid: { color: '#1e2d45' } },
-          y: { stacked: true, ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 }, callback: v => v.toLocaleString() + ' MW' }, grid: { color: '#1e2d45' } }
+          x: {stacked: true, ticks: {color:'#64748b',font:{family:'Space Mono',size:9},maxTicksLimit:8,maxRotation:0}, grid: {color:'#1e2d4544'}},
+          y: {stacked: true, ticks: {color:'#94a3b8',font:{family:'Space Mono',size:10},callback: v => v.toLocaleString()+' MW'}, grid: {color:'#1e2d45'}}
         }
-      }
+      },
+      plugins: [nowLinePlugin(nowIdx2)]
     });
-    ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Current generation by region (fuel history loading…)';
+    ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'NEM Generation by Region — Scheduled + Semi-Sched (fuel type loading…)';
     return;
   }
   const now = nowAEST();
@@ -498,11 +527,15 @@ function drawDemandChart(data) {
   destroyChart('demandHist');
   const ctx = document.getElementById('demandHistChart');
   if (!ctx) return;
-  const hist = data.demand_history || {}, pd = data.predispatch_demand || {};
+  // Prefer full-day dispatch archive history, fall back to in-memory snapshots
+  const dispHist = data.dispatch_history || {};
+  const snapHist = data.demand_history || {};
+  const pd = data.predispatch_demand || {};
   const labelSet = new Set();
   for (const r of REGIONS) {
-    (hist[r] || []).forEach(p => labelSet.add(p.interval));
-    (pd[r]   || []).forEach(p => labelSet.add(p.interval));
+    const src = dispHist[r] || snapHist[r] || [];
+    src.forEach(p => labelSet.add(p.interval));
+    (pd[r] || []).forEach(p => labelSet.add(p.interval));
   }
   const labels = Array.from(labelSet).sort();
   if (labels.length === 0) {
@@ -515,36 +548,38 @@ function drawDemandChart(data) {
   const datasets = [];
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
-    const hm = {}; (hist[r] || []).forEach(p => hm[p.interval] = p.demand);
-    const pm = {}; (pd[r]   || []).forEach(p => pm[p.interval] = p.demand);
+    const src = dispHist[r] || snapHist[r] || [];
+    const hm = {};
+    src.forEach(p => { if (p.demand !== null && p.demand !== undefined) hm[p.interval] = p.demand; });
+    const pm = {};
+    (pd[r] || []).forEach(p => pm[p.interval] = p.demand);
     datasets.push({
       label: REGION_SHORT[r], regionId: r,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
-      borderColor:color, backgroundColor:'transparent',
-      borderWidth:3, pointRadius:0, tension:0.3, spanGaps:false
+      borderColor: color, backgroundColor: 'transparent',
+      borderWidth: 2.5, pointRadius: 0, tension: 0.3, spanGaps: true
     });
     datasets.push({
-      label: REGION_SHORT[r]+' PD', regionId: r,
+      label: REGION_SHORT[r] + ' PD', regionId: r,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor:color+'55', backgroundColor:'transparent',
-      borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[4,4]
+      borderColor: color + '55', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: false, borderDash: [4, 4]
     });
   }
   charts.demandHist = new Chart(ctx, {
-    type:'line', data:{labels,datasets},
-    options:{...CHART_DEFAULTS,
-      plugins:{...CHART_DEFAULTS.plugins,
-        tooltip:{...CHART_DEFAULTS.plugins.tooltip,
-          filter:i=>i.raw!==null,
-          callbacks:{label:c=>c.raw===null?null:` ${c.dataset.label}: ${fmt(c.raw)} MW`}
+    type: 'line', data: {labels, datasets},
+    options: {...CHART_DEFAULTS,
+      plugins: {...CHART_DEFAULTS.plugins,
+        tooltip: {...CHART_DEFAULTS.plugins.tooltip,
+          filter: i => i.raw !== null,
+          callbacks: {label: c => c.raw === null ? null : ` ${c.dataset.label}: ${fmt(c.raw)} MW`}
         }
       },
-      scales:{...CHART_DEFAULTS.scales,
-        y:{...CHART_DEFAULTS.scales.y, ticks:{...CHART_DEFAULTS.scales.y.ticks, callback:v=>v.toLocaleString()+' MW'}}
+      scales: {...CHART_DEFAULTS.scales,
+        y: {...CHART_DEFAULTS.scales.y, ticks: {...CHART_DEFAULTS.scales.y.ticks, callback: v => v.toLocaleString() + ' MW'}}
       }
     },
-    plugins:[nowLinePlugin(nowIdx)]
+    plugins: [nowLinePlugin(nowIdx)]
   });
 }
 
