@@ -155,18 +155,47 @@ async def debug():
         result["trading_list_ms"] = round((time.time()-t0)*1000)
         test_url = today_zips[-1] if today_zips else (all_zips[-1] if all_zips else None)
         if test_url:
+            result["trading_test_url"] = test_url
             t1 = time.time()
             text = _read_zip(test_url)
             result["trading_fetch_ms"] = round((time.time()-t1)*1000)
+            # Show all table names AND their columns
             tables = {}
             reader = csv.reader(io.StringIO(text))
             for row in reader:
                 if row and row[0].strip().upper() == "I" and len(row) >= 5:
                     key = f"{row[1].strip()}_{row[2].strip()}".upper()
-                    tables[key] = True
-            result["trading_tables"] = list(tables.keys())
+                    tables[key] = [c.strip().upper() for c in row[4:] if c.strip()]
+            result["trading_tables_with_cols"] = tables
+            # Sample actual rows
+            for tbl in ["TRADING_PRICE", "TRADING_REGIONSUM"]:
+                rows = _parse_aemo(text, tbl)
+                result[f"{tbl}_count"] = len(rows)
+                result[f"{tbl}_sample"] = rows[:2] if rows else []
     except Exception:
         result["trading_error"] = traceback.format_exc()
+
+    # Also check DispatchIS (the live file)
+    try:
+        dispatch_urls = _list_hrefs(DISPATCH_IS_URL)
+        if dispatch_urls:
+            result["dispatch_latest_url"] = dispatch_urls[-1]
+            t1 = time.time()
+            text = _read_zip(dispatch_urls[-1])
+            result["dispatch_fetch_ms"] = round((time.time()-t1)*1000)
+            tables = {}
+            reader = csv.reader(io.StringIO(text))
+            for row in reader:
+                if row and row[0].strip().upper() == "I" and len(row) >= 5:
+                    key = f"{row[1].strip()}_{row[2].strip()}".upper()
+                    tables[key] = [c.strip().upper() for c in row[4:] if c.strip()]
+            result["dispatch_tables_with_cols"] = tables
+            for tbl in ["DISPATCH_PRICE", "DISPATCH_REGIONSUM"]:
+                rows = _parse_aemo(text, tbl)
+                result[f"{tbl}_count"] = len(rows)
+                result[f"{tbl}_sample"] = rows[:2] if rows else []
+    except Exception:
+        result["dispatch_error"] = traceback.format_exc()
 
     # ST PASA listing
     try:
@@ -183,10 +212,13 @@ async def debug():
         d = fast_cache["data"]
         result["fast_cache"] = {
             "prices":        d.get("prices", {}),
+            "demand":        d.get("demand", {}),
             "hist_prices":   {r: len(v) for r, v in d.get("historical_prices", {}).items()},
+            "hist_prices_sample": {r: v[:2] for r, v in d.get("historical_prices", {}).items()},
             "pd_prices":     {r: len(v) for r, v in d.get("predispatch_prices", {}).items()},
-            "demand_hist":   {r: len(v) for r, v in d.get("demand_history", {}).items()},
             "dispatch_hist": {r: len(v) for r, v in d.get("dispatch_history", {}).items()},
+            "dispatch_hist_sample": {r: v[:2] for r, v in d.get("dispatch_history", {}).items()},
+            "demand_hist":   {r: len(v) for r, v in d.get("demand_history", {}).items()},
             "fuel_mix":      {r: len(v) for r, v in d.get("fuel_mix_history", {}).items()},
             "ic_history":    {k: len(v) for k, v in d.get("ic_history", {}).items()},
         }
