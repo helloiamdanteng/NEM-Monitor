@@ -527,6 +527,54 @@ def _get_demand_history() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# In-memory interconnector history + predispatch IC flows
+# ---------------------------------------------------------------------------
+
+_ic_history: dict[str, dict] = {}
+
+
+def _update_ic_history(ic_snapshot: dict) -> None:
+    label = datetime.now(AEST).strftime("%H:%M")
+    for ic_id, vals in ic_snapshot.items():
+        if ic_id not in _ic_history:
+            _ic_history[ic_id] = {}
+        _ic_history[ic_id][label] = vals.get("flow", 0)
+
+
+def _get_ic_history() -> dict:
+    result = {}
+    for ic_id, series in _ic_history.items():
+        if series:
+            result[ic_id] = [{"interval": k, "flow": v} for k, v in sorted(series.items())]
+    return result
+
+
+def scrape_predispatch_interconnectors(text: str) -> dict:
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    ic_series: dict[str, dict] = {}
+    for tk in ["PREDISPATCH_INTERCONNECTOR_SOLN", "PREDISPATCH_INTERCONNECTORSOLN"]:
+        rows = _parse_aemo(text, tk)
+        if not rows:
+            continue
+        for row in rows:
+            ic = row.get("INTERCONNECTORID", "").strip()
+            dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
+            flow_str = row.get("MWFLOW", "")
+            if not ic or not dt_str or not flow_str:
+                continue
+            try:
+                flow = round(float(flow_str), 1)
+                dt = datetime.fromisoformat(dt_str.replace("/", "-"))
+                if dt.replace(tzinfo=None) >= now_aest:
+                    ic_series.setdefault(ic, {})[dt.strftime("%H:%M")] = flow
+            except (ValueError, TypeError):
+                pass
+        break
+    return {ic: [{"interval": k, "flow": v} for k, v in sorted(s.items())]
+            for ic, s in ic_series.items() if s}
+
+
+# ---------------------------------------------------------------------------
 # Main scrape_all — parallel fetches
 # ---------------------------------------------------------------------------
 
@@ -562,9 +610,12 @@ def scrape_all() -> dict:
     pd_demand = scrape_predispatch_demand(predispatch_text)
     pd_gen    = scrape_predispatch_generation(predispatch_text)
 
-    # Accumulate demand history
+    # Accumulate demand + IC history
     _update_demand_history(region_summary)
     demand_history = _get_demand_history()
+    _update_ic_history(interconnectors)
+    ic_history = _get_ic_history()
+    pd_interconnectors = scrape_predispatch_interconnectors(predispatch_text)
 
     # Build simple current values
     prices     = {r: d["RRP"]                    for r, d in region_summary.items() if "RRP" in d}
@@ -605,6 +656,8 @@ def scrape_all() -> dict:
         "predispatch_demand": pd_demand,
         "fuel_mix_history":   fuel_mix,
         "predispatch_gen":    pd_gen,
+        "ic_history":         ic_history,
+        "predispatch_ic":     pd_interconnectors,
         "origin_assets":      origin_assets_out,
         "fuel_colors":        FUEL_COLORS,
         "all_fuels":          ALL_FUELS,
