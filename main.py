@@ -145,6 +145,18 @@ async def debug():
     today_str = now.strftime("%Y%m%d")
     result["now_aest"] = now.isoformat()
 
+    # Direct test of scrape_trading_history
+    try:
+        from scraper import scrape_trading_history
+        th = scrape_trading_history()
+        result["trading_history_test"] = {
+            "price_regions": list(th["prices"].keys()),
+            "price_counts": {r: len(v) for r, v in th["prices"].items()},
+            "price_sample": {r: v[:2] for r, v in th["prices"].items()},
+        }
+    except Exception:
+        result["trading_history_error"] = traceback.format_exc()
+
     # Trading archive timing
     try:
         t0 = time.time()
