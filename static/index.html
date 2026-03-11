@@ -15,7 +15,7 @@
   --accent:#00d4ff; --accent2:#ff6b35; --text:#e2e8f0;
   --text-muted:#64748b; --text-dim:#94a3b8;
   --red:#ff4757; --green:#2ed573; --yellow:#ffd32a;
-  --qld:#f39c12; --nsw:#3498db; --vic:#9b59b6; --sa:#e74c3c; --tas:#1abc9c;
+  --qld:#f39c12; --nsw:#3498db; --vic:#2ed573; --sa:#e74c3c; --tas:#9b59b6;
   --font-mono:'Space Mono',monospace; --font-sans:'DM Sans',sans-serif;
 }
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -143,7 +143,7 @@ tr:last-child td { border-bottom:none; }
 const REGIONS = ['QLD1','NSW1','VIC1','SA1','TAS1'];
 const REGION_SHORT = {QLD1:'QLD',NSW1:'NSW',VIC1:'VIC',SA1:'SA',TAS1:'TAS'};
 const REGION_CLASS = {QLD1:'qld',NSW1:'nsw',VIC1:'vic',SA1:'sa',TAS1:'tas'};
-const REGION_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#9b59b6',SA1:'#e74c3c',TAS1:'#1abc9c'};
+const REGION_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#2ed573',SA1:'#e74c3c',TAS1:'#9b59b6'};
 const FUEL_ICONS = {"Black Coal":"⬛","Brown Coal":"🟫","Gas":"🔥","Hydro":"💧","Wind":"🌀","Solar":"☀️","Battery":"🔋","Liquid":"🛢️","Other":"⚙️"};
 
 let currentPanel = 'prices';
@@ -297,18 +297,17 @@ function drawPriceChart(data) {
     const hm = {}; (hist[r] || []).forEach(p => hm[p.interval] = p.rrp);
     const pm = {}; (pd[r]   || []).forEach(p => pm[p.interval] = p.rrp);
     datasets.push({
-      label: REGION_SHORT[r], regionId: r,
+      label: REGION_SHORT[r], regionId: r, isPD: false,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor: color, backgroundColor:'transparent',
-      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[], segment:{borderDash:()=>[]}
+      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false
     });
     datasets.push({
-      label: REGION_SHORT[r]+' PD', regionId: r,
+      label: REGION_SHORT[r]+' PD', regionId: r, isPD: true,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor: color+'88', backgroundColor:'transparent',
-      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[5,4], segment:{borderDash:()=>[5,4]}
+      borderColor: color+'99', backgroundColor:'transparent',
+      borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:false,
+      borderDash:[5,4]
     });
   }
   charts.priceHist = new Chart(ctx, {
@@ -355,11 +354,13 @@ function renderGeneration(data) {
   html += '<div class="table-wrap"><table><tr><th>Region</th><th>Scheduled</th><th>Semi-Sched</th><th>Net Int.</th></tr>';
   for (const r of REGIONS) {
     const g = gen[r] || {}, rw = raw[r] || {};
-    const ni = g['Net Interchange'] ?? rw.NETINTERCHANGE ?? 0;
+    const ni = (g['Net Interchange'] !== undefined ? g['Net Interchange'] : (rw.NETINTERCHANGE !== undefined ? rw.NETINTERCHANGE : 0));
+    const sched = g.Scheduled !== undefined ? g.Scheduled : rw.DISPATCHABLEGENERATION;
+    const semi  = g['Semi-Scheduled'] !== undefined ? g['Semi-Scheduled'] : rw.SEMISCHEDULEDGENERATION;
     html += `<tr>
       <td style="color:${REGION_COLORS[r]};font-weight:700">${REGION_SHORT[r]}</td>
-      <td>${fmt(g.Scheduled ?? rw.DISPATCHABLEGENERATION)} MW</td>
-      <td>${fmt(g['Semi-Scheduled'] ?? rw.SEMISCHEDULEDGENERATION)} MW</td>
+      <td>${fmt(sched)} MW</td>
+      <td>${fmt(semi)} MW</td>
       <td style="color:${ni>=0?'#00d4ff':'#ff6b35'}">${fmt(ni)} MW</td></tr>`;
   }
   html += '</table></div></div>';
@@ -472,7 +473,8 @@ function renderDemand(data) {
   html += '<div class="chart-card"><div class="chart-title">Demand Details</div>';
   html += '<div class="table-wrap"><table><tr><th>Region</th><th>Demand</th><th>Forecast</th><th>Initial Supply</th></tr>';
   for (const r of REGIONS) {
-    const rw = raw[r] || {}, d = demand[r] ?? rw.TOTALDEMAND;
+    const rw = raw[r] || {};
+    const d = demand[r] !== undefined ? demand[r] : rw.TOTALDEMAND;
     html += `<tr>
       <td style="color:${REGION_COLORS[r]};font-weight:700">${REGION_SHORT[r]}</td>
       <td>${fmt(d)} MW</td><td>${fmt(rw.DEMANDFORECAST)} MW</td><td>${fmt(rw.INITIALSUPPLY)} MW</td></tr>`;
@@ -520,15 +522,14 @@ function drawDemandChart(data) {
       label: REGION_SHORT[r], regionId: r,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor:color, backgroundColor:'transparent',
-      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[], segment:{borderDash:()=>[]}
+      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false
     });
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor:color+'88', backgroundColor:'transparent',
-      borderWidth:2, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[5,4], segment:{borderDash:()=>[5,4]}
+      borderColor:color+'99', backgroundColor:'transparent',
+      borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:false,
+      borderDash:[5,4]
     });
   }
   charts.demandHist = new Chart(ctx, {
