@@ -723,6 +723,11 @@ function drawPriceChart(data) {
   }
   const labels = Array.from(labelSet).sort();
 
+  if (labels.length === 0) {
+    ctx.parentElement.innerHTML = '<div class="state-msg" style="padding:20px 0"><div class="icon" style="font-size:24px">📈</div><div style="font-size:11px;margin-top:6px">Price history loading on next refresh</div></div>';
+    return;
+  }
+
   // Get current AEST time for "now" marker
   const nowStr = new Date().toLocaleTimeString('en-AU', {
     hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Sydney'
@@ -1041,6 +1046,11 @@ function drawDemandChart(data) {
   }
   const labels = Array.from(labelSet).sort();
 
+  if (labels.length === 0) {
+    ctx.parentElement.innerHTML = '<div class="state-msg" style="padding:20px 0"><div class="icon" style="font-size:24px">📊</div><div style="font-size:11px;margin-top:6px">Demand history loading on next refresh</div></div>';
+    return;
+  }
+
   const nowStr = new Date().toLocaleTimeString('en-AU', {
     hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Sydney'
   });
@@ -1307,26 +1317,33 @@ function renderPanel(panel, data) {
   const main = document.getElementById('mainContent');
   let html = '';
 
-  switch(panel) {
-    case 'prices':        html = renderPrices(data); break;
-    case 'generation':    html = renderGeneration(data); break;
-    case 'demand':        html = renderDemand(data); break;
-    case 'interconnectors': html = renderInterconnectors(data); break;
-    case 'origin':          html = renderOrigin(data); break;
+  try {
+    switch(panel) {
+      case 'prices':        html = renderPrices(data); break;
+      case 'generation':    html = renderGeneration(data); break;
+      case 'demand':        html = renderDemand(data); break;
+      case 'interconnectors': html = renderInterconnectors(data); break;
+      case 'origin':          html = renderOrigin(data); break;
+    }
+  } catch(e) {
+    console.error('Render error:', e);
+    html = `<div class="state-msg"><div class="icon">⚠️</div><div style="font-size:11px">${e.message}</div></div>`;
   }
 
   main.innerHTML = html;
 
   // Draw charts after DOM update
   requestAnimationFrame(() => {
-    switch(panel) {
-      case 'prices':        drawPriceChart(data); break;
-      case 'generation':
-        selectGenRegion(currentGenRegion);
-        break;
-      case 'demand':        drawDemandChart(data); break;
-      case 'interconnectors': drawIcChart(data); break;
-      case 'origin': break; // no charts needed
+    try {
+      switch(panel) {
+        case 'prices':        drawPriceChart(data); break;
+        case 'generation':    selectGenRegion(currentGenRegion); break;
+        case 'demand':        drawDemandChart(data); break;
+        case 'interconnectors': drawIcChart(data); break;
+        case 'origin': break;
+      }
+    } catch(e) {
+      console.error('Chart error:', e);
     }
   });
 }
