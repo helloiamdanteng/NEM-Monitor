@@ -298,6 +298,8 @@ def scrape_trading_prices_today() -> tuple:
         today_zips = [u for u in all_zips if yesterday_str in u]
     if not today_zips:
         today_zips = all_zips[-1:]
+    # Cap to last 50 files — 48 x 30-min intervals = full day, well within limit
+    today_zips = today_zips[-50:]
 
     region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 
