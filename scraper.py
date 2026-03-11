@@ -28,7 +28,6 @@ DISPATCH_IS_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/PredispatchIS_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/Dispatch_SCADA/"
 TRADING_ARCHIVE   = f"{NEMWEB_BASE}/Reports/ARCHIVE/TradingIS_Reports/"
-DISPATCH_ARCHIVE  = f"{NEMWEB_BASE}/Reports/ARCHIVE/DispatchIS_Reports/"
 OPENNEM_API       = "https://api.opennem.org.au"
 
 NEM_REGIONS = ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]
@@ -287,7 +286,8 @@ def scrape_unit_solution(text: str, duids: set) -> dict:
 # Trading prices (historical — archive)
 # ---------------------------------------------------------------------------
 
-def scrape_trading_prices_today() -> dict:
+def scrape_trading_prices_today() -> tuple:
+    """Returns (prices_dict, trading_zips_used)"""
     now_aest = datetime.now(AEST)
     today_str = now_aest.strftime("%Y%m%d")
     yesterday_str = (now_aest - timedelta(days=1)).strftime("%Y%m%d")
@@ -332,7 +332,7 @@ def scrape_trading_prices_today() -> dict:
         if series:
             result[region] = [{"interval": k, "rrp": v} for k, v in sorted(series.items())]
     logger.info(f"Trading prices: {sum(len(v) for v in result.values())} pts")
-    return result
+    return result, today_zips
 
 
 # ---------------------------------------------------------------------------
@@ -506,58 +506,45 @@ def scrape_fuel_mix_history_opennem() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Full-day demand + generation history from DispatchIS archive (5-min actuals)
+# Demand history from TradingIS archive (30-min, reuses already-listed zips)
+# Same files used for price history — no extra directory listing needed.
 # ---------------------------------------------------------------------------
 
-def scrape_dispatch_history_today() -> dict:
+def scrape_demand_history_today(trading_zips: list) -> dict:
     """
-    Pull today's 5-min DispatchIS files from the archive.
-    Returns { region: [{interval, demand, scheduled, semischeduled}] }
-    Also extracts fuel-type generation via DISPATCH_UNIT_SOLUTION if available,
-    but at minimum gives demand + total scheduled + semischeduled.
+    Extract TOTALDEMAND from today's TradingIS archive zips (30-min intervals).
+    trading_zips = list of URLs already fetched for price history.
+    Returns { region: [{interval, demand, scheduled, semi}] }
     """
-    now_aest = datetime.now(AEST)
-    today_str = now_aest.strftime("%Y%m%d")
-    yesterday_str = (now_aest - timedelta(days=1)).strftime("%Y%m%d")
-
-    all_zips = _list_hrefs(DISPATCH_ARCHIVE)
-    today_zips = sorted([u for u in all_zips if today_str in u])
-    if not today_zips:
-        today_zips = sorted([u for u in all_zips if yesterday_str in u])
-    if not today_zips:
-        today_zips = all_zips[-12:]  # last ~1hr of files
-
     region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 
     def fetch_one(url):
         text = _read_zip(url)
         pts = []
-        for row in _parse_aemo(text, "DISPATCH_REGIONSUM"):
+        for row in _parse_aemo(text, "TRADING_REGIONSUM"):
             region = row.get("REGIONID", "")
             if region not in NEM_REGIONS:
                 continue
             dt_str = row.get("SETTLEMENTDATE", "")
             demand_str = row.get("TOTALDEMAND", "")
-            sched_str  = row.get("DISPATCHABLEGENERATION", "")
+            sched_str  = row.get("DISPATCHABLEGENERATION", row.get("SS_SOLAR_UIGF", ""))
             semi_str   = row.get("SEMISCHEDULEDGENERATION", "")
-            if not dt_str:
+            if not dt_str or not demand_str:
                 continue
             try:
                 dt = datetime.fromisoformat(dt_str.replace("/", "-"))
                 label = dt.strftime("%H:%M")
                 pts.append((region, label, {
-                    "demand":   round(float(demand_str), 1)  if demand_str  else None,
-                    "scheduled":round(float(sched_str), 1)   if sched_str   else None,
-                    "semi":     round(float(semi_str), 1)    if semi_str    else None,
+                    "demand":    round(float(demand_str), 1),
+                    "scheduled": round(float(sched_str), 1) if sched_str else None,
+                    "semi":      round(float(semi_str), 1)  if semi_str  else None,
                 }))
             except (ValueError, TypeError):
                 pass
         return pts
 
-    # Fetch concurrently — limit to last 300 files (covers 25hr at 5-min intervals)
-    zips_to_fetch = today_zips[-300:]
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = [ex.submit(fetch_one, u) for u in zips_to_fetch]
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = [ex.submit(fetch_one, u) for u in trading_zips]
         for fut in as_completed(futures):
             for region, label, vals in fut.result():
                 region_series[region][label] = vals
@@ -566,7 +553,7 @@ def scrape_dispatch_history_today() -> dict:
     for region, series in region_series.items():
         if series:
             result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
-    logger.info(f"Dispatch history: {sum(len(v) for v in result.values())} pts across {len(result)} regions")
+    logger.info(f"Demand history: {sum(len(v) for v in result.values())} pts across {len(result)} regions")
     return result
 
 
@@ -654,14 +641,21 @@ def scrape_all() -> dict:
         f_trading       = ex.submit(scrape_trading_prices_today)
         f_fuel_mix      = ex.submit(scrape_fuel_mix_history_opennem)
         f_scada         = ex.submit(scrape_scada_duids, ORIGIN_DUIDS)
-        f_dispatch_hist = ex.submit(scrape_dispatch_history_today)
 
     dispatch_text    = f_dispatch_is.result()
     predispatch_text = f_predispatch.result()
-    trading_prices   = f_trading.result()
+    trading_result   = f_trading.result()
     fuel_mix         = f_fuel_mix.result()
     scada_vals       = f_scada.result()
-    dispatch_history = f_dispatch_hist.result()
+
+    # Unpack trading — returns (prices_dict, zips_used)
+    if isinstance(trading_result, tuple):
+        trading_prices, trading_zips = trading_result
+    else:
+        trading_prices, trading_zips = trading_result, []
+
+    # Fetch demand history reusing the same trading zips (no extra HTTP calls)
+    dispatch_history = scrape_demand_history_today(trading_zips) if trading_zips else {}
 
     # Parse dispatch IS
     region_summary  = scrape_region_summary(dispatch_text)
