@@ -203,6 +203,7 @@ function nowLinePlugin(nowIndex) {
       c.save();
       c.beginPath(); c.moveTo(x,chartArea.top); c.lineTo(x,chartArea.bottom);
       c.strokeStyle='rgba(255,255,255,0.25)'; c.lineWidth=1; c.setLineDash([3,3]); c.stroke();
+      c.setLineDash([]);
       c.fillStyle='rgba(255,255,255,0.5)'; c.font='9px Space Mono';
       c.fillText('NOW',x+3,chartArea.top+12); c.restore();
     }
@@ -394,8 +395,25 @@ function drawGenChart(data) {
   }
   const labels = Object.keys(nemMap).sort();
   if (labels.length === 0) {
-    ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Fuel mix — data loading on next refresh';
-    ctx.style.display = 'none';
+    // Fallback: show current snapshot as a bar chart by fuel/region
+    destroyChart('gen');
+    const gen = data.generation || {}, raw = data.raw_summary || {};
+    const barDatasets = [
+      { label: 'Scheduled',     data: REGIONS.map(r => (gen[r] || raw[r] || {}).Scheduled || (raw[r] || {}).DISPATCHABLEGENERATION || 0),     backgroundColor: '#4a4a6acc', borderColor: '#4a4a6a', borderWidth:1 },
+      { label: 'Semi-Scheduled',data: REGIONS.map(r => (gen[r] || {})['Semi-Scheduled'] || (raw[r] || {}).SEMISCHEDULEDGENERATION || 0), backgroundColor: '#4bc0c0cc', borderColor: '#4bc0c0', borderWidth:1 },
+    ];
+    charts.gen = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: REGIONS.map(r => REGION_SHORT[r]), datasets: barDatasets },
+      options: { ...CHART_DEFAULTS,
+        plugins: { ...CHART_DEFAULTS.plugins, legend: { display: true, labels: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 } } } },
+        scales: {
+          x: { stacked: true, ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 } }, grid: { color: '#1e2d45' } },
+          y: { stacked: true, ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 }, callback: v => v.toLocaleString() + ' MW' }, grid: { color: '#1e2d45' } }
+        }
+      }
+    });
+    ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Current generation by region (fuel history loading…)';
     return;
   }
   const now = nowAEST();
