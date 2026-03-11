@@ -136,7 +136,7 @@ async def health():
 @app.get("/api/debug")
 async def debug():
     import csv, io
-    from scraper import _list_hrefs, _read_zip, _parse_aemo, DISPATCH_IS_URL, PREDISPATCH_URL, TRADING_ARCHIVE, ST_PASA_URL
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, DISPATCH_IS_URL, PREDISPATCH_URL, TRADING_CURRENT, ST_PASA_URL
     from zoneinfo import ZoneInfo
 
     result = {}
