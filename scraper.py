@@ -28,7 +28,9 @@ DISPATCH_IS_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/PredispatchIS_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/Dispatch_SCADA/"
 TRADING_ARCHIVE   = f"{NEMWEB_BASE}/Reports/ARCHIVE/TradingIS_Reports/"
+ST_PASA_URL       = f"{NEMWEB_BASE}/Reports/CURRENT/STPASA_Files/"
 OPENNEM_API       = "https://api.opennem.org.au"
+AEMO_REG_LIST_URL = "https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/Current-Participants/NEM-Registration-and-Exemption-List.xls"
 
 NEM_REGIONS = ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]
 
@@ -736,12 +738,317 @@ def scrape_all() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Registration list cache — DUID -> {station, fuel, region, capacity}
+# ---------------------------------------------------------------------------
+
+_reg_cache: dict = {}
+_reg_cache_date: str = ""
+
+
+def _fuel_from_reg(fuel_raw: str) -> str:
+    """Map AEMO registration fuel source string to display fuel."""
+    f = (fuel_raw or "").upper()
+    if "BLACK COAL" in f or "COAL" in f and "BROWN" not in f: return "Black Coal"
+    if "BROWN COAL" in f or "BROWN" in f:                      return "Brown Coal"
+    if "GAS" in f or "OCGT" in f or "CCGT" in f or "LIQUID FUEL" in f and "GAS" in f: return "Gas"
+    if "HYDRO" in f or "WATER" in f:                           return "Hydro"
+    if "WIND" in f:                                             return "Wind"
+    if "SOLAR" in f or "PHOTOVOLTAIC" in f:                    return "Solar"
+    if "BATTERY" in f or "STORAGE" in f:                       return "Battery"
+    if "LIQUID" in f or "DISTILLATE" in f or "DIESEL" in f:   return "Liquid"
+    return "Other"
+
+
+def _load_registration_list() -> dict:
+    """
+    Download and parse AEMO NEM Registration and Exemption List (XLS).
+    Returns { DUID: {station, fuel, region, capacity_mw, participant} }
+    Cached once per day.
+    """
+    global _reg_cache, _reg_cache_date
+    today = datetime.now(AEST).strftime("%Y-%m-%d")
+    if _reg_cache and _reg_cache_date == today:
+        return _reg_cache
+
+    try:
+        import openpyxl
+    except ImportError:
+        logger.warning("openpyxl not installed; registration list unavailable")
+        return _reg_cache
+
+    try:
+        r = _get(AEMO_REG_LIST_URL, timeout=30)
+        if not r:
+            return _reg_cache
+
+        wb = openpyxl.load_workbook(io.BytesIO(r.content), read_only=True, data_only=True)
+        # Sheet name varies; find the generators sheet
+        sheet = None
+        for name in wb.sheetnames:
+            if "generator" in name.lower() or "scheduled" in name.lower():
+                sheet = wb[name]
+                break
+        if sheet is None and wb.sheetnames:
+            sheet = wb[wb.sheetnames[0]]
+        if sheet is None:
+            return _reg_cache
+
+        rows = list(sheet.iter_rows(values_only=True))
+        # Find header row
+        header_row = None
+        for i, row in enumerate(rows[:10]):
+            cells = [str(c or "").upper() for c in row]
+            if any("DUID" in c for c in cells):
+                header_row = i
+                break
+        if header_row is None:
+            return _reg_cache
+
+        headers = [str(c or "").strip().upper() for c in rows[header_row]]
+
+        def col(name_parts):
+            for i, h in enumerate(headers):
+                if any(p.upper() in h for p in name_parts):
+                    return i
+            return None
+
+        ci_duid     = col(["DUID"])
+        ci_station  = col(["STATION NAME", "STATION"])
+        ci_fuel     = col(["FUEL SOURCE - DESCRIPTOR", "FUEL SOURCE", "FUEL"])
+        ci_region   = col(["REGION"])
+        ci_capacity = col(["REG CAP", "REGISTERED CAPACITY", "MAX CAP", "CAPACITY"])
+        ci_part     = col(["PARTICIPANT"])
+
+        result = {}
+        for row in rows[header_row + 1:]:
+            if not row or ci_duid is None:
+                continue
+            duid = str(row[ci_duid] or "").strip().upper()
+            if not duid or duid == "DUID":
+                continue
+            station  = str(row[ci_station]  or "").strip() if ci_station  is not None else ""
+            fuel_raw = str(row[ci_fuel]     or "").strip() if ci_fuel     is not None else ""
+            region   = str(row[ci_region]   or "").strip() if ci_region   is not None else ""
+            cap_raw  = row[ci_capacity]                     if ci_capacity is not None else None
+            part     = str(row[ci_part]     or "").strip() if ci_part     is not None else ""
+            try:
+                capacity = round(float(cap_raw), 1) if cap_raw not in (None, "") else None
+            except (ValueError, TypeError):
+                capacity = None
+            # Normalise region
+            if region and not region.endswith("1"):
+                region = region + "1"
+            result[duid] = {
+                "station":     station or duid,
+                "fuel":        _fuel_from_reg(fuel_raw),
+                "fuel_raw":    fuel_raw,
+                "region":      region,
+                "capacity":    capacity,
+                "participant": part,
+            }
+
+        _reg_cache = result
+        _reg_cache_date = today
+        logger.info(f"Registration list loaded: {len(result)} DUIDs")
+        return result
+
+    except Exception as e:
+        logger.warning(f"Registration list load failed: {e}")
+        return _reg_cache
+
+
+# ---------------------------------------------------------------------------
+# Full SCADA fetch — all DUIDs (not just Origin)
+# ---------------------------------------------------------------------------
+
+def _fetch_full_scada() -> dict:
+    """Return { DUID: mw } for every unit in DISPATCH_UNIT_SCADA."""
+    url = get_latest_file_url(SCADA_URL, "PUBLIC_DISPATCHSCADA")
+    if not url:
+        return {}
+    text = _read_zip(url)
+    result = {}
+    for row in _parse_aemo(text, "DISPATCH_UNIT_SCADA"):
+        duid = row.get("DUID", "").strip().upper()
+        v = row.get("SCADAVALUE", "")
+        try:
+            result[duid] = round(float(v), 1)
+        except (ValueError, TypeError):
+            pass
+    logger.info(f"Full SCADA: {len(result)} DUIDs")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# ST PASA — 7-day ahead regional demand forecast
+# ---------------------------------------------------------------------------
+
+def scrape_stpasa_demand() -> dict:
+    """
+    Fetch latest ST PASA file and extract STPASA_REGIONSOLUTION.
+    Returns { region: [{interval, demand_50, demand_10}] } for next ~7 days.
+    """
+    try:
+        urls = _list_hrefs(ST_PASA_URL)
+        # Find latest STPASA file
+        pasa_urls = sorted([u for u in urls if "STPASA" in u.upper()])
+        if not pasa_urls:
+            logger.warning("No ST PASA files found")
+            return {}
+        url = pasa_urls[-1]
+        text = _read_zip(url)
+
+        now_aest = datetime.now(AEST).replace(tzinfo=None)
+        region_series: dict = {r: {} for r in NEM_REGIONS}
+
+        for tk in ["STPASA_REGIONSOLUTION", "ST_PASA_REGIONSOLUTION"]:
+            rows = _parse_aemo(text, tk)
+            if not rows:
+                continue
+            for row in rows:
+                region = row.get("REGIONID", "").strip()
+                if region not in NEM_REGIONS:
+                    continue
+                dt_str = row.get("INTERVAL_DATETIME", row.get("SETTLEMENTDATE", ""))
+                d50 = row.get("DEMAND50", row.get("TOTALDEMAND", ""))
+                d10 = row.get("DEMAND10", "")
+                if not dt_str:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-"))
+                    if dt.replace(tzinfo=None) < now_aest:
+                        continue
+                    label = dt.strftime("%Y-%m-%d %H:%M")
+                    region_series[region][label] = {
+                        "demand_50": round(float(d50), 1) if d50 else None,
+                        "demand_10": round(float(d10), 1) if d10 else None,
+                    }
+                except (ValueError, TypeError):
+                    pass
+            if any(region_series.values()):
+                break
+
+        result = {}
+        for region, series in region_series.items():
+            if series:
+                result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
+        logger.info(f"ST PASA: {sum(len(v) for v in result.values())} pts across {len(result)} regions")
+        return result
+    except Exception as e:
+        logger.warning(f"ST PASA fetch failed: {e}")
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# All-generators scrape (for /api/slow endpoint)
+# ---------------------------------------------------------------------------
+
+def scrape_all_generators() -> dict:
+    """
+    Fetch full SCADA output for all NEM DUIDs, join with registration list.
+    Returns grouped structure: { region: { fuel: [ {duid, station, mw, capacity, pct} ] } }
+    """
+    # Fetch SCADA and registration list concurrently
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_scada = ex.submit(_fetch_full_scada)
+        f_reg   = ex.submit(_load_registration_list)
+    scada  = f_scada.result()
+    reg    = f_reg.result()
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Group by region → fuel → list of units
+    grouped: dict = {}
+    for duid, mw in scada.items():
+        info = reg.get(duid, {})
+        region   = info.get("region", "UNKNOWN")
+        fuel     = info.get("fuel", "Other")
+        station  = info.get("station", duid)
+        capacity = info.get("capacity")
+        pct = round(mw / capacity * 100, 1) if (mw is not None and capacity and capacity > 0) else None
+
+        if region not in NEM_REGIONS:
+            continue  # skip non-NEM (WA, etc.)
+
+        rg = grouped.setdefault(region, {})
+        fg = rg.setdefault(fuel, [])
+        fg.append({
+            "duid":     duid,
+            "station":  station,
+            "mw":       round(mw, 1) if mw is not None else None,
+            "capacity": capacity,
+            "pct":      pct,
+            "participant": info.get("participant", ""),
+        })
+
+    # Sort within each fuel group by MW descending
+    for region in grouped:
+        for fuel in grouped[region]:
+            grouped[region][fuel].sort(key=lambda x: x["mw"] or 0, reverse=True)
+
+    # Summary stats per region/fuel
+    summary: dict = {}
+    for region, fuels in grouped.items():
+        summary[region] = {}
+        for fuel, units in fuels.items():
+            total_mw  = sum(u["mw"] or 0 for u in units)
+            total_cap = sum(u["capacity"] or 0 for u in units)
+            summary[region][fuel] = {
+                "total_mw":  round(total_mw, 1),
+                "total_cap": round(total_cap, 1),
+                "unit_count": len(units),
+            }
+
+    logger.info(f"scrape_all_generators: {sum(len(v) for r in grouped.values() for v in r.values())} units across {len(grouped)} regions")
+    return {
+        "timestamp":   timestamp,
+        "grouped":     grouped,
+        "summary":     summary,
+        "fuel_colors": FUEL_COLORS,
+    }
+
+
+# ---------------------------------------------------------------------------
+# scrape_slow — background fetch for generators + week-ahead
+# ---------------------------------------------------------------------------
+
+def scrape_slow() -> dict:
+    """
+    Heavy scrape for generators page and week-ahead page.
+    Runs in background after fast scrape completes.
+    """
+    logger.info("scrape_slow starting...")
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        f_gens   = ex.submit(scrape_all_generators)
+        f_pasa   = ex.submit(scrape_stpasa_demand)
+        f_fuel7  = ex.submit(scrape_fuel_mix_history_opennem)  # reuse for week-ahead fuel context
+
+    gens  = f_gens.result()
+    pasa  = f_pasa.result()
+    fuel7 = f_fuel7.result()
+
+    logger.info("scrape_slow done")
+    return {
+        "timestamp":        datetime.now(timezone.utc).isoformat(),
+        "generators":       gens,
+        "stpasa_demand":    pasa,
+        "fuel_mix_today":   fuel7,
+        "fuel_colors":      FUEL_COLORS,
+        "all_fuels":        ALL_FUELS,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Quick test
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     import json
     logging.basicConfig(level=logging.INFO)
     data = scrape_all()
     summary = {
-        "prices": data["prices"],
+        "prices":       data["prices"],
         "hist_prices":  {r: len(v) for r, v in data["historical_prices"].items()},
         "pd_prices":    {r: len(v) for r, v in data["predispatch_prices"].items()},
         "demand_hist":  {r: len(v) for r, v in data["demand_history"].items()},
