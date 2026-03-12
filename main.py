@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from scraper import scrape_all, scrape_gen, scrape_slow
+from scraper import scrape_all, scrape_gen, scrape_slow, scrape_scada_history
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -101,6 +101,16 @@ async def _run_gen():
 
 async def gen_loop():
     await asyncio.sleep(5)   # let fast scrape finish first
+    # Backfill 24hr SCADA history once at startup so chart is immediately populated
+    try:
+        loop = asyncio.get_event_loop()
+        logger.info("Starting SCADA history backfill…")
+        await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_scada_history), timeout=120
+        )
+        logger.info("SCADA history backfill complete")
+    except Exception as e:
+        logger.warning(f"SCADA history backfill failed: {e}")
     while True:
         try:
             await _run_gen()
@@ -381,6 +391,33 @@ async def reg_test():
 
     return JSONResponse(content=result)
 
+
+
+@app.get("/api/scada-debug")
+async def scada_debug():
+    """Show raw SCADA DUIDs and which ones match/miss the registry."""
+    from scraper import _fetch_full_scada, NEM_UNITS
+    loop = asyncio.get_event_loop()
+    scada = await loop.run_in_executor(None, _fetch_full_scada)
+    matched, unmatched = {}, {}
+    for duid, mw in scada.items():
+        info = NEM_UNITS.get(duid.upper())
+        if info:
+            matched[duid] = {**info, "mw": mw}
+        else:
+            unmatched[duid] = mw
+    # Sort unmatched by MW desc to see biggest missing generators
+    top_unmatched = dict(sorted(unmatched.items(), key=lambda x: abs(x[1] or 0), reverse=True)[:100])
+    return JSONResponse(content={
+        "total_scada": len(scada),
+        "matched": len(matched),
+        "unmatched": len(unmatched),
+        "top_unmatched_by_mw": top_unmatched,
+        "matched_fuel_summary": {
+            fuel: round(sum(v["mw"] or 0 for v in matched.values() if v["fuel"] == fuel), 1)
+            for fuel in set(v["fuel"] for v in matched.values())
+        }
+    })
 
 
 @app.get("/", response_class=HTMLResponse)
