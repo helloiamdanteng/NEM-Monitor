@@ -327,72 +327,102 @@ function drawPriceChart(data) {
   destroyChart('priceHist');
   const ctx = document.getElementById('priceHistChart');
   if (!ctx) return;
-  const hist = data.historical_prices || {};
-  const pd   = data.predispatch_prices || {};
-  const livePrice = data.prices || {};   // current 5-min spot price
-  const now = nowAEST();
 
-  // Fixed 5-min spine from 00:00 to end of predispatch (or 23:55)
+  const hist      = data.historical_prices || {};
+  const pd        = data.predispatch_prices || {};
+  const livePrice = data.prices || {};
+  const now       = nowAEST();
+
+  // Build a 5-min spine for today
   const allSlots = [];
   for (let h = 0; h < 24; h++)
     for (let m = 0; m < 60; m += 5)
       allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
 
-  // Find last label that has any data (hist or predispatch)
+  // Trim spine to last slot that has any data
   const hasData = new Set();
   for (const r of REGIONS) {
     (hist[r] || []).forEach(p => hasData.add(p.interval));
     (pd[r]   || []).forEach(p => hasData.add(p.interval));
   }
-  const lastSlot = allSlots.filter(s => hasData.has(s)).pop() || allSlots[allSlots.length-1];
+  const lastSlot = allSlots.filter(s => hasData.has(s)).pop();
+  if (!lastSlot) return; // nothing to draw yet
+
   const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
 
-  // Snap now to nearest 5-min slot by numeric time distance
+  // Snap "now" to nearest slot
   const [nh, nm] = now.split(':').map(Number);
-  const nowMins = nh * 60 + nm;
-  const nowSnap = allSlots.length ? allSlots.reduce((a, b) => {
+  const nowMins  = nh * 60 + nm;
+  const nowSnap  = allSlots.reduce((a, b) => {
     const [ah, am] = a.split(':').map(Number);
     const [bh, bm] = b.split(':').map(Number);
     return Math.abs(bh*60+bm - nowMins) < Math.abs(ah*60+am - nowMins) ? b : a;
-  }) : '00:00';
-
-  if (labels.length <= 1) {
+  });
   const nowIdx = labels.indexOf(nowSnap);
+
   const datasets = [];
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
-    const hm = {}; (hist[r] || []).forEach(p => hm[p.interval] = p.rrp);
-    // Inject live spot price at snapped NOW slot
-    if (livePrice[r] !== undefined && livePrice[r] !== null) hm[nowSnap] = livePrice[r];
-    const pm = {}; (pd[r]   || []).forEach(p => pm[p.interval] = p.rrp);
+    // Actual history map
+    const hm = {};
+    (hist[r] || []).forEach(p => { hm[p.interval] = p.rrp; });
+    if (livePrice[r] != null) hm[nowSnap] = livePrice[r]; // inject live point
+    // Predispatch map
+    const pm = {};
+    (pd[r] || []).forEach(p => { pm[p.interval] = p.rrp; });
+
     datasets.push({
       label: REGION_SHORT[r], regionId: r, isPD: false,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
-      borderColor: color, backgroundColor:'transparent',
-      borderWidth:3, pointRadius:0, tension:0.3, spanGaps:false
+      borderColor: color, backgroundColor: 'transparent',
+      borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false
     });
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r, isPD: true,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor: color+'55', backgroundColor:'transparent',
-      borderWidth:1.5, pointRadius:0, tension:0.3, spanGaps:false,
-      borderDash:[4,4]
+      borderColor: color+'66', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
+      borderDash: [4, 4]
     });
   }
+
   charts.priceHist = new Chart(ctx, {
-    type:'line', data:{labels,datasets},
-    options:{...CHART_DEFAULTS,
-      plugins:{...CHART_DEFAULTS.plugins,
-        tooltip:{...CHART_DEFAULTS.plugins.tooltip,
-          filter:i=>i.raw!==null,
-          callbacks:{label:c=>c.raw===null?null:` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh`}
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: {
+          ...CHART_DEFAULTS.plugins.tooltip,
+          filter: i => i.raw !== null,
+          callbacks: { label: c => c.raw === null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` }
         }
       },
-      scales:{...CHART_DEFAULTS.scales,
-        y:{...CHART_DEFAULTS.scales.y, ticks:{...CHART_DEFAULTS.scales.y.ticks, callback:v=>'$'+v.toFixed(0)}}
+      scales: {
+        x: {
+          ticks: {
+            color: '#64748b',
+            font: { family: 'Space Mono', size: 9 },
+            maxRotation: 0,
+            // Only show hour marks — every 12th 5-min slot
+            callback: function(val, idx) {
+              return idx % 12 === 0 ? labels[idx] : '';
+            }
+          },
+          grid: { color: '#1e2d4544' }
+        },
+        y: {
+          ticks: {
+            color: '#94a3b8',
+            font: { family: 'Space Mono', size: 10 },
+            callback: v => '$' + v.toFixed(0)
+          },
+          grid: { color: '#1e2d45' }
+        }
       }
     },
-    plugins:[nowLinePlugin(nowIdx)]
+    plugins: [nowLinePlugin(nowIdx)]
   });
 }
 
@@ -587,76 +617,114 @@ function drawDemandChart(data) {
   destroyChart('demandHist');
   const ctx = document.getElementById('demandHistChart');
   if (!ctx) return;
-  // Prefer full-day dispatch archive history, fall back to in-memory snapshots
-  const dispHist = data.dispatch_history || {};
-  const snapHist = data.demand_history || {};
-  const pd = data.predispatch_demand || {};
-  const liveDemand = data.demand || {};   // current 5-min live reading
+
+  // dispatch_history has shape [{interval, demand}], demand_history same shape
+  const dispHist  = data.dispatch_history  || {};
+  const snapHist  = data.demand_history    || {};
+  const pd        = data.predispatch_demand || {};
+  const liveDemand = data.demand || {};
   const now = nowAEST();
 
-  // Fixed 5-min spine from 00:00 to end of predispatch (or current data)
+  // Build 5-min spine
   const allSlots = [];
   for (let h = 0; h < 24; h++)
     for (let m = 0; m < 60; m += 5)
       allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
 
+  // Find last slot with any data
   const hasData = new Set();
   for (const r of REGIONS) {
-    const src = dispHist[r] || snapHist[r] || [];
-    src.forEach(p => hasData.add(p.interval));
-    (pd[r] || []).forEach(p => hasData.add(p.interval));
+    const src = (dispHist[r] && dispHist[r].length) ? dispHist[r] : (snapHist[r] || []);
+    src.forEach(p => { if (p.interval) hasData.add(p.interval); });
+    (pd[r] || []).forEach(p => { if (p.interval) hasData.add(p.interval); });
   }
-  const lastSlot = allSlots.filter(s => hasData.has(s)).pop() || allSlots[allSlots.length-1];
-  const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
-
-  const [nh, nm] = now.split(':').map(Number);
-  const nowMins = nh * 60 + nm;
-  const nowSnap = allSlots.length ? allSlots.reduce((a, b) => {
-    const [ah, am] = a.split(':').map(Number);
-    const [bh, bm] = b.split(':').map(Number);
-    return Math.abs(bh*60+bm - nowMins) < Math.abs(ah*60+am - nowMins) ? b : a;
-  }) : '00:00';
-
-  if (labels.length <= 1) {
-    ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Demand history — data loading on next refresh';
+  const lastSlot = allSlots.filter(s => hasData.has(s)).pop();
+  if (!lastSlot) {
+    ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Demand history — loading…';
     ctx.style.display = 'none';
     return;
   }
+  ctx.style.display = '';
+
+  const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
+
+  // Snap now
+  const [nh, nm] = now.split(':').map(Number);
+  const nowMins  = nh * 60 + nm;
+  const nowSnap  = allSlots.reduce((a, b) => {
+    const [ah, am] = a.split(':').map(Number);
+    const [bh, bm] = b.split(':').map(Number);
+    return Math.abs(bh*60+bm - nowMins) < Math.abs(ah*60+am - nowMins) ? b : a;
+  });
   const nowIdx = labels.indexOf(nowSnap);
+
   const datasets = [];
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
-    const src = dispHist[r] || snapHist[r] || [];
+    // Prefer dispatch_history, fall back to demand_history snapshots
+    const src = (dispHist[r] && dispHist[r].length) ? dispHist[r] : (snapHist[r] || []);
     const hm = {};
-    src.forEach(p => { if (p.demand !== null && p.demand !== undefined) hm[p.interval] = p.demand; });
-    // Inject live reading at snapped NOW slot
-    if (liveDemand[r] !== undefined && liveDemand[r] !== null) hm[nowSnap] = liveDemand[r];
+    src.forEach(p => {
+      if (p.interval !== undefined) {
+        // dispatch_history uses p.demand; demand_history also uses p.demand
+        const val = p.demand !== undefined ? p.demand : p.totaldemand;
+        if (val !== null && val !== undefined) hm[p.interval] = val;
+      }
+    });
+    if (liveDemand[r] != null) hm[nowSnap] = liveDemand[r]; // inject live point
+
     const pm = {};
-    (pd[r] || []).forEach(p => pm[p.interval] = p.demand);
+    (pd[r] || []).forEach(p => { if (p.interval) pm[p.interval] = p.demand; });
+
     datasets.push({
       label: REGION_SHORT[r], regionId: r,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor: color, backgroundColor: 'transparent',
-      borderWidth: 2.5, pointRadius: 0, tension: 0.3, spanGaps: true
+      borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: true
     });
     datasets.push({
-      label: REGION_SHORT[r] + ' PD', regionId: r,
+      label: REGION_SHORT[r]+' PD', regionId: r,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor: color + '55', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: false, borderDash: [4, 4]
+      borderColor: color+'66', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
+      borderDash: [4, 4]
     });
   }
+
   charts.demandHist = new Chart(ctx, {
-    type: 'line', data: {labels, datasets},
-    options: {...CHART_DEFAULTS,
-      plugins: {...CHART_DEFAULTS.plugins,
-        tooltip: {...CHART_DEFAULTS.plugins.tooltip,
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: {
+          ...CHART_DEFAULTS.plugins.tooltip,
           filter: i => i.raw !== null,
-          callbacks: {label: c => c.raw === null ? null : ` ${c.dataset.label}: ${fmt(c.raw)} MW`}
+          callbacks: { label: c => c.raw === null ? null : ` ${c.dataset.label}: ${fmt(c.raw)} MW` }
         }
       },
-      scales: {...CHART_DEFAULTS.scales,
-        y: {...CHART_DEFAULTS.scales.y, ticks: {...CHART_DEFAULTS.scales.y.ticks, callback: v => v.toLocaleString() + ' MW'}}
+      scales: {
+        x: {
+          ticks: {
+            color: '#64748b',
+            font: { family: 'Space Mono', size: 9 },
+            maxRotation: 0,
+            // Show only hour marks
+            callback: function(val, idx) {
+              return idx % 12 === 0 ? labels[idx] : '';
+            }
+          },
+          grid: { color: '#1e2d4544' }
+        },
+        y: {
+          ticks: {
+            color: '#94a3b8',
+            font: { family: 'Space Mono', size: 10 },
+            callback: v => v.toLocaleString() + ' MW'
+          },
+          grid: { color: '#1e2d45' }
+        }
       }
     },
     plugins: [nowLinePlugin(nowIdx)]
