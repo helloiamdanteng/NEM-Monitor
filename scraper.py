@@ -34,6 +34,23 @@ AEMO_REG_LIST_URL = "https://www.aemo.com.au/-/media/Files/Electricity/NEM/Parti
 
 NEM_REGIONS = ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]
 
+# ---------------------------------------------------------------------------
+# Static unit registry — loaded once from nem_units.json at startup
+# ---------------------------------------------------------------------------
+import json as _json
+from pathlib import Path as _Path
+
+def _load_nem_units() -> dict:
+    p = _Path(__file__).parent / "nem_units.json"
+    try:
+        return _json.loads(p.read_text())
+    except Exception as e:
+        logger.warning(f"nem_units.json load failed: {e}")
+        return {}
+
+NEM_UNITS: dict = _load_nem_units()
+logger.info(f"NEM_UNITS loaded: {len(NEM_UNITS)} DUIDs")
+
 FUEL_COLORS = {
     "Black Coal": "#4a4a6a",
     "Brown Coal": "#8B4513",
@@ -797,20 +814,18 @@ def scrape_predispatch_interconnectors(text: str) -> dict:
 def scrape_all() -> dict:
     logger.info("scrape_all starting...")
 
-    # Run all IO-bound fetches concurrently
-    with ThreadPoolExecutor(max_workers=8) as ex:
+    # Run all IO-bound fetches concurrently — prices/demand/history/predispatch only
+    with ThreadPoolExecutor(max_workers=6) as ex:
         f_dispatch_is   = ex.submit(_fetch_dispatch_is)
         f_predispatch   = ex.submit(_fetch_predispatch)
         f_trading       = ex.submit(scrape_trading_history)
         f_dispatch_hist = ex.submit(scrape_dispatch_history)
-        f_fuel_mix      = ex.submit(scrape_fuel_mix_history_opennem)
         f_scada         = ex.submit(scrape_scada_duids, ORIGIN_DUIDS)
 
     dispatch_text    = f_dispatch_is.result()
     predispatch_text = f_predispatch.result()
-    trading          = f_trading.result()   # {"prices": {...}}
-    dispatch_hist    = f_dispatch_hist.result()  # {"demand": {...}, "prices": {...}}
-    fuel_mix         = f_fuel_mix.result()
+    trading          = f_trading.result()
+    dispatch_hist    = f_dispatch_hist.result()
     scada_vals       = f_scada.result()
 
     dispatch_demand       = dispatch_hist.get("demand", {})
@@ -892,7 +907,6 @@ def scrape_all() -> dict:
         "demand_history":        demand_history,
         "dispatch_history":      dispatch_demand,
         "predispatch_demand":    pd_demand,
-        "fuel_mix_history":      fuel_mix,
         "predispatch_gen":       pd_gen,
         "ic_history":            ic_history,
         "predispatch_ic":        pd_interconnectors,
@@ -1276,32 +1290,87 @@ def scrape_all_generators() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# scrape_gen — medium speed: fuel mix from SCADA + NEM_UNITS static registry
+# Refreshed every 15 min.
+# ---------------------------------------------------------------------------
+
+def scrape_gen() -> dict:
+    """
+    Fetch full SCADA snapshot, join with NEM_UNITS static registry.
+    Returns current MW by fuel per region, plus NEM-wide totals.
+    """
+    logger.info("scrape_gen starting...")
+    scada = _fetch_full_scada()
+    reg   = NEM_UNITS
+
+    fuel_mix:   dict = {r: {} for r in NEM_REGIONS}
+    nem_totals: dict = {}
+
+    # Also build grouped structure for Stations tab (reuse same SCADA pass)
+    grouped: dict = {}
+
+    for duid, mw in scada.items():
+        info = reg.get(duid.upper(), {})
+        region = info.get("region", "")
+        fuel   = info.get("fuel",   "Other")
+        if region not in NEM_REGIONS:
+            continue
+
+        mw_pos = max(mw, 0) if mw is not None else 0
+
+        # Fuel mix totals (generating only, positive MW)
+        fuel_mix[region][fuel] = round(fuel_mix[region].get(fuel, 0) + mw_pos, 1)
+        nem_totals[fuel] = round(nem_totals.get(fuel, 0) + mw_pos, 1)
+
+        # Grouped detail for Stations tab
+        capacity = info.get("capacity")
+        pct = round(mw / capacity * 100, 1) if (mw is not None and capacity and capacity > 0) else None
+        rg = grouped.setdefault(region, {})
+        fg = rg.setdefault(fuel, [])
+        fg.append({
+            "duid":     duid,
+            "station":  info.get("station", duid),
+            "mw":       round(mw, 1) if mw is not None else None,
+            "capacity": capacity,
+            "pct":      pct,
+        })
+
+    # Sort units within each fuel group by MW desc
+    for region in grouped:
+        for fuel in grouped[region]:
+            grouped[region][fuel].sort(key=lambda x: x["mw"] or 0, reverse=True)
+
+    logger.info(f"scrape_gen done — {len(scada)} SCADA DUIDs, "
+                f"reg={len(reg)}, buckets={sum(len(v) for v in fuel_mix.values())}")
+    return {
+        "timestamp":   datetime.now(timezone.utc).isoformat(),
+        "fuel_mix":    fuel_mix,
+        "nem_totals":  nem_totals,
+        "grouped":     grouped,
+        "fuel_colors": FUEL_COLORS,
+        "all_fuels":   ALL_FUELS,
+        "scada_count": len(scada),
+        "reg_count":   len(reg),
+    }
+
+
 # scrape_slow — background fetch for generators + week-ahead
 # ---------------------------------------------------------------------------
 
 def scrape_slow() -> dict:
     """
-    Heavy scrape for generators page and week-ahead page.
-    Runs in background after fast scrape completes.
+    Week-ahead ST PASA demand forecast only.
+    Generators/fuel mix now handled by scrape_gen (medium cache).
     """
     logger.info("scrape_slow starting...")
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f_gens   = ex.submit(scrape_all_generators)
-        f_pasa   = ex.submit(scrape_stpasa_demand)
-        f_fuel7  = ex.submit(scrape_fuel_mix_history_opennem)  # reuse for week-ahead fuel context
-
-    gens  = f_gens.result()
-    pasa  = f_pasa.result()
-    fuel7 = f_fuel7.result()
-
+    pasa = scrape_stpasa_demand()
     logger.info("scrape_slow done")
     return {
-        "timestamp":        datetime.now(timezone.utc).isoformat(),
-        "generators":       gens,
-        "stpasa_demand":    pasa,
-        "fuel_mix_today":   fuel7,
-        "fuel_colors":      FUEL_COLORS,
-        "all_fuels":        ALL_FUELS,
+        "timestamp":     datetime.now(timezone.utc).isoformat(),
+        "stpasa_demand": pasa,
+        "fuel_colors":   FUEL_COLORS,
+        "all_fuels":     ALL_FUELS,
     }
 
 
