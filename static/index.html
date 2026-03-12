@@ -864,8 +864,11 @@ function toggleStationRegion(region) {
 }
 
 function renderStations(fastData) {
-  if (!slowData || !slowData.generators) {
+  if (!slowData) {
     return `<div class="spinner"><div class="spinner-icon">⚙️</div><br>Loading generator data…<br><span style="font-size:10px;margin-top:8px;display:block">This page fetches from AEMO — may take 20–30s</span></div>`;
+  }
+  if (slowData._unavailable || !slowData.generators) {
+    return `<div class="state-msg"><div class="icon">⚠️</div><div>Generator data unavailable<br><span style="font-size:10px">AEMO registration list could not be loaded. Check Render logs.</span></div></div>`;
   }
   const { grouped, summary, fuel_colors: fc } = slowData.generators;
   const prices = (fastData || {}).prices || {};
@@ -952,6 +955,9 @@ function toggleWeekRegion(region) {
 }
 
 function renderWeekAhead(fastData) {
+  if (slowData && slowData._unavailable) {
+    return `<div class="state-msg"><div class="icon">⚠️</div><div>Week-ahead data unavailable<br><span style="font-size:10px">AEMO data could not be loaded. Will retry on next refresh.</span></div></div>`;
+  }
   let html = '<div class="section-title">Week Ahead</div>';
 
   // Region filter pills
@@ -1113,15 +1119,28 @@ function renderPanel(panel, data) {
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
+let slowRetries = 0;
+const SLOW_MAX_RETRIES = 18; // 18 × 10s = 3 min max wait
+
 async function fetchSlowData() {
   try {
     const resp = await fetch('/api/slow');
     if (resp.status === 202) {
-      // Still loading — retry in 10s
-      setTimeout(fetchSlowData, 10000);
+      slowRetries++;
+      if (slowRetries < SLOW_MAX_RETRIES) {
+        setTimeout(fetchSlowData, 10000);
+      } else {
+        // Give up — show stations/weekahead as unavailable
+        console.warn('Slow data never arrived after max retries');
+        slowData = { _unavailable: true };
+        if (currentPanel === 'stations' || currentPanel === 'weekahead') {
+          renderPanel(currentPanel, latestData);
+        }
+      }
       return;
     }
     if (resp.ok) {
+      slowRetries = 0;
       slowData = await resp.json();
       // Re-render if on a slow-data panel
       if (currentPanel === 'stations' || currentPanel === 'weekahead') {
