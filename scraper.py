@@ -833,14 +833,15 @@ def scrape_all() -> dict:
         }
 
     # Merge TradingIS (30-min, firm) with DispatchIS 5-min prices to fill the lag gap.
-    # TradingIS lags ~30-60min behind real time; DispatchIS is near real-time.
-    # Strategy: use TradingIS as base, then fill any slots not covered by trading
-    # with the 5-min dispatch prices (these are the last ~1hr).
+    # TradingIS lags ~30-60min; DispatchIS is near real-time.
+    # Cap dispatch prices at now so they don't appear as solid "future" lines.
+    now_label = datetime.now(AEST).strftime("%H:%M")
     merged_prices = {}
     for r in NEM_REGIONS:
-        trading_pts = {p["interval"]: p["rrp"] for p in trading["prices"].get(r, [])}
-        dispatch_pts = {p["interval"]: p["rrp"] for p in dispatch_price_5min.get(r, [])}
-        # Dispatch fills slots where trading has no data
+        trading_pts  = {p["interval"]: p["rrp"] for p in trading["prices"].get(r, [])}
+        # Only use dispatch prices up to and including now
+        dispatch_pts = {p["interval"]: p["rrp"] for p in dispatch_price_5min.get(r, [])
+                        if p["interval"] <= now_label}
         combined = {**dispatch_pts, **trading_pts}  # trading wins on overlap (firm prices)
         if combined:
             merged_prices[r] = [{"interval": k, "rrp": v} for k, v in sorted(combined.items())]
