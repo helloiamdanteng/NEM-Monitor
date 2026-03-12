@@ -832,49 +832,46 @@ def scrape_all() -> dict:
             "status": "running" if (mw is not None and mw > 5) else ("off" if mw is not None else "unknown"),
         }
 
-    # Merge TradingIS (30-min, firm) with DispatchIS 5-min prices to fill the lag gap.
-    # TradingIS lags ~30-60min; DispatchIS is near real-time.
-    # Cap dispatch prices at now so they don't appear as solid "future" lines.
+    # Keep trading (firm 30-min) and dispatch 5-min prices separate
+    # so the frontend can style them differently
+    trading_prices = trading["prices"]
+    # Cap dispatch at now
     now_label = datetime.now(AEST).strftime("%H:%M")
-    merged_prices = {}
+    capped_dispatch_prices = {}
     for r in NEM_REGIONS:
-        trading_pts  = {p["interval"]: p["rrp"] for p in trading["prices"].get(r, [])}
-        # Only use dispatch prices up to and including now
-        dispatch_pts = {p["interval"]: p["rrp"] for p in dispatch_price_5min.get(r, [])
-                        if p["interval"] <= now_label}
-        combined = {**dispatch_pts, **trading_pts}  # trading wins on overlap (firm prices)
-        if combined:
-            merged_prices[r] = [{"interval": k, "rrp": v} for k, v in sorted(combined.items())]
+        pts = [p for p in dispatch_price_5min.get(r, []) if p["interval"] <= now_label]
+        if pts:
+            capped_dispatch_prices[r] = pts
 
     logger.info(
         f"scrape_all done — prices:{list(prices.keys())} "
-        f"trading_pts:{sum(len(v) for v in trading['prices'].values())} "
-        f"dispatch_5min_pts:{sum(len(v) for v in dispatch_price_5min.values())} "
-        f"merged_pts:{sum(len(v) for v in merged_prices.values())} "
+        f"trading_pts:{sum(len(v) for v in trading_prices.values())} "
+        f"dispatch_5min_pts:{sum(len(v) for v in capped_dispatch_prices.values())} "
         f"origin_duids_found:{len(scada_vals)} "
         f"fuel_mix_regions:{list(fuel_mix.keys())}"
     )
 
     return {
-        "timestamp":          datetime.now(timezone.utc).isoformat(),
-        "prices":             prices,
-        "demand":             demand,
-        "generation":         generation,
-        "interconnectors":    interconnectors,
-        "raw_summary":        region_summary,
-        "historical_prices":  merged_prices,
-        "price_fetch_stats":  trading.get("fetch_stats", {}),
-        "predispatch_prices": pd_prices,
-        "demand_history":     demand_history,
-        "dispatch_history":   dispatch_demand,
-        "predispatch_demand": pd_demand,
-        "fuel_mix_history":   fuel_mix,
-        "predispatch_gen":    pd_gen,
-        "ic_history":         ic_history,
-        "predispatch_ic":     pd_interconnectors,
-        "origin_assets":      origin_assets_out,
-        "fuel_colors":        FUEL_COLORS,
-        "all_fuels":          ALL_FUELS,
+        "timestamp":             datetime.now(timezone.utc).isoformat(),
+        "prices":                prices,
+        "demand":                demand,
+        "generation":            generation,
+        "interconnectors":       interconnectors,
+        "raw_summary":           region_summary,
+        "historical_prices":     trading_prices,
+        "dispatch_prices_5min":  capped_dispatch_prices,
+        "price_fetch_stats":     trading.get("fetch_stats", {}),
+        "predispatch_prices":    pd_prices,
+        "demand_history":        demand_history,
+        "dispatch_history":      dispatch_demand,
+        "predispatch_demand":    pd_demand,
+        "fuel_mix_history":      fuel_mix,
+        "predispatch_gen":       pd_gen,
+        "ic_history":            ic_history,
+        "predispatch_ic":        pd_interconnectors,
+        "origin_assets":         origin_assets_out,
+        "fuel_colors":           FUEL_COLORS,
+        "all_fuels":             ALL_FUELS,
     }
 
 
