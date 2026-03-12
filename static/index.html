@@ -332,26 +332,42 @@ function drawPriceChart(data) {
   const livePrice = data.prices || {};   // current 5-min spot price
   const now = nowAEST();
 
-  const labelSet = new Set();
+  // Fixed 5-min spine from 00:00 to end of predispatch (or 23:55)
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  // Find last label that has any data (hist or predispatch)
+  const hasData = new Set();
   for (const r of REGIONS) {
-    (hist[r] || []).forEach(p => labelSet.add(p.interval));
-    (pd[r]   || []).forEach(p => labelSet.add(p.interval));
+    (hist[r] || []).forEach(p => hasData.add(p.interval));
+    (pd[r]   || []).forEach(p => hasData.add(p.interval));
   }
-  // Always include NOW so the live price has a home on the chart
-  labelSet.add(now);
-  const labels = Array.from(labelSet).sort();
+  const lastSlot = allSlots.filter(s => hasData.has(s)).pop() || allSlots[allSlots.length-1];
+  const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
+
+  // Snap now to nearest 5-min slot by numeric time distance
+  const [nh, nm] = now.split(':').map(Number);
+  const nowMins = nh * 60 + nm;
+  const nowSnap = allSlots.reduce((a, b) => {
+    const [ah, am] = a.split(':').map(Number);
+    const [bh, bm] = b.split(':').map(Number);
+    return Math.abs(bh*60+bm - nowMins) < Math.abs(ah*60+am - nowMins) ? b : a;
+  });
+
   if (labels.length <= 1) {
     ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Price history — data loading on next refresh';
     ctx.style.display = 'none';
     return;
   }
-  const nowIdx = labels.indexOf(now);
+  const nowIdx = labels.indexOf(nowSnap);
   const datasets = [];
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
     const hm = {}; (hist[r] || []).forEach(p => hm[p.interval] = p.rrp);
-    // Inject live spot price at NOW
-    if (livePrice[r] !== undefined && livePrice[r] !== null) hm[now] = livePrice[r];
+    // Inject live spot price at snapped NOW slot
+    if (livePrice[r] !== undefined && livePrice[r] !== null) hm[nowSnap] = livePrice[r];
     const pm = {}; (pd[r]   || []).forEach(p => pm[p.interval] = p.rrp);
     datasets.push({
       label: REGION_SHORT[r], regionId: r, isPD: false,
@@ -582,29 +598,43 @@ function drawDemandChart(data) {
   const liveDemand = data.demand || {};   // current 5-min live reading
   const now = nowAEST();
 
-  const labelSet = new Set();
+  // Fixed 5-min spine from 00:00 to end of predispatch (or current data)
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const hasData = new Set();
   for (const r of REGIONS) {
     const src = dispHist[r] || snapHist[r] || [];
-    src.forEach(p => labelSet.add(p.interval));
-    (pd[r] || []).forEach(p => labelSet.add(p.interval));
+    src.forEach(p => hasData.add(p.interval));
+    (pd[r] || []).forEach(p => hasData.add(p.interval));
   }
-  // Always include NOW so the live reading has a home on the chart
-  labelSet.add(now);
-  const labels = Array.from(labelSet).sort();
+  const lastSlot = allSlots.filter(s => hasData.has(s)).pop() || allSlots[allSlots.length-1];
+  const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
+
+  const [nh, nm] = now.split(':').map(Number);
+  const nowMins = nh * 60 + nm;
+  const nowSnap = allSlots.reduce((a, b) => {
+    const [ah, am] = a.split(':').map(Number);
+    const [bh, bm] = b.split(':').map(Number);
+    return Math.abs(bh*60+bm - nowMins) < Math.abs(ah*60+am - nowMins) ? b : a;
+  });
+
   if (labels.length <= 1) {
     ctx.closest('.chart-card').querySelector('.chart-title').textContent = 'Demand history — data loading on next refresh';
     ctx.style.display = 'none';
     return;
   }
-  const nowIdx = labels.indexOf(now);
+  const nowIdx = labels.indexOf(nowSnap);
   const datasets = [];
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
     const src = dispHist[r] || snapHist[r] || [];
     const hm = {};
     src.forEach(p => { if (p.demand !== null && p.demand !== undefined) hm[p.interval] = p.demand; });
-    // Inject live reading at NOW
-    if (liveDemand[r] !== undefined && liveDemand[r] !== null) hm[now] = liveDemand[r];
+    // Inject live reading at snapped NOW slot
+    if (liveDemand[r] !== undefined && liveDemand[r] !== null) hm[nowSnap] = liveDemand[r];
     const pm = {};
     (pd[r] || []).forEach(p => pm[p.interval] = p.demand);
     datasets.push({
