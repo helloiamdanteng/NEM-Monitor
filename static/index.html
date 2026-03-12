@@ -377,12 +377,16 @@ function drawPriceChart(data) {
       borderColor: color, backgroundColor: 'transparent',
       borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false
     });
+    // Bridge: inject last actual price into PD map so line connects
+    const lastActual = labels.slice().reverse().find(l => hm[l] !== undefined);
+    if (lastActual && Object.keys(pm).length) pm[lastActual] = hm[lastActual];
+
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r, isPD: true,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor: color+'66', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
-      borderDash: [4, 4]
+      borderColor: color+'99', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true,
+      borderDash: [5, 5]
     });
   }
 
@@ -682,12 +686,16 @@ function drawDemandChart(data) {
       borderColor: color, backgroundColor: 'transparent',
       borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: true
     });
+    // Bridge: connect last actual to first PD point
+    const lastActualD = labels.slice().reverse().find(l => hm[l] !== undefined);
+    if (lastActualD && Object.keys(pm).length) pm[lastActualD] = hm[lastActualD];
+
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
-      borderColor: color+'66', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
-      borderDash: [4, 4]
+      borderColor: color+'99', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true,
+      borderDash: [5, 5]
     });
   }
 
