@@ -107,14 +107,20 @@ ORIGIN_DUIDS = set(ORIGIN_ASSETS.keys())
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "NEM-Dashboard/1.0"})
 
-def _get(url: str, timeout: int = 15) -> Optional[requests.Response]:
-    try:
-        r = SESSION.get(url, timeout=timeout)
-        r.raise_for_status()
-        return r
-    except Exception as e:
-        logger.warning(f"GET failed {url}: {e}")
-        return None
+def _get(url: str, timeout: int = 15, retries: int = 2) -> Optional[requests.Response]:
+    import time as _time
+    for attempt in range(retries + 1):
+        try:
+            r = SESSION.get(url, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            if attempt < retries:
+                _time.sleep(0.5 * (attempt + 1))  # 0.5s, 1.0s backoff
+                logger.debug(f"GET retry {attempt+1} {url}: {e}")
+            else:
+                logger.warning(f"GET failed {url}: {e}")
+    return None
 
 
 def _list_hrefs(url: str) -> list[str]:
@@ -315,10 +321,17 @@ def scrape_trading_history() -> dict:
     today_zips = sorted(today_zips)[-300:]
 
     prices: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    fetch_ok = 0
+    fetch_fail = 0
+    fetch_empty = 0
 
     def fetch_one(url):
+        import time as _time, random
+        _time.sleep(random.uniform(0, 0.1))  # small jitter to avoid burst
         try:
             text = _read_zip(url)
+            if not text:
+                return [], "empty"
             pts = []
             for row in _parse_aemo(text, "TRADING_PRICE"):
                 region = row.get("REGIONID", "")
@@ -336,22 +349,30 @@ def scrape_trading_history() -> dict:
                     pts.append((region, dt.strftime("%H:%M"), round(float(rrp_str), 2)))
                 except (ValueError, TypeError):
                     pass
-            return pts
+            return pts, "ok" if pts else "empty"
         except Exception as e:
             logger.warning(f"fetch_one failed {url}: {e}")
-            return []
+            return [], "fail"
 
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = [ex.submit(fetch_one, u) for u in today_zips]
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {ex.submit(fetch_one, u): u for u in today_zips}
         for fut in as_completed(futures):
-            for region, label, val in fut.result():
+            pts, status = fut.result()
+            if status == "ok":
+                fetch_ok += 1
+            elif status == "fail":
+                fetch_fail += 1
+            else:
+                fetch_empty += 1
+            for region, label, val in pts:
                 prices[region][label] = val
 
     price_result = {r: [{"interval": k, "rrp": v} for k, v in sorted(s.items())]
                     for r, s in prices.items() if s}
 
-    logger.info(f"TradingIS prices: {sum(len(v) for v in price_result.values())} pts from {len(today_zips)} files")
-    return {"prices": price_result}
+    logger.info(f"TradingIS prices: {sum(len(v) for v in price_result.values())} pts "
+                f"from {len(today_zips)} files (ok={fetch_ok} empty={fetch_empty} fail={fetch_fail})")
+    return {"prices": price_result, "fetch_stats": {"ok": fetch_ok, "empty": fetch_empty, "fail": fetch_fail}}
 
 
 # ---------------------------------------------------------------------------
@@ -374,10 +395,17 @@ def scrape_dispatch_demand_history() -> dict:
     today_zips = sorted(today_zips)[-300:]
 
     demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    fetch_ok = 0
+    fetch_fail = 0
+    fetch_empty = 0
 
     def fetch_one(url):
+        import time as _time, random
+        _time.sleep(random.uniform(0, 0.1))
         try:
             text = _read_zip(url)
+            if not text:
+                return [], "empty"
             pts = []
             for row in _parse_aemo(text, "DISPATCH_REGIONSUM"):
                 region = row.get("REGIONID", "")
@@ -395,20 +423,28 @@ def scrape_dispatch_demand_history() -> dict:
                     pts.append((region, dt.strftime("%H:%M"), round(float(demand_str), 1)))
                 except (ValueError, TypeError):
                     pass
-            return pts
+            return pts, "ok" if pts else "empty"
         except Exception as e:
             logger.warning(f"dispatch_demand fetch_one failed {url}: {e}")
-            return []
+            return [], "fail"
 
-    with ThreadPoolExecutor(max_workers=10) as ex:
-        futures = [ex.submit(fetch_one, u) for u in today_zips]
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {ex.submit(fetch_one, u): u for u in today_zips}
         for fut in as_completed(futures):
-            for region, label, val in fut.result():
+            pts, status = fut.result()
+            if status == "ok":
+                fetch_ok += 1
+            elif status == "fail":
+                fetch_fail += 1
+            else:
+                fetch_empty += 1
+            for region, label, val in pts:
                 demand[region][label] = val
 
     result = {r: [{"interval": k, "demand": v} for k, v in sorted(s.items())]
               for r, s in demand.items() if s}
-    logger.info(f"DispatchIS demand history: {sum(len(v) for v in result.values())} pts from {len(today_zips)} files")
+    logger.info(f"DispatchIS demand history: {sum(len(v) for v in result.values())} pts "
+                f"from {len(today_zips)} files (ok={fetch_ok} empty={fetch_empty} fail={fetch_fail})")
     return result
 
 
@@ -738,6 +774,7 @@ def scrape_all() -> dict:
         "interconnectors":    interconnectors,
         "raw_summary":        region_summary,
         "historical_prices":  trading["prices"],
+        "price_fetch_stats":  trading.get("fetch_stats", {}),
         "predispatch_prices": pd_prices,
         "demand_history":     demand_history,
         "predispatch_demand": pd_demand,
