@@ -210,11 +210,11 @@ function fmtPrice(n) {
 }
 function fmtTime(iso) {
   try {
-    return new Date(iso).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZone:'Australia/Sydney'}) + ' AEST';
+    return new Date(iso).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'}) + ' AEST';
   } catch { return ''; }
 }
 function nowAEST() {
-  return new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Australia/Sydney'});
+  return new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Australia/Brisbane'});
 }
 function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
@@ -1147,13 +1147,13 @@ function drawWeekCharts(fastData) {
           legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:12, padding:8 } },
           tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
             callbacks: { label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null,
-              title: ts => { try { const d = new Date(ts[0].label.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Australia/Sydney'}); } catch { return ts[0].label; } }
+              title: ts => { try { const d = new Date(ts[0].label.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'}); } catch { return ts[0].label; } }
             }
           }
         },
         scales: {
           x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:8}, maxTicksLimit:8, maxRotation:0,
-            callback: function(v,i) { const l = this.getLabelForValue(v); try { const d = new Date(l.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',timeZone:'Australia/Sydney'}); } catch { return l; } }
+            callback: function(v,i) { const l = this.getLabelForValue(v); try { const d = new Date(l.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',timeZone:'Australia/Brisbane'}); } catch { return l; } }
           }, grid:{color:'#1e2d4544'} },
           y: { ticks: { color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => v.toLocaleString()+' MW' }, grid:{color:'#1e2d45'} }
         }
