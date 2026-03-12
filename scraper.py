@@ -418,7 +418,8 @@ def scrape_region_summary(text: str) -> dict:
             continue  # skip intervention runs
         e = summary.setdefault(region, {})
         for f in ["TOTALDEMAND","DEMANDFORECAST","INITIALSUPPLY",
-                  "DISPATCHABLEGENERATION","SEMISCHEDULE_CLEAREDMW","NETINTERCHANGE"]:
+                  "DISPATCHABLEGENERATION","SEMISCHEDULE_CLEAREDMW","NETINTERCHANGE",
+                  "DEMAND_AND_NONSCHEDGEN","TOTALINTERMITTENTGENERATION"]:
             v = row.get(f, "")
             if v:
                 try: e[f] = round(float(v), 1)
@@ -607,6 +608,7 @@ def scrape_dispatch_history() -> dict:
     today_zips = sorted(today_zips)[-300:]
 
     demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    op_demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     prices: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     fetch_ok = fetch_fail = fetch_empty = 0
     now_aest   = datetime.now(AEST)
@@ -630,13 +632,17 @@ def scrape_dispatch_history() -> dict:
                     continue
                 dt_str = row.get("SETTLEMENTDATE", "")
                 demand_str = row.get("TOTALDEMAND", "")
+                op_demand_str = row.get("DEMAND_AND_NONSCHEDGEN", "")
                 if not dt_str or not demand_str:
                     continue
                 try:
                     dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=5)
                     if dt.date() != today_date or dt.strftime("%H:%M") > now_label:
                         continue
-                    pts.append(("demand", region, dt.strftime("%H:%M"), round(float(demand_str), 1)))
+                    label = dt.strftime("%H:%M")
+                    pts.append(("demand", region, label, round(float(demand_str), 1)))
+                    if op_demand_str:
+                        pts.append(("op_demand", region, label, round(float(op_demand_str), 1)))
                 except (ValueError, TypeError):
                     pass
             # Extract price from DISPATCH_PRICE
@@ -675,18 +681,22 @@ def scrape_dispatch_history() -> dict:
             for kind, region, label, val in pts:
                 if kind == "demand":
                     demand[region][label] = val
+                elif kind == "op_demand":
+                    op_demand[region][label] = val
                 else:
                     prices[region][label] = val
 
     demand_result = {r: [{"interval": k, "demand": v} for k, v in sorted(s.items())]
                      for r, s in demand.items() if s}
+    op_demand_result = {r: [{"interval": k, "demand": v} for k, v in sorted(s.items())]
+                        for r, s in op_demand.items() if s}
     price_result  = {r: [{"interval": k, "rrp": v}    for k, v in sorted(s.items())]
                      for r, s in prices.items() if s}
 
     logger.info(f"DispatchIS history: demand={sum(len(v) for v in demand_result.values())} pts, "
                 f"prices={sum(len(v) for v in price_result.values())} pts "
                 f"from {len(today_zips)} files (ok={fetch_ok} empty={fetch_empty} fail={fetch_fail})")
-    return {"demand": demand_result, "prices": price_result}
+    return {"demand": demand_result, "op_demand": op_demand_result, "prices": price_result}
 
 
 # Keep old name as alias for compatibility
@@ -1028,6 +1038,7 @@ def scrape_all() -> dict:
     scada_vals       = f_scada.result()
 
     dispatch_demand       = dispatch_hist.get("demand", {})
+    dispatch_op_demand    = dispatch_hist.get("op_demand", {})
     dispatch_price_5min   = dispatch_hist.get("prices", {})
 
     # Parse live dispatch snapshot (prices, demand, generation, ICs)
@@ -1056,6 +1067,7 @@ def scrape_all() -> dict:
     # Live current values from latest dispatch interval
     prices     = {r: d["RRP"]         for r, d in region_summary.items() if "RRP" in d}
     demand     = {r: d["TOTALDEMAND"] for r, d in region_summary.items() if "TOTALDEMAND" in d}
+    op_demand  = {r: d["DEMAND_AND_NONSCHEDGEN"] for r, d in region_summary.items() if "DEMAND_AND_NONSCHEDGEN" in d}
     generation = {r: {
         "Scheduled":      d.get("DISPATCHABLEGENERATION", 0),
         "Semi-Scheduled": d.get("SEMISCHEDULE_CLEAREDMW", 0),
@@ -1095,6 +1107,7 @@ def scrape_all() -> dict:
         "timestamp":             datetime.now(timezone.utc).isoformat(),
         "prices":                prices,
         "demand":                demand,
+        "op_demand":             op_demand,
         "generation":            generation,
         "interconnectors":       interconnectors,
         "raw_summary":           region_summary,
@@ -1103,6 +1116,7 @@ def scrape_all() -> dict:
         "price_fetch_stats":     trading.get("fetch_stats", {}),
         "predispatch_prices":    pd_prices,
         "demand_history":        demand_history,
+        "op_demand_history":     dispatch_op_demand,
         "dispatch_history":      dispatch_demand,
         "predispatch_demand":    pd_demand,
         "predispatch_gen":       pd_gen,
