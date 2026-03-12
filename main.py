@@ -243,6 +243,8 @@ async def debug():
         result["slow_cache"] = {
             "gen_regions":   list(gens.keys()),
             "gen_units":     sum(len(u) for r in gens.values() for u in r.values()),
+            "reg_list_count": d.get("generators", {}).get("reg_list_count", 0),
+            "scada_count":   d.get("generators", {}).get("scada_count", 0),
             "stpasa_pts":    {r: len(v) for r, v in d.get("stpasa_demand", {}).items()},
             "fuel_mix_pts":  {r: len(v) for r, v in d.get("fuel_mix_today", {}).items()},
         }
