@@ -360,32 +360,49 @@ function drawPriceChart(data) {
   });
   const nowIdx = labels.indexOf(nowSnap);
 
+  const disp5 = data.dispatch_prices_5min || {};
   const datasets = [];
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
-    // Actual history map
+    // Layer 1: firm 30-min trading prices (thick solid)
     const hm = {};
     (hist[r] || []).forEach(p => { hm[p.interval] = p.rrp; });
-    if (livePrice[r] != null) hm[nowSnap] = livePrice[r]; // inject live point
-    // Predispatch map
+    // Layer 2: 5-min dispatch fill for the recent gap (thin solid, only slots not in trading)
+    const dm = {};
+    (disp5[r] || []).forEach(p => { if (hm[p.interval] === undefined) dm[p.interval] = p.rrp; });
+    // Inject live spot at nowSnap into whichever series owns that slot
+    if (livePrice[r] != null) {
+      if (hm[nowSnap] !== undefined) hm[nowSnap] = livePrice[r];
+      else dm[nowSnap] = livePrice[r];
+    }
+    // Layer 3: predispatch (dashed), bridged from last actual
     const pm = {};
     (pd[r] || []).forEach(p => { pm[p.interval] = p.rrp; });
+    const lastActual = labels.slice().reverse().find(l => dm[l] !== undefined || hm[l] !== undefined);
+    if (lastActual && Object.keys(pm).length) {
+      pm[lastActual] = dm[lastActual] !== undefined ? dm[lastActual] : hm[lastActual];
+    }
 
+    // Trading — thick solid, no gap interpolation
     datasets.push({
       label: REGION_SHORT[r], regionId: r, isPD: false,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor: color, backgroundColor: 'transparent',
       borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false
     });
-    // Bridge: inject last actual price into PD map so line connects
-    const lastActual = labels.slice().reverse().find(l => hm[l] !== undefined);
-    if (lastActual && Object.keys(pm).length) pm[lastActual] = hm[lastActual];
-
+    // Dispatch 5-min fill — thinner solid
+    datasets.push({
+      label: REGION_SHORT[r]+' 5m', regionId: r, isPD: false,
+      data: labels.map(l => dm[l] !== undefined ? dm[l] : null),
+      borderColor: color+'cc', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false
+    });
+    // Predispatch — dashed
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r, isPD: true,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
       borderColor: color+'99', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true,
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
       borderDash: [5, 5]
     });
   }
@@ -680,21 +697,21 @@ function drawDemandChart(data) {
     const pm = {};
     (pd[r] || []).forEach(p => { if (p.interval) pm[p.interval] = p.demand; });
 
-    datasets.push({
-      label: REGION_SHORT[r], regionId: r,
-      data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
-      borderColor: color, backgroundColor: 'transparent',
-      borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: true
-    });
-    // Bridge: connect last actual to first PD point
+    // Bridge PD to last actual before pushing datasets
     const lastActualD = labels.slice().reverse().find(l => hm[l] !== undefined);
     if (lastActualD && Object.keys(pm).length) pm[lastActualD] = hm[lastActualD];
 
     datasets.push({
+      label: REGION_SHORT[r], regionId: r,
+      data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
+      borderColor: color, backgroundColor: 'transparent',
+      borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false
+    });
+    datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r,
       data: labels.map(l => pm[l] !== undefined ? pm[l] : null),
       borderColor: color+'99', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true,
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
       borderDash: [5, 5]
     });
   }
