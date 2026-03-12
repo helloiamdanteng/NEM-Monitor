@@ -1645,6 +1645,13 @@ def scrape_gen() -> dict:
         for fuel in grouped[region]:
             grouped[region][fuel].sort(key=lambda x: x["mw"] or 0, reverse=True)
 
+    # Log unmatched DUIDs (in SCADA but not in registry) sorted by MW descending
+    unmatched = {d: mw for d, mw in scada.items() if not reg.get(d.upper(), {}).get("region")}
+    if unmatched:
+        top_unmatched = sorted(unmatched.items(), key=lambda x: x[1] or 0, reverse=True)[:20]
+        logger.info(f"scrape_gen unmatched DUIDs ({len(unmatched)} total): "
+                    + ", ".join(f"{d}={mw:.0f}MW" for d, mw in top_unmatched if mw and mw > 1))
+
     # Accumulate into in-memory history
     _update_fuel_history(fuel_mix)
 
