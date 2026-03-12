@@ -43,7 +43,7 @@ async def _run_slow():
         loop = asyncio.get_event_loop()
         data = await asyncio.wait_for(
             loop.run_in_executor(None, scrape_slow),
-            timeout=120  # hard 2-min ceiling — never hang the slow cache
+            timeout=45   # hard ceiling — if AEMO XLS hangs, don't block forever
         )
         slow_cache["data"] = data
         slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
@@ -271,7 +271,60 @@ async def debug():
     return JSONResponse(content=result)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/api/reg-test")
+async def reg_test():
+    """Directly test AEMO registration list download and parse."""
+    import time as _time
+    result = {}
+    try:
+        from scraper import AEMO_REG_LIST_URL, SESSION
+        result["url"] = AEMO_REG_LIST_URL
+        t0 = _time.time()
+        r = SESSION.get(AEMO_REG_LIST_URL, timeout=30, allow_redirects=True)
+        result["status_code"] = r.status_code
+        result["content_type"] = r.headers.get("Content-Type", "")
+        result["content_length"] = len(r.content)
+        result["fetch_ms"] = round((_time.time() - t0) * 1000)
+        result["final_url"] = r.url
+
+        if r.status_code != 200:
+            result["error"] = f"HTTP {r.status_code}"
+            return JSONResponse(content=result)
+
+        # Try xlrd
+        try:
+            import xlrd
+            wb = xlrd.open_workbook(file_contents=r.content)
+            result["xlrd_sheets"] = wb.sheet_names()
+            # Try each sheet
+            sheet_info = {}
+            for name in wb.sheet_names():
+                sh = wb.sheet_by_name(name)
+                # First 5 rows, first 8 cols
+                rows_sample = []
+                for i in range(min(5, sh.nrows)):
+                    rows_sample.append([str(sh.cell_value(i, j)) for j in range(min(8, sh.ncols))])
+                sheet_info[name] = {"nrows": sh.nrows, "ncols": sh.ncols, "sample": rows_sample}
+            result["sheets"] = sheet_info
+        except Exception as e:
+            result["xlrd_error"] = str(e)
+            # Try openpyxl as fallback diagnostic
+            try:
+                import openpyxl
+                wb2 = openpyxl.load_workbook(io.BytesIO(r.content), read_only=True)
+                result["openpyxl_sheets"] = wb2.sheetnames
+            except Exception as e2:
+                result["openpyxl_error"] = str(e2)
+
+    except Exception as e:
+        result["exception"] = str(e)
+        import traceback as tb
+        result["traceback"] = tb.format_exc()
+
+    return JSONResponse(content=result)
+
+
+
 async def dashboard():
     html_path = Path(__file__).parent / "static" / "index.html"
     if html_path.exists():
