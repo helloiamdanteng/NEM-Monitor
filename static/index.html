@@ -1118,7 +1118,7 @@ function renderStations(fastData) {
   const grouped = genData.grouped;
   const fc = genData.fuel_colors || {};
   const prices = (fastData || {}).prices || {};
-  const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Battery','Liquid','Other'];
+  const FUEL_ORDER = ['Brown Coal','Black Coal','Gas','Hydro','Battery','Wind','Solar','Liquid','Other'];
 
   // Build region pills
   let html = '<div class="section-title">All NEM Generators</div>';
