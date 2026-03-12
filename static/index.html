@@ -719,6 +719,8 @@ function renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER) {
   el.innerHTML = html;
 }
 
+function renderGeneration(data) {
+  const fc = (genData && genData.fuel_colors) || data.fuel_colors || {};
 
   let html = '<div class="section-title">NEM Generation — Fuel Mix</div>';
 
@@ -735,7 +737,7 @@ function renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER) {
 
   // Chart card
   html += '<div class="chart-card"><div class="chart-title">Loading…</div>';
-  html += '<div class="chart-container" style="height:100px"><canvas id="fuelChart"></canvas></div>';
+  html += '<div class="chart-container" style="height:260px"><canvas id="fuelChart"></canvas></div>';
   html += '</div>';
 
   // Fuel breakdown list
@@ -748,8 +750,9 @@ function renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER) {
   }
   html += '</div>';
 
-  const gen = data.generation || {};
-  const raw = data.raw_summary || {};
+  return html;
+}
+
 // ── Demand ────────────────────────────────────────────────────────────────────
 
 function renderDemand(data) {
