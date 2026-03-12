@@ -40,13 +40,184 @@ NEM_REGIONS = ["QLD1", "NSW1", "VIC1", "SA1", "TAS1"]
 import json as _json
 from pathlib import Path as _Path
 
+_AEMO_REG_URL = "https://www.aemo.com.au/-/media/files/electricity/nem/participant_information/nem-registration-and-exemption-list.xlsx"
+
+# Fuel type mapping from AEMO's "Fuel Source - Primary" and "Technology Type" columns
+_FUEL_MAP = {
+    # Coal
+    "black coal": "Black Coal",
+    "coal": "Black Coal",
+    "brown coal": "Brown Coal",
+    "lignite": "Brown Coal",
+    # Gas
+    "natural gas": "Gas",
+    "gas": "Gas",
+    "coal seam methane": "Gas",
+    "coal seam gas": "Gas",
+    "landfill methane gas": "Gas",
+    "biogas": "Gas",
+    "waste coal mine gas": "Gas",
+    # Hydro
+    "water": "Hydro",
+    "hydro": "Hydro",
+    "pumped hydro": "Hydro",
+    # Wind
+    "wind": "Wind",
+    # Solar
+    "solar": "Solar",
+    "solar thermal": "Solar",
+    # Battery
+    "battery storage": "Battery",
+    "battery": "Battery",
+    # Liquid
+    "liquid fuel": "Liquid",
+    "diesel": "Liquid",
+    "fuel oil": "Liquid",
+    # Other
+    "biomass": "Other",
+    "waste": "Other",
+    "kerosene": "Liquid",
+}
+
+def _fetch_aemo_registration() -> dict:
+    """
+    Download and parse the AEMO NEM Registration and Exemption List XLSX.
+    Returns { DUID: { station, fuel, region, capacity } }
+    """
+    import io
+    try:
+        import openpyxl
+    except ImportError:
+        logger.warning("openpyxl not available for registration fetch")
+        return {}
+
+    try:
+        logger.info("Fetching AEMO registration list…")
+        resp = requests.get(_AEMO_REG_URL, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+        wb = openpyxl.load_workbook(io.BytesIO(resp.content), read_only=True, data_only=True)
+
+        # Find the "Generators and Scheduled Loads" sheet
+        sheet = None
+        for name in wb.sheetnames:
+            if "generator" in name.lower() or "scheduled" in name.lower():
+                sheet = wb[name]
+                break
+        if sheet is None:
+            sheet = wb.active
+
+        # Read header row to find column indices
+        rows = list(sheet.iter_rows(values_only=True))
+        # Find header row (contains "DUID")
+        header_row = None
+        header_idx = 0
+        for i, row in enumerate(rows[:10]):
+            if row and any(str(c).strip().upper() == "DUID" for c in row if c):
+                header_row = [str(c).strip() if c else "" for c in row]
+                header_idx = i
+                break
+
+        if not header_row:
+            logger.warning("Could not find header row in AEMO registration list")
+            return {}
+
+        # Map column names to indices (case-insensitive)
+        col = {h.lower(): i for i, h in enumerate(header_row)}
+        logger.info(f"Registration sheet columns: {list(col.keys())[:20]}")
+
+        # Find key columns
+        def find_col(*names):
+            for n in names:
+                if n in col: return col[n]
+            # Partial match
+            for k, v in col.items():
+                for n in names:
+                    if n in k: return v
+            return None
+
+        duid_col     = find_col("duid")
+        station_col  = find_col("station name", "station", "generating unit name", "name")
+        region_col   = find_col("region", "regionid")
+        fuel_col     = find_col("fuel source - primary", "fuel source", "fuel type", "primary fuel")
+        tech_col     = find_col("technology type - primary", "technology type", "tech type")
+        capacity_col = find_col("reg cap (mw)", "registered capacity", "capacity", "max cap", "reg cap")
+
+        if duid_col is None:
+            logger.warning("Could not find DUID column in registration list")
+            return {}
+
+        result = {}
+        for row in rows[header_idx + 1:]:
+            if not row or not row[duid_col]:
+                continue
+            duid = str(row[duid_col]).strip().upper()
+            if not duid or duid == "NONE":
+                continue
+
+            station  = str(row[station_col]).strip()  if station_col  is not None and row[station_col]  else duid
+            region   = str(row[region_col]).strip()   if region_col   is not None and row[region_col]   else ""
+            fuel_raw = str(row[fuel_col]).strip().lower() if fuel_col is not None and row[fuel_col] else ""
+            tech_raw = str(row[tech_col]).strip().lower() if tech_col is not None and row[tech_col] else ""
+
+            # Normalise region
+            if region and not region.endswith("1"):
+                region = region + "1"
+            if region not in ("QLD1", "NSW1", "VIC1", "SA1", "TAS1"):
+                continue  # skip non-NEM regions
+
+            # Normalise fuel
+            fuel = None
+            for key, val in _FUEL_MAP.items():
+                if key in fuel_raw or key in tech_raw:
+                    fuel = val
+                    break
+            # Battery override via tech
+            if "battery" in tech_raw or "storage" in tech_raw:
+                fuel = "Battery"
+            if fuel is None:
+                fuel = "Other"
+
+            # Capacity
+            cap = None
+            if capacity_col is not None and row[capacity_col]:
+                try:
+                    cap = int(round(float(str(row[capacity_col]).replace(",", ""))))
+                except (ValueError, TypeError):
+                    pass
+
+            result[duid] = {"station": station, "fuel": fuel, "region": region, "capacity": cap}
+
+        logger.info(f"AEMO registration list: {len(result)} DUIDs parsed")
+        return result
+
+    except Exception as e:
+        logger.warning(f"AEMO registration fetch failed: {e}")
+        return {}
+
+
 def _load_nem_units() -> dict:
+    """Load DUID registry: try live AEMO registration list first, fall back to static JSON."""
+    live = _fetch_aemo_registration()
+    if len(live) > 100:
+        # Merge static file on top to fill any gaps / override bad fuel mappings
+        p = _Path(__file__).parent / "nem_units.json"
+        try:
+            static = _json.loads(p.read_text())
+            # Static overrides live for DUIDs we've manually verified
+            merged = {**live, **static}
+            logger.info(f"NEM_UNITS: {len(live)} live + {len(static)} static overrides = {len(merged)} total")
+            return merged
+        except Exception:
+            return live
+    # Fallback to static
+    logger.warning("Live AEMO registration failed — using static nem_units.json")
     p = _Path(__file__).parent / "nem_units.json"
     try:
         return _json.loads(p.read_text())
     except Exception as e:
         logger.warning(f"nem_units.json load failed: {e}")
         return {}
+
 
 NEM_UNITS: dict = _load_nem_units()
 logger.info(f"NEM_UNITS loaded: {len(NEM_UNITS)} DUIDs")
