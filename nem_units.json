@@ -1,247 +1,1526 @@
 {
-  "BAYSW":      {"station":"Bayswater",          "fuel":"Black Coal","region":"NSW1","capacity":660},
-  "BAYSW2":     {"station":"Bayswater",          "fuel":"Black Coal","region":"NSW1","capacity":660},
-  "BAYSW3":     {"station":"Bayswater",          "fuel":"Black Coal","region":"NSW1","capacity":660},
-  "BAYSW4":     {"station":"Bayswater",          "fuel":"Black Coal","region":"NSW1","capacity":660},
-  "ERARING1":   {"station":"Eraring",            "fuel":"Black Coal","region":"NSW1","capacity":720},
-  "ERARING2":   {"station":"Eraring",            "fuel":"Black Coal","region":"NSW1","capacity":720},
-  "ERARING3":   {"station":"Eraring",            "fuel":"Black Coal","region":"NSW1","capacity":720},
-  "ERARING4":   {"station":"Eraring",            "fuel":"Black Coal","region":"NSW1","capacity":720},
-  "MTPIPER1":   {"station":"Mt Piper",           "fuel":"Black Coal","region":"NSW1","capacity":700},
-  "MTPIPER2":   {"station":"Mt Piper",           "fuel":"Black Coal","region":"NSW1","capacity":700},
-  "VALES1":     {"station":"Vales Point B",      "fuel":"Black Coal","region":"NSW1","capacity":660},
-  "VALES2":     {"station":"Vales Point B",      "fuel":"Black Coal","region":"NSW1","capacity":660},
-  "TALLWRRA":   {"station":"Tallawarra A",       "fuel":"Gas",       "region":"NSW1","capacity":440},
-  "TALLWRRB":   {"station":"Tallawarra B",       "fuel":"Gas",       "region":"NSW1","capacity":316},
-  "URANQ1":     {"station":"Uranquinty",         "fuel":"Gas",       "region":"NSW1","capacity":170},
-  "URANQ2":     {"station":"Uranquinty",         "fuel":"Gas",       "region":"NSW1","capacity":170},
-  "URANQ3":     {"station":"Uranquinty",         "fuel":"Gas",       "region":"NSW1","capacity":170},
-  "URANQ4":     {"station":"Uranquinty",         "fuel":"Gas",       "region":"NSW1","capacity":170},
-  "COLONGRA1":  {"station":"Colongra",           "fuel":"Gas",       "region":"NSW1","capacity":187},
-  "COLONGRA2":  {"station":"Colongra",           "fuel":"Gas",       "region":"NSW1","capacity":187},
-  "COLONGRA3":  {"station":"Colongra",           "fuel":"Gas",       "region":"NSW1","capacity":187},
-  "COLONGRA4":  {"station":"Colongra",           "fuel":"Gas",       "region":"NSW1","capacity":187},
-  "SHGEN":      {"station":"Shoalhaven",         "fuel":"Hydro",     "region":"NSW1","capacity":240},
-  "SHNGEN":     {"station":"Shoalhaven",         "fuel":"Hydro",     "region":"NSW1","capacity":240},
-  "TUMUT1":     {"station":"Tumut 1",            "fuel":"Hydro",     "region":"NSW1","capacity":160},
-  "TUMUT2":     {"station":"Tumut 2",            "fuel":"Hydro",     "region":"NSW1","capacity":160},
-  "TUMUT3":     {"station":"Tumut 3",            "fuel":"Hydro",     "region":"NSW1","capacity":250},
-  "TUMUT3A":    {"station":"Tumut 3",            "fuel":"Hydro",     "region":"NSW1","capacity":250},
-  "BLOWERNG":   {"station":"Blowering",          "fuel":"Hydro",     "region":"NSW1","capacity":80},
-  "MURRAY1":    {"station":"Murray",             "fuel":"Hydro",     "region":"NSW1","capacity":256},
-  "MURRAY2":    {"station":"Murray",             "fuel":"Hydro",     "region":"NSW1","capacity":256},
-  "GUTHEGA1":   {"station":"Guthega",            "fuel":"Hydro",     "region":"NSW1","capacity":60},
-  "BENDEELA1":  {"station":"Bendeela",           "fuel":"Hydro",     "region":"NSW1","capacity":80},
-  "BENDEELA2":  {"station":"Bendeela",           "fuel":"Hydro",     "region":"NSW1","capacity":80},
-  "KANGAROO1":  {"station":"Kangaroo Valley",    "fuel":"Hydro",     "region":"NSW1","capacity":160},
-  "KANGAROO2":  {"station":"Kangaroo Valley",    "fuel":"Hydro",     "region":"NSW1","capacity":160},
-  "HUME1":      {"station":"Hume",               "fuel":"Hydro",     "region":"NSW1","capacity":29},
-  "HUME2":      {"station":"Hume",               "fuel":"Hydro",     "region":"NSW1","capacity":29},
-  "DARLPNT1":   {"station":"Darlington Point",   "fuel":"Solar",     "region":"NSW1","capacity":275},
-  "SAPHIRE1":   {"station":"Sapphire Wind",      "fuel":"Wind",      "region":"NSW1","capacity":270},
-  "CAPTL_WF":   {"station":"Capital Wind",       "fuel":"Wind",      "region":"NSW1","capacity":140},
-  "WOODLWN1":   {"station":"Woodlawn",           "fuel":"Wind",      "region":"NSW1","capacity":48},
-  "BOCORWF1":   {"station":"Boco Rock",          "fuel":"Wind",      "region":"NSW1","capacity":113},
-  "CULLRGWF1":  {"station":"Cullerin Range",     "fuel":"Wind",      "region":"NSW1","capacity":30},
-  "GUNNING1":   {"station":"Gunning Wind",       "fuel":"Wind",      "region":"NSW1","capacity":46},
-  "CRUDINE1":   {"station":"Crudine Ridge",      "fuel":"Wind",      "region":"NSW1","capacity":135},
-  "TARALGA1":   {"station":"Taralga Wind",       "fuel":"Wind",      "region":"NSW1","capacity":106},
-  "GOONWF1":    {"station":"Gullen Range",       "fuel":"Wind",      "region":"NSW1","capacity":166},
-  "LIMOSF11":   {"station":"Limondale Solar",    "fuel":"Solar",     "region":"NSW1","capacity":249},
-  "BOMEN_SF1":  {"station":"Bomen Solar",        "fuel":"Solar",     "region":"NSW1","capacity":121},
-  "NEVERTIRE1": {"station":"Nevertire Solar",    "fuel":"Solar",     "region":"NSW1","capacity":120},
-  "FINNSF1":    {"station":"Finley Solar",       "fuel":"Solar",     "region":"NSW1","capacity":100},
-
-  "CALLIDE_B1": {"station":"Callide B",          "fuel":"Black Coal","region":"QLD1","capacity":350},
-  "CALLIDE_B2": {"station":"Callide B",          "fuel":"Black Coal","region":"QLD1","capacity":350},
-  "CALLIDE4":   {"station":"Callide C",          "fuel":"Black Coal","region":"QLD1","capacity":450},
-  "CALLIDE3":   {"station":"Callide C",          "fuel":"Black Coal","region":"QLD1","capacity":450},
-  "GLADSTONE1": {"station":"Gladstone",          "fuel":"Black Coal","region":"QLD1","capacity":280},
-  "GLADSTONE2": {"station":"Gladstone",          "fuel":"Black Coal","region":"QLD1","capacity":280},
-  "GLADSTONE3": {"station":"Gladstone",          "fuel":"Black Coal","region":"QLD1","capacity":280},
-  "GLADSTONE4": {"station":"Gladstone",          "fuel":"Black Coal","region":"QLD1","capacity":280},
-  "GLADSTONE5": {"station":"Gladstone",          "fuel":"Black Coal","region":"QLD1","capacity":280},
-  "GLADSTONE6": {"station":"Gladstone",          "fuel":"Black Coal","region":"QLD1","capacity":280},
-  "TARONG1":    {"station":"Tarong",             "fuel":"Black Coal","region":"QLD1","capacity":350},
-  "TARONG2":    {"station":"Tarong",             "fuel":"Black Coal","region":"QLD1","capacity":350},
-  "TARONG3":    {"station":"Tarong",             "fuel":"Black Coal","region":"QLD1","capacity":350},
-  "TARONG4":    {"station":"Tarong",             "fuel":"Black Coal","region":"QLD1","capacity":350},
-  "TARONGA":    {"station":"Tarong North",       "fuel":"Black Coal","region":"QLD1","capacity":443},
-  "MILMERRAN1": {"station":"Millmerran",         "fuel":"Black Coal","region":"QLD1","capacity":440},
-  "MILMERRAN2": {"station":"Millmerran",         "fuel":"Black Coal","region":"QLD1","capacity":440},
-  "KOGAN1":     {"station":"Kogan Creek",        "fuel":"Black Coal","region":"QLD1","capacity":750},
-  "KAREEYA1":   {"station":"Kareeya",            "fuel":"Hydro",     "region":"QLD1","capacity":44},
-  "KAREEYA2":   {"station":"Kareeya",            "fuel":"Hydro",     "region":"QLD1","capacity":44},
-  "KAREEYA3":   {"station":"Kareeya",            "fuel":"Hydro",     "region":"QLD1","capacity":44},
-  "KAREEYA4":   {"station":"Kareeya",            "fuel":"Hydro",     "region":"QLD1","capacity":44},
-  "WIVENHOE1":  {"station":"Wivenhoe",           "fuel":"Hydro",     "region":"QLD1","capacity":275},
-  "WIVENHOE2":  {"station":"Wivenhoe",           "fuel":"Hydro",     "region":"QLD1","capacity":275},
-  "BARRON1":    {"station":"Barron Gorge",       "fuel":"Hydro",     "region":"QLD1","capacity":66},
-  "BARRON2":    {"station":"Barron Gorge",       "fuel":"Hydro",     "region":"QLD1","capacity":66},
-  "BRAEMAR1":   {"station":"Braemar",            "fuel":"Gas",       "region":"QLD1","capacity":171},
-  "BRAEMAR2":   {"station":"Braemar",            "fuel":"Gas",       "region":"QLD1","capacity":171},
-  "BRAEMAR3":   {"station":"Braemar",            "fuel":"Gas",       "region":"QLD1","capacity":171},
-  "BRAEMAR7":   {"station":"Braemar 2",          "fuel":"Gas",       "region":"QLD1","capacity":192},
-  "BRAEMAR8":   {"station":"Braemar 2",          "fuel":"Gas",       "region":"QLD1","capacity":192},
-  "BRAEMAR9":   {"station":"Braemar 2",          "fuel":"Gas",       "region":"QLD1","capacity":192},
-  "CONDAMINE1": {"station":"Condamine",          "fuel":"Gas",       "region":"QLD1","capacity":140},
-  "OAKEY1":     {"station":"Oakey",              "fuel":"Gas",       "region":"QLD1","capacity":282},
-  "OAKEY2":     {"station":"Oakey",              "fuel":"Gas",       "region":"QLD1","capacity":282},
-  "YABULU2":    {"station":"Yabulu",             "fuel":"Gas",       "region":"QLD1","capacity":88},
-  "LOYNB1":     {"station":"Loynton",            "fuel":"Gas",       "region":"QLD1","capacity":100},
-  "COOPERS1":   {"station":"Coopers Gap Wind",   "fuel":"Wind",      "region":"QLD1","capacity":453},
-  "MEWF1":      {"station":"Mount Emerald Wind", "fuel":"Wind",      "region":"QLD1","capacity":180},
-  "WGWF1":      {"station":"Windy Hill",         "fuel":"Wind",      "region":"QLD1","capacity":20},
-  "RRSF1":      {"station":"Ross River Solar",   "fuel":"Solar",     "region":"QLD1","capacity":153},
-  "HAUGHT11":   {"station":"Haughton Solar",     "fuel":"Solar",     "region":"QLD1","capacity":102},
-  "LILYVALE1":  {"station":"Lilyvale Solar",     "fuel":"Solar",     "region":"QLD1","capacity":119},
-  "RUGBYR1":    {"station":"Rugby Run Solar",    "fuel":"Solar",     "region":"QLD1","capacity":78},
-  "BARCABAT1":  {"station":"Barcaldine Battery", "fuel":"Battery",   "region":"QLD1","capacity":20},
-  "WANDBG1":    {"station":"Wandoan Battery",    "fuel":"Battery",   "region":"QLD1","capacity":100},
-
-  "LOYYANG1":   {"station":"Loy Yang A",         "fuel":"Brown Coal","region":"VIC1","capacity":560},
-  "LOYYANG2":   {"station":"Loy Yang A",         "fuel":"Brown Coal","region":"VIC1","capacity":560},
-  "LOYYANG3":   {"station":"Loy Yang A",         "fuel":"Brown Coal","region":"VIC1","capacity":560},
-  "LOYYANG4":   {"station":"Loy Yang A",         "fuel":"Brown Coal","region":"VIC1","capacity":560},
-  "LOYYB1":     {"station":"Loy Yang B",         "fuel":"Brown Coal","region":"VIC1","capacity":500},
-  "LOYYB2":     {"station":"Loy Yang B",         "fuel":"Brown Coal","region":"VIC1","capacity":500},
-  "MORTLK1":    {"station":"Mortlake",           "fuel":"Gas",       "region":"VIC1","capacity":282},
-  "MORTLK2":    {"station":"Mortlake",           "fuel":"Gas",       "region":"VIC1","capacity":282},
-  "LAVERTON1":  {"station":"Laverton North",     "fuel":"Gas",       "region":"VIC1","capacity":316},
-  "JBUTTONS1":  {"station":"Jeeralang B",        "fuel":"Gas",       "region":"VIC1","capacity":228},
-  "JBUTTONS2":  {"station":"Jeeralang B",        "fuel":"Gas",       "region":"VIC1","capacity":228},
-  "JBUTTONS3":  {"station":"Jeeralang B",        "fuel":"Gas",       "region":"VIC1","capacity":228},
-  "VALUNIT1":   {"station":"Valley Power",       "fuel":"Gas",       "region":"VIC1","capacity":300},
-  "VALUNIT2":   {"station":"Valley Power",       "fuel":"Gas",       "region":"VIC1","capacity":300},
-  "VALUNIT3":   {"station":"Valley Power",       "fuel":"Gas",       "region":"VIC1","capacity":300},
-  "VALUNIT4":   {"station":"Valley Power",       "fuel":"Gas",       "region":"VIC1","capacity":300},
-  "VALUNIT5":   {"station":"Valley Power",       "fuel":"Gas",       "region":"VIC1","capacity":300},
-  "VALUNIT6":   {"station":"Valley Power",       "fuel":"Gas",       "region":"VIC1","capacity":300},
-  "EILDON1":    {"station":"Eildon",             "fuel":"Hydro",     "region":"VIC1","capacity":65},
-  "EILDON2":    {"station":"Eildon",             "fuel":"Hydro",     "region":"VIC1","capacity":65},
-  "DARTM1":     {"station":"Dartmouth",          "fuel":"Hydro",     "region":"VIC1","capacity":150},
-  "DARTM2":     {"station":"Dartmouth",          "fuel":"Hydro",     "region":"VIC1","capacity":150},
-  "DARTM3":     {"station":"Dartmouth",          "fuel":"Hydro",     "region":"VIC1","capacity":150},
-  "DARTM4":     {"station":"Dartmouth",          "fuel":"Hydro",     "region":"VIC1","capacity":150},
-  "MCKAY1":     {"station":"McKay Creek",        "fuel":"Hydro",     "region":"VIC1","capacity":75},
-  "MCKAY2":     {"station":"McKay Creek",        "fuel":"Hydro",     "region":"VIC1","capacity":75},
-  "WKIEWA1":    {"station":"West Kiewa",         "fuel":"Hydro",     "region":"VIC1","capacity":40},
-  "WKIEWA2":    {"station":"West Kiewa",         "fuel":"Hydro",     "region":"VIC1","capacity":40},
-  "ARARAT1":    {"station":"Ararat Wind",        "fuel":"Wind",      "region":"VIC1","capacity":240},
-  "CHALLHWF":   {"station":"Challicum Hills",    "fuel":"Wind",      "region":"VIC1","capacity":52},
-  "WAUBRAWF1":  {"station":"Waubra",             "fuel":"Wind",      "region":"VIC1","capacity":192},
-  "BPWF1":      {"station":"Bald Hills",         "fuel":"Wind",      "region":"VIC1","capacity":107},
-  "YAMBUKWF1":  {"station":"Yambuk",             "fuel":"Wind",      "region":"VIC1","capacity":30},
-  "OAKHNWF1":   {"station":"Oakland Hill",       "fuel":"Wind",      "region":"VIC1","capacity":67},
-  "DUNDONNELL1":{"station":"Dundonnell",         "fuel":"Wind",      "region":"VIC1","capacity":336},
-  "LIAPVALE1":  {"station":"Lal Lal Wind",       "fuel":"Wind",      "region":"VIC1","capacity":228},
-  "MOORABOOL1": {"station":"Moorabool Wind",     "fuel":"Wind",      "region":"VIC1","capacity":227},
-  "MURRA3WF1":  {"station":"Murra Warra",        "fuel":"Wind",      "region":"VIC1","capacity":158},
-  "LLEWWF1":    {"station":"Crowlands",          "fuel":"Wind",      "region":"VIC1","capacity":80},
-  "GSWF1":      {"station":"Golden Plains",      "fuel":"Wind",      "region":"VIC1","capacity":400},
-  "GANNAWARRA1":{"station":"Gannawarra Batt",    "fuel":"Battery",   "region":"VIC1","capacity":25},
-  "NEOEN_VIC":  {"station":"Victorian Big Batt", "fuel":"Battery",   "region":"VIC1","capacity":300},
-  "WEMENSF1":   {"station":"Wemen Solar",        "fuel":"Solar",     "region":"VIC1","capacity":221},
-  "NUMURKH1":   {"station":"Numurkah Solar",     "fuel":"Solar",     "region":"VIC1","capacity":128},
-  "MOORPVF1":   {"station":"Moorabool Solar",    "fuel":"Solar",     "region":"VIC1","capacity":100},
-
-  "TORRSA1":    {"station":"Torrens Island A",   "fuel":"Gas",       "region":"SA1", "capacity":120},
-  "TORRSA2":    {"station":"Torrens Island A",   "fuel":"Gas",       "region":"SA1", "capacity":120},
-  "TORRSA3":    {"station":"Torrens Island A",   "fuel":"Gas",       "region":"SA1", "capacity":120},
-  "TORRSA4":    {"station":"Torrens Island A",   "fuel":"Gas",       "region":"SA1", "capacity":120},
-  "TORRSB1":    {"station":"Torrens Island B",   "fuel":"Gas",       "region":"SA1", "capacity":200},
-  "TORRSB2":    {"station":"Torrens Island B",   "fuel":"Gas",       "region":"SA1", "capacity":200},
-  "TORRSB3":    {"station":"Torrens Island B",   "fuel":"Gas",       "region":"SA1", "capacity":200},
-  "TORRSB4":    {"station":"Torrens Island B",   "fuel":"Gas",       "region":"SA1", "capacity":200},
-  "PELICAN1":   {"station":"Pelican Point",      "fuel":"Gas",       "region":"SA1", "capacity":480},
-  "OSBORNPS":   {"station":"Osborne",            "fuel":"Gas",       "region":"SA1", "capacity":180},
-  "QPSCL1":     {"station":"Quarantine",         "fuel":"Gas",       "region":"SA1", "capacity":60},
-  "QPSCL2":     {"station":"Quarantine",         "fuel":"Gas",       "region":"SA1", "capacity":60},
-  "QPSCL3":     {"station":"Quarantine",         "fuel":"Gas",       "region":"SA1", "capacity":60},
-  "QPSCL4":     {"station":"Quarantine",         "fuel":"Gas",       "region":"SA1", "capacity":60},
-  "LBBG1":      {"station":"Ladbroke Grove",     "fuel":"Gas",       "region":"SA1", "capacity":80},
-  "MINTARO":    {"station":"Mintaro",            "fuel":"Gas",       "region":"SA1", "capacity":90},
-  "AGLSOM":     {"station":"Somerton",           "fuel":"Gas",       "region":"SA1", "capacity":180},
-  "SNUGGERY1":  {"station":"Snuggery",           "fuel":"Liquid",    "region":"SA1", "capacity":72},
-  "PPCCGT":     {"station":"Port Pirie GT",      "fuel":"Gas",       "region":"SA1", "capacity":120},
-  "SNAPPER1":   {"station":"Snapper Point",      "fuel":"Gas",       "region":"SA1", "capacity":319},
-  "HDWF1":      {"station":"Hornsdale Wind",     "fuel":"Wind",      "region":"SA1", "capacity":102},
-  "HDWF2":      {"station":"Hornsdale Wind",     "fuel":"Wind",      "region":"SA1", "capacity":102},
-  "HDWF3":      {"station":"Hornsdale Wind",     "fuel":"Wind",      "region":"SA1", "capacity":102},
-  "HPRL1":      {"station":"Hornsdale Reserve",  "fuel":"Battery",   "region":"SA1", "capacity":150},
-  "LKBONNY1":   {"station":"Lake Bonney 1",      "fuel":"Wind",      "region":"SA1", "capacity":80},
-  "LKBONNY2":   {"station":"Lake Bonney 2",      "fuel":"Wind",      "region":"SA1", "capacity":159},
-  "LKBONNY3":   {"station":"Lake Bonney 3",      "fuel":"Wind",      "region":"SA1", "capacity":39},
-  "LKBONNY4":   {"station":"Lake Bonney 4",      "fuel":"Wind",      "region":"SA1", "capacity":60},
-  "CATHROCK":   {"station":"Cathedral Rock",     "fuel":"Wind",      "region":"SA1", "capacity":66},
-  "CANUNDA1":   {"station":"Canunda Wind",       "fuel":"Wind",      "region":"SA1", "capacity":46},
-  "HALWF1":     {"station":"Hallett Wind",       "fuel":"Wind",      "region":"SA1", "capacity":100},
-  "BLUFF1":     {"station":"Bluff Wind",         "fuel":"Wind",      "region":"SA1", "capacity":52},
-  "WGSA1":      {"station":"Waterloo Wind",      "fuel":"Wind",      "region":"SA1", "capacity":111},
-  "SNOWSF1":    {"station":"Snowtown Wind",      "fuel":"Wind",      "region":"SA1", "capacity":100},
-  "SNOWTWN1":   {"station":"Snowtown Wind",      "fuel":"Wind",      "region":"SA1", "capacity":100},
-  "CLEMENTS1":  {"station":"Clements Gap",       "fuel":"Wind",      "region":"SA1", "capacity":57},
-  "DUNDAS1":    {"station":"Dundas Wind",        "fuel":"Wind",      "region":"SA1", "capacity":132},
-  "WPWF1":      {"station":"Willogoleche Wind",  "fuel":"Wind",      "region":"SA1", "capacity":119},
-  "WILLOGWF1":  {"station":"Willogoleche Wind",  "fuel":"Wind",      "region":"SA1", "capacity":119},
-  "BUNGWF1":    {"station":"Bungala Solar 1",    "fuel":"Solar",     "region":"SA1", "capacity":110},
-  "BUNGWF2":    {"station":"Bungala Solar 2",    "fuel":"Solar",     "region":"SA1", "capacity":110},
-  "MANCALA1":   {"station":"Mancala Solar",      "fuel":"Solar",     "region":"SA1", "capacity":150},
-  "NEOEN_SA":   {"station":"Hornsdale Reserve",  "fuel":"Battery",   "region":"SA1", "capacity":150},
-
-  "GORDN1":     {"station":"Gordon",             "fuel":"Hydro",     "region":"TAS1","capacity":144},
-  "GORDN2":     {"station":"Gordon",             "fuel":"Hydro",     "region":"TAS1","capacity":144},
-  "GORDN3":     {"station":"Gordon",             "fuel":"Hydro",     "region":"TAS1","capacity":144},
-  "POATINA1":   {"station":"Poatina",            "fuel":"Hydro",     "region":"TAS1","capacity":75},
-  "POATINA2":   {"station":"Poatina",            "fuel":"Hydro",     "region":"TAS1","capacity":75},
-  "POATINA3":   {"station":"Poatina",            "fuel":"Hydro",     "region":"TAS1","capacity":75},
-  "POATINA4":   {"station":"Poatina",            "fuel":"Hydro",     "region":"TAS1","capacity":75},
-  "POATINA5":   {"station":"Poatina",            "fuel":"Hydro",     "region":"TAS1","capacity":75},
-  "POATINA6":   {"station":"Poatina",            "fuel":"Hydro",     "region":"TAS1","capacity":75},
-  "TREVALLYN1": {"station":"Trevallyn",          "fuel":"Hydro",     "region":"TAS1","capacity":23},
-  "TREVALLYN2": {"station":"Trevallyn",          "fuel":"Hydro",     "region":"TAS1","capacity":23},
-  "TREVALLYN3": {"station":"Trevallyn",          "fuel":"Hydro",     "region":"TAS1","capacity":23},
-  "TREVALLYN4": {"station":"Trevallyn",          "fuel":"Hydro",     "region":"TAS1","capacity":23},
-  "CATAGUNYA1": {"station":"Catagunya",          "fuel":"Hydro",     "region":"TAS1","capacity":27},
-  "CATAGUNYA2": {"station":"Catagunya",          "fuel":"Hydro",     "region":"TAS1","capacity":27},
-  "REPULSE1":   {"station":"Repulse",            "fuel":"Hydro",     "region":"TAS1","capacity":33},
-  "REPULSE2":   {"station":"Repulse",            "fuel":"Hydro",     "region":"TAS1","capacity":33},
-  "TUNGATINAH1":{"station":"Tungatinah",         "fuel":"Hydro",     "region":"TAS1","capacity":30},
-  "TUNGATINAH2":{"station":"Tungatinah",         "fuel":"Hydro",     "region":"TAS1","capacity":30},
-  "TUNGATINAH3":{"station":"Tungatinah",         "fuel":"Hydro",     "region":"TAS1","capacity":30},
-  "TUNGATINAH4":{"station":"Tungatinah",         "fuel":"Hydro",     "region":"TAS1","capacity":30},
-  "TUNGATINAH5":{"station":"Tungatinah",         "fuel":"Hydro",     "region":"TAS1","capacity":30},
-  "LEMONTHYME1":{"station":"Lemonthyme",         "fuel":"Hydro",     "region":"TAS1","capacity":51},
-  "LEMONTHYME2":{"station":"Lemonthyme",         "fuel":"Hydro",     "region":"TAS1","capacity":51},
-  "FISHER1":    {"station":"Fisher",             "fuel":"Hydro",     "region":"TAS1","capacity":14},
-  "FISHER2":    {"station":"Fisher",             "fuel":"Hydro",     "region":"TAS1","capacity":14},
-  "FISHER3":    {"station":"Fisher",             "fuel":"Hydro",     "region":"TAS1","capacity":14},
-  "CETHANA1":   {"station":"Cethana",            "fuel":"Hydro",     "region":"TAS1","capacity":85},
-  "DEVILS_G1":  {"station":"Devils Gate",        "fuel":"Hydro",     "region":"TAS1","capacity":60},
-  "DEVILS_G2":  {"station":"Devils Gate",        "fuel":"Hydro",     "region":"TAS1","capacity":60},
-  "TRIBUTE1":   {"station":"Tribute",            "fuel":"Hydro",     "region":"TAS1","capacity":80},
-  "TRIBUTE2":   {"station":"Tribute",            "fuel":"Hydro",     "region":"TAS1","capacity":80},
-  "BASTYAN1":   {"station":"Bastyan",            "fuel":"Hydro",     "region":"TAS1","capacity":80},
-  "BASTYAN2":   {"station":"Bastyan",            "fuel":"Hydro",     "region":"TAS1","capacity":80},
-  "MACKNTSH1":  {"station":"Mackintosh",         "fuel":"Hydro",     "region":"TAS1","capacity":80},
-  "MACKNTSH2":  {"station":"Mackintosh",         "fuel":"Hydro",     "region":"TAS1","capacity":80},
-  "TYNDALL1":   {"station":"Tyndall",            "fuel":"Hydro",     "region":"TAS1","capacity":50},
-  "TYNDALL2":   {"station":"Tyndall",            "fuel":"Hydro",     "region":"TAS1","capacity":50},
-  "KING1":      {"station":"King River",         "fuel":"Hydro",     "region":"TAS1","capacity":60},
-  "KING2":      {"station":"King River",         "fuel":"Hydro",     "region":"TAS1","capacity":60},
-  "REECE1":     {"station":"Reece",              "fuel":"Hydro",     "region":"TAS1","capacity":231},
-  "REECE2":     {"station":"Reece",              "fuel":"Hydro",     "region":"TAS1","capacity":231},
-  "MUSSELROE1": {"station":"Musselroe Wind",     "fuel":"Wind",      "region":"TAS1","capacity":168},
-  "MUSSELROE2": {"station":"Musselroe Wind",     "fuel":"Wind",      "region":"TAS1","capacity":168},
-  "CATTLE_HILL1":{"station":"Cattle Hill",       "fuel":"Wind",      "region":"TAS1","capacity":149},
-  "CATTLE_HILL2":{"station":"Cattle Hill",       "fuel":"Wind",      "region":"TAS1","capacity":149},
-  "GRANVILLE1": {"station":"Granville Harbour",  "fuel":"Wind",      "region":"TAS1","capacity":112},
-  "WOOLNORTH_WF1H":{"station":"Woolnorth",       "fuel":"Wind",      "region":"TAS1","capacity":65},
-  "WOOLNORTH_WF2H":{"station":"Woolnorth",       "fuel":"Wind",      "region":"TAS1","capacity":65},
-  "BRINBA_WF1": {"station":"Brinbeal Wind",      "fuel":"Wind",      "region":"TAS1","capacity":157},
-  "RALPHS_BAY1":{"station":"Ralphs Bay Wind",    "fuel":"Wind",      "region":"TAS1","capacity":60},
-  "TAMAR_GT1":  {"station":"Tamar Valley GT",    "fuel":"Gas",       "region":"TAS1","capacity":208},
-  "BELL_BAY3":  {"station":"Bell Bay",           "fuel":"Gas",       "region":"TAS1","capacity":121},
-  "BELL_BAY4":  {"station":"Bell Bay",           "fuel":"Gas",       "region":"TAS1","capacity":121},
-  "TAS1BES1":   {"station":"TAS Battery",        "fuel":"Battery",   "region":"TAS1","capacity":150}
+  "TALLWRRA": {
+    "station": "Tallawarra A",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 440
+  },
+  "TALLWRRB": {
+    "station": "Tallawarra B",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 316
+  },
+  "URANQ1": {
+    "station": "Uranquinty",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 170
+  },
+  "URANQ2": {
+    "station": "Uranquinty",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 170
+  },
+  "URANQ3": {
+    "station": "Uranquinty",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 170
+  },
+  "URANQ4": {
+    "station": "Uranquinty",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 170
+  },
+  "COLONGRA1": {
+    "station": "Colongra",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 187
+  },
+  "COLONGRA2": {
+    "station": "Colongra",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 187
+  },
+  "COLONGRA3": {
+    "station": "Colongra",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 187
+  },
+  "COLONGRA4": {
+    "station": "Colongra",
+    "fuel": "Gas",
+    "region": "NSW1",
+    "capacity": 187
+  },
+  "SHGEN": {
+    "station": "Shoalhaven",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 240
+  },
+  "SHNGEN": {
+    "station": "Shoalhaven",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 240
+  },
+  "TUMUT1": {
+    "station": "Tumut 1",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 160
+  },
+  "TUMUT2": {
+    "station": "Tumut 2",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 160
+  },
+  "TUMUT3": {
+    "station": "Tumut 3",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 250
+  },
+  "TUMUT3A": {
+    "station": "Tumut 3",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 250
+  },
+  "BLOWERNG": {
+    "station": "Blowering",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 80
+  },
+  "MURRAY1": {
+    "station": "Murray",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 256
+  },
+  "MURRAY2": {
+    "station": "Murray",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 256
+  },
+  "GUTHEGA1": {
+    "station": "Guthega",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 60
+  },
+  "BENDEELA1": {
+    "station": "Bendeela",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 80
+  },
+  "BENDEELA2": {
+    "station": "Bendeela",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 80
+  },
+  "KANGAROO1": {
+    "station": "Kangaroo Valley",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 160
+  },
+  "KANGAROO2": {
+    "station": "Kangaroo Valley",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 160
+  },
+  "HUME1": {
+    "station": "Hume",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 29
+  },
+  "HUME2": {
+    "station": "Hume",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 29
+  },
+  "DARLPNT1": {
+    "station": "Darlington Point",
+    "fuel": "Solar",
+    "region": "NSW1",
+    "capacity": 275
+  },
+  "SAPHIRE1": {
+    "station": "Sapphire Wind",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 270
+  },
+  "CAPTL_WF": {
+    "station": "Capital Wind",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 140
+  },
+  "WOODLWN1": {
+    "station": "Woodlawn",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 48
+  },
+  "BOCORWF1": {
+    "station": "Boco Rock",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 113
+  },
+  "CULLRGWF1": {
+    "station": "Cullerin Range",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 30
+  },
+  "GUNNING1": {
+    "station": "Gunning Wind",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 46
+  },
+  "CRUDINE1": {
+    "station": "Crudine Ridge",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 135
+  },
+  "TARALGA1": {
+    "station": "Taralga Wind",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 106
+  },
+  "GOONWF1": {
+    "station": "Gullen Range",
+    "fuel": "Wind",
+    "region": "NSW1",
+    "capacity": 166
+  },
+  "LIMOSF11": {
+    "station": "Limondale Solar",
+    "fuel": "Solar",
+    "region": "NSW1",
+    "capacity": 249
+  },
+  "BOMEN_SF1": {
+    "station": "Bomen Solar",
+    "fuel": "Solar",
+    "region": "NSW1",
+    "capacity": 121
+  },
+  "NEVERTIRE1": {
+    "station": "Nevertire Solar",
+    "fuel": "Solar",
+    "region": "NSW1",
+    "capacity": 120
+  },
+  "FINNSF1": {
+    "station": "Finley Solar",
+    "fuel": "Solar",
+    "region": "NSW1",
+    "capacity": 100
+  },
+  "CALLIDE4": {
+    "station": "Callide C",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 450
+  },
+  "CALLIDE3": {
+    "station": "Callide C",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 450
+  },
+  "TARONG1": {
+    "station": "Tarong",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 350
+  },
+  "TARONG2": {
+    "station": "Tarong",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 350
+  },
+  "TARONG3": {
+    "station": "Tarong",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 350
+  },
+  "TARONG4": {
+    "station": "Tarong",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 350
+  },
+  "KAREEYA1": {
+    "station": "Kareeya",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 44
+  },
+  "KAREEYA2": {
+    "station": "Kareeya",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 44
+  },
+  "KAREEYA3": {
+    "station": "Kareeya",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 44
+  },
+  "KAREEYA4": {
+    "station": "Kareeya",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 44
+  },
+  "WIVENHOE1": {
+    "station": "Wivenhoe",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 275
+  },
+  "WIVENHOE2": {
+    "station": "Wivenhoe",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 275
+  },
+  "BARRON1": {
+    "station": "Barron Gorge",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 66
+  },
+  "BARRON2": {
+    "station": "Barron Gorge",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 66
+  },
+  "BRAEMAR1": {
+    "station": "Braemar",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 171
+  },
+  "BRAEMAR2": {
+    "station": "Braemar",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 171
+  },
+  "BRAEMAR3": {
+    "station": "Braemar",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 171
+  },
+  "BRAEMAR7": {
+    "station": "Braemar 2",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 192
+  },
+  "BRAEMAR8": {
+    "station": "Braemar 2",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 192
+  },
+  "BRAEMAR9": {
+    "station": "Braemar 2",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 192
+  },
+  "CONDAMINE1": {
+    "station": "Condamine",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 140
+  },
+  "OAKEY1": {
+    "station": "Oakey",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 282
+  },
+  "OAKEY2": {
+    "station": "Oakey",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 282
+  },
+  "YABULU2": {
+    "station": "Yabulu",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 88
+  },
+  "LOYNB1": {
+    "station": "Loynton",
+    "fuel": "Gas",
+    "region": "QLD1",
+    "capacity": 100
+  },
+  "COOPERS1": {
+    "station": "Coopers Gap Wind",
+    "fuel": "Wind",
+    "region": "QLD1",
+    "capacity": 453
+  },
+  "MEWF1": {
+    "station": "Mount Emerald Wind",
+    "fuel": "Wind",
+    "region": "QLD1",
+    "capacity": 180
+  },
+  "WGWF1": {
+    "station": "Windy Hill",
+    "fuel": "Wind",
+    "region": "QLD1",
+    "capacity": 20
+  },
+  "RRSF1": {
+    "station": "Ross River Solar",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 153
+  },
+  "HAUGHT11": {
+    "station": "Haughton Solar",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 102
+  },
+  "LILYVALE1": {
+    "station": "Lilyvale Solar",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 119
+  },
+  "RUGBYR1": {
+    "station": "Rugby Run Solar",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 78
+  },
+  "BARCABAT1": {
+    "station": "Barcaldine Battery",
+    "fuel": "Battery",
+    "region": "QLD1",
+    "capacity": 20
+  },
+  "WANDBG1": {
+    "station": "Wandoan Battery",
+    "fuel": "Battery",
+    "region": "QLD1",
+    "capacity": 100
+  },
+  "LOYYANG1": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "LOYYANG2": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "LOYYANG3": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "LOYYANG4": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "MORTLK1": {
+    "station": "Mortlake",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 282
+  },
+  "MORTLK2": {
+    "station": "Mortlake",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 282
+  },
+  "LAVERTON1": {
+    "station": "Laverton North",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 316
+  },
+  "JBUTTONS1": {
+    "station": "Jeeralang B",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 228
+  },
+  "JBUTTONS2": {
+    "station": "Jeeralang B",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 228
+  },
+  "JBUTTONS3": {
+    "station": "Jeeralang B",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 228
+  },
+  "VALUNIT1": {
+    "station": "Valley Power",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "VALUNIT2": {
+    "station": "Valley Power",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "VALUNIT3": {
+    "station": "Valley Power",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "VALUNIT4": {
+    "station": "Valley Power",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "VALUNIT5": {
+    "station": "Valley Power",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "VALUNIT6": {
+    "station": "Valley Power",
+    "fuel": "Gas",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "EILDON1": {
+    "station": "Eildon",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 65
+  },
+  "EILDON2": {
+    "station": "Eildon",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 65
+  },
+  "DARTM1": {
+    "station": "Dartmouth",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 150
+  },
+  "DARTM2": {
+    "station": "Dartmouth",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 150
+  },
+  "DARTM3": {
+    "station": "Dartmouth",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 150
+  },
+  "DARTM4": {
+    "station": "Dartmouth",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 150
+  },
+  "MCKAY1": {
+    "station": "McKay Creek",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 75
+  },
+  "MCKAY2": {
+    "station": "McKay Creek",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 75
+  },
+  "WKIEWA1": {
+    "station": "West Kiewa",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 40
+  },
+  "WKIEWA2": {
+    "station": "West Kiewa",
+    "fuel": "Hydro",
+    "region": "VIC1",
+    "capacity": 40
+  },
+  "ARARAT1": {
+    "station": "Ararat Wind",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 240
+  },
+  "CHALLHWF": {
+    "station": "Challicum Hills",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 52
+  },
+  "WAUBRAWF1": {
+    "station": "Waubra",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 192
+  },
+  "BPWF1": {
+    "station": "Bald Hills",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 107
+  },
+  "YAMBUKWF1": {
+    "station": "Yambuk",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 30
+  },
+  "OAKHNWF1": {
+    "station": "Oakland Hill",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 67
+  },
+  "DUNDONNELL1": {
+    "station": "Dundonnell",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 336
+  },
+  "LIAPVALE1": {
+    "station": "Lal Lal Wind",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 228
+  },
+  "MOORABOOL1": {
+    "station": "Moorabool Wind",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 227
+  },
+  "MURRA3WF1": {
+    "station": "Murra Warra",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 158
+  },
+  "LLEWWF1": {
+    "station": "Crowlands",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 80
+  },
+  "GSWF1": {
+    "station": "Golden Plains",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 400
+  },
+  "GANNAWARRA1": {
+    "station": "Gannawarra Batt",
+    "fuel": "Battery",
+    "region": "VIC1",
+    "capacity": 25
+  },
+  "NEOEN_VIC": {
+    "station": "Victorian Big Batt",
+    "fuel": "Battery",
+    "region": "VIC1",
+    "capacity": 300
+  },
+  "WEMENSF1": {
+    "station": "Wemen Solar",
+    "fuel": "Solar",
+    "region": "VIC1",
+    "capacity": 221
+  },
+  "NUMURKH1": {
+    "station": "Numurkah Solar",
+    "fuel": "Solar",
+    "region": "VIC1",
+    "capacity": 128
+  },
+  "MOORPVF1": {
+    "station": "Moorabool Solar",
+    "fuel": "Solar",
+    "region": "VIC1",
+    "capacity": 100
+  },
+  "TORRSA1": {
+    "station": "Torrens Island A",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 120
+  },
+  "TORRSA2": {
+    "station": "Torrens Island A",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 120
+  },
+  "TORRSA3": {
+    "station": "Torrens Island A",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 120
+  },
+  "TORRSA4": {
+    "station": "Torrens Island A",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 120
+  },
+  "TORRSB1": {
+    "station": "Torrens Island B",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 200
+  },
+  "TORRSB2": {
+    "station": "Torrens Island B",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 200
+  },
+  "TORRSB3": {
+    "station": "Torrens Island B",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 200
+  },
+  "TORRSB4": {
+    "station": "Torrens Island B",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 200
+  },
+  "PELICAN1": {
+    "station": "Pelican Point",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 480
+  },
+  "OSBORNPS": {
+    "station": "Osborne",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 180
+  },
+  "QPSCL1": {
+    "station": "Quarantine",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 60
+  },
+  "QPSCL2": {
+    "station": "Quarantine",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 60
+  },
+  "QPSCL3": {
+    "station": "Quarantine",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 60
+  },
+  "QPSCL4": {
+    "station": "Quarantine",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 60
+  },
+  "LBBG1": {
+    "station": "Ladbroke Grove",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 80
+  },
+  "MINTARO": {
+    "station": "Mintaro",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 90
+  },
+  "AGLSOM": {
+    "station": "Somerton",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 180
+  },
+  "SNUGGERY1": {
+    "station": "Snuggery",
+    "fuel": "Liquid",
+    "region": "SA1",
+    "capacity": 72
+  },
+  "PPCCGT": {
+    "station": "Port Pirie GT",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 120
+  },
+  "SNAPPER1": {
+    "station": "Snapper Point",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 319
+  },
+  "HDWF1": {
+    "station": "Hornsdale Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 102
+  },
+  "HDWF2": {
+    "station": "Hornsdale Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 102
+  },
+  "HDWF3": {
+    "station": "Hornsdale Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 102
+  },
+  "HPRL1": {
+    "station": "Hornsdale Reserve",
+    "fuel": "Battery",
+    "region": "SA1",
+    "capacity": 150
+  },
+  "LKBONNY1": {
+    "station": "Lake Bonney 1",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 80
+  },
+  "LKBONNY2": {
+    "station": "Lake Bonney 2",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 159
+  },
+  "LKBONNY3": {
+    "station": "Lake Bonney 3",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 39
+  },
+  "LKBONNY4": {
+    "station": "Lake Bonney 4",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 60
+  },
+  "CATHROCK": {
+    "station": "Cathedral Rock",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 66
+  },
+  "CANUNDA1": {
+    "station": "Canunda Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 46
+  },
+  "HALWF1": {
+    "station": "Hallett Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 100
+  },
+  "BLUFF1": {
+    "station": "Bluff Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 52
+  },
+  "WGSA1": {
+    "station": "Waterloo Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 111
+  },
+  "SNOWSF1": {
+    "station": "Snowtown Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 100
+  },
+  "SNOWTWN1": {
+    "station": "Snowtown Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 100
+  },
+  "CLEMENTS1": {
+    "station": "Clements Gap",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 57
+  },
+  "DUNDAS1": {
+    "station": "Dundas Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 132
+  },
+  "WPWF1": {
+    "station": "Willogoleche Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 119
+  },
+  "WILLOGWF1": {
+    "station": "Willogoleche Wind",
+    "fuel": "Wind",
+    "region": "SA1",
+    "capacity": 119
+  },
+  "BUNGWF1": {
+    "station": "Bungala Solar 1",
+    "fuel": "Solar",
+    "region": "SA1",
+    "capacity": 110
+  },
+  "BUNGWF2": {
+    "station": "Bungala Solar 2",
+    "fuel": "Solar",
+    "region": "SA1",
+    "capacity": 110
+  },
+  "MANCALA1": {
+    "station": "Mancala Solar",
+    "fuel": "Solar",
+    "region": "SA1",
+    "capacity": 150
+  },
+  "NEOEN_SA": {
+    "station": "Hornsdale Reserve",
+    "fuel": "Battery",
+    "region": "SA1",
+    "capacity": 150
+  },
+  "GORDN1": {
+    "station": "Gordon",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 144
+  },
+  "GORDN2": {
+    "station": "Gordon",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 144
+  },
+  "GORDN3": {
+    "station": "Gordon",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 144
+  },
+  "POATINA1": {
+    "station": "Poatina",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 75
+  },
+  "POATINA2": {
+    "station": "Poatina",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 75
+  },
+  "POATINA3": {
+    "station": "Poatina",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 75
+  },
+  "POATINA4": {
+    "station": "Poatina",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 75
+  },
+  "POATINA5": {
+    "station": "Poatina",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 75
+  },
+  "POATINA6": {
+    "station": "Poatina",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 75
+  },
+  "TREVALLYN1": {
+    "station": "Trevallyn",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 23
+  },
+  "TREVALLYN2": {
+    "station": "Trevallyn",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 23
+  },
+  "TREVALLYN3": {
+    "station": "Trevallyn",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 23
+  },
+  "TREVALLYN4": {
+    "station": "Trevallyn",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 23
+  },
+  "CATAGUNYA1": {
+    "station": "Catagunya",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 27
+  },
+  "CATAGUNYA2": {
+    "station": "Catagunya",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 27
+  },
+  "REPULSE1": {
+    "station": "Repulse",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 33
+  },
+  "REPULSE2": {
+    "station": "Repulse",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 33
+  },
+  "TUNGATINAH1": {
+    "station": "Tungatinah",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 30
+  },
+  "TUNGATINAH2": {
+    "station": "Tungatinah",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 30
+  },
+  "TUNGATINAH3": {
+    "station": "Tungatinah",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 30
+  },
+  "TUNGATINAH4": {
+    "station": "Tungatinah",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 30
+  },
+  "TUNGATINAH5": {
+    "station": "Tungatinah",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 30
+  },
+  "LEMONTHYME1": {
+    "station": "Lemonthyme",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 51
+  },
+  "LEMONTHYME2": {
+    "station": "Lemonthyme",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 51
+  },
+  "FISHER1": {
+    "station": "Fisher",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 14
+  },
+  "FISHER2": {
+    "station": "Fisher",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 14
+  },
+  "FISHER3": {
+    "station": "Fisher",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 14
+  },
+  "CETHANA1": {
+    "station": "Cethana",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 85
+  },
+  "DEVILS_G1": {
+    "station": "Devils Gate",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 60
+  },
+  "DEVILS_G2": {
+    "station": "Devils Gate",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 60
+  },
+  "TRIBUTE1": {
+    "station": "Tribute",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 80
+  },
+  "TRIBUTE2": {
+    "station": "Tribute",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 80
+  },
+  "BASTYAN1": {
+    "station": "Bastyan",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 80
+  },
+  "BASTYAN2": {
+    "station": "Bastyan",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 80
+  },
+  "MACKNTSH1": {
+    "station": "Mackintosh",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 80
+  },
+  "MACKNTSH2": {
+    "station": "Mackintosh",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 80
+  },
+  "TYNDALL1": {
+    "station": "Tyndall",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 50
+  },
+  "TYNDALL2": {
+    "station": "Tyndall",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 50
+  },
+  "KING1": {
+    "station": "King River",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 60
+  },
+  "KING2": {
+    "station": "King River",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 60
+  },
+  "REECE1": {
+    "station": "Reece",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 231
+  },
+  "REECE2": {
+    "station": "Reece",
+    "fuel": "Hydro",
+    "region": "TAS1",
+    "capacity": 231
+  },
+  "MUSSELROE1": {
+    "station": "Musselroe Wind",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 168
+  },
+  "MUSSELROE2": {
+    "station": "Musselroe Wind",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 168
+  },
+  "CATTLE_HILL1": {
+    "station": "Cattle Hill",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 149
+  },
+  "CATTLE_HILL2": {
+    "station": "Cattle Hill",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 149
+  },
+  "GRANVILLE1": {
+    "station": "Granville Harbour",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 112
+  },
+  "WOOLNORTH_WF1H": {
+    "station": "Woolnorth",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 65
+  },
+  "WOOLNORTH_WF2H": {
+    "station": "Woolnorth",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 65
+  },
+  "BRINBA_WF1": {
+    "station": "Brinbeal Wind",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 157
+  },
+  "RALPHS_BAY1": {
+    "station": "Ralphs Bay Wind",
+    "fuel": "Wind",
+    "region": "TAS1",
+    "capacity": 60
+  },
+  "TAMAR_GT1": {
+    "station": "Tamar Valley GT",
+    "fuel": "Gas",
+    "region": "TAS1",
+    "capacity": 208
+  },
+  "BELL_BAY3": {
+    "station": "Bell Bay",
+    "fuel": "Gas",
+    "region": "TAS1",
+    "capacity": 121
+  },
+  "BELL_BAY4": {
+    "station": "Bell Bay",
+    "fuel": "Gas",
+    "region": "TAS1",
+    "capacity": 121
+  },
+  "TAS1BES1": {
+    "station": "TAS Battery",
+    "fuel": "Battery",
+    "region": "TAS1",
+    "capacity": 150
+  },
+  "BW01": {
+    "station": "Bayswater",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 660
+  },
+  "BW02": {
+    "station": "Bayswater",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 660
+  },
+  "BW03": {
+    "station": "Bayswater",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 660
+  },
+  "BW04": {
+    "station": "Bayswater",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 660
+  },
+  "ER01": {
+    "station": "Eraring",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 720
+  },
+  "ER02": {
+    "station": "Eraring",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 720
+  },
+  "ER03": {
+    "station": "Eraring",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 720
+  },
+  "ER04": {
+    "station": "Eraring",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 720
+  },
+  "MP1": {
+    "station": "Mt Piper",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 700
+  },
+  "MP2": {
+    "station": "Mt Piper",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 700
+  },
+  "VP5": {
+    "station": "Vales Point B",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 660
+  },
+  "VP6": {
+    "station": "Vales Point B",
+    "fuel": "Black Coal",
+    "region": "NSW1",
+    "capacity": 660
+  },
+  "GLAD1": {
+    "station": "Gladstone",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 280
+  },
+  "GLAD2": {
+    "station": "Gladstone",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 280
+  },
+  "GLAD3": {
+    "station": "Gladstone",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 280
+  },
+  "GLAD4": {
+    "station": "Gladstone",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 280
+  },
+  "GLAD5": {
+    "station": "Gladstone",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 280
+  },
+  "GLAD6": {
+    "station": "Gladstone",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 280
+  },
+  "CALL_B_1": {
+    "station": "Callide B",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 350
+  },
+  "CALL_B_2": {
+    "station": "Callide B",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 350
+  },
+  "TNPS1": {
+    "station": "Tarong North",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 443
+  },
+  "MILLMERRAN1": {
+    "station": "Millmerran",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 440
+  },
+  "MILLMERRAN2": {
+    "station": "Millmerran",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 440
+  },
+  "KSG1": {
+    "station": "Kogan Creek",
+    "fuel": "Black Coal",
+    "region": "QLD1",
+    "capacity": 750
+  },
+  "LOYYB1": {
+    "station": "Loy Yang B",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 500
+  },
+  "LOYYB2": {
+    "station": "Loy Yang B",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 500
+  },
+  "LYA1": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "LYA2": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "LYA3": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "LYA4": {
+    "station": "Loy Yang A",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 560
+  },
+  "YWPS1": {
+    "station": "Yallourn W",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 360
+  },
+  "YWPS2": {
+    "station": "Yallourn W",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 360
+  },
+  "YWPS3": {
+    "station": "Yallourn W",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 360
+  },
+  "YWPS4": {
+    "station": "Yallourn W",
+    "fuel": "Brown Coal",
+    "region": "VIC1",
+    "capacity": 360
+  },
+  "ROOFTOP_NSW1": {
+    "station": "Rooftop Solar NSW",
+    "fuel": "Rooftop Solar",
+    "region": "NSW1",
+    "capacity": 3000
+  },
+  "ROOFTOP_QLD1": {
+    "station": "Rooftop Solar QLD",
+    "fuel": "Rooftop Solar",
+    "region": "QLD1",
+    "capacity": 3500
+  },
+  "ROOFTOP_VIC1": {
+    "station": "Rooftop Solar VIC",
+    "fuel": "Rooftop Solar",
+    "region": "VIC1",
+    "capacity": 2000
+  },
+  "ROOFTOP_SA1": {
+    "station": "Rooftop Solar SA",
+    "fuel": "Rooftop Solar",
+    "region": "SA1",
+    "capacity": 1200
+  },
+  "ROOFTOP_TAS1": {
+    "station": "Rooftop Solar TAS",
+    "fuel": "Rooftop Solar",
+    "region": "TAS1",
+    "capacity": 200
+  }
 }
