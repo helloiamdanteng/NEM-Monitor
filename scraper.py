@@ -1318,6 +1318,98 @@ def scrape_all_generators() -> dict:
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# scrape_scada_history — backfill 24hr fuel mix history from SCADA CURRENT files
+# ---------------------------------------------------------------------------
+
+def scrape_scada_history() -> None:
+    """
+    Fetch all of today's DISPATCH_SCADA files in parallel and populate
+    _fuel_history with historical fuel mix snapshots.
+    Called once at startup so the gen chart shows 24hr history immediately.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time as _time, random
+
+    now_aest   = datetime.now(AEST)
+    today_str  = now_aest.strftime("%Y%m%d")
+    today_date = now_aest.date()
+    now_label  = now_aest.strftime("%H:%M")
+
+    all_urls = _list_hrefs(SCADA_URL)
+    today_urls = sorted([u for u in all_urls if today_str in u and "PUBLIC_DISPATCHSCADA" in u.upper()])
+    # Limit to 300 files (25hrs worth at 5min cadence)
+    today_urls = today_urls[-300:]
+
+    if not today_urls:
+        logger.warning("scrape_scada_history: no SCADA files found for today")
+        return
+
+    logger.info(f"scrape_scada_history: fetching {len(today_urls)} SCADA files…")
+
+    def fetch_one(url):
+        _time.sleep(random.uniform(0, 0.03))
+        try:
+            text = _read_zip(url)
+            if not text:
+                return None
+            # Each file: { HH:MM -> { duid: mw } }
+            snapshot = {}
+            for row in _parse_aemo(text, "DISPATCH_UNIT_SCADA"):
+                duid = row.get("DUID", "").strip().upper()
+                dt_str = row.get("SETTLEMENTDATE", "")
+                v = row.get("SCADAVALUE", "")
+                if not dt_str or not v:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=5)
+                    if dt.date() != today_date or dt.strftime("%H:%M") > now_label:
+                        continue
+                    label = dt.strftime("%H:%M")
+                    if label not in snapshot:
+                        snapshot[label] = {}
+                    snapshot[label][duid] = round(float(v), 1)
+                except (ValueError, TypeError):
+                    pass
+            return snapshot
+        except Exception as e:
+            logger.debug(f"scrape_scada_history fetch error: {e}")
+            return None
+
+    # Parallel fetch
+    all_snapshots = {}  # { HH:MM -> { duid: mw } }
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futures = {ex.submit(fetch_one, u): u for u in today_urls}
+        for fut in as_completed(futures):
+            result = fut.result()
+            if result:
+                for label, duids in result.items():
+                    if label not in all_snapshots:
+                        all_snapshots[label] = {}
+                    all_snapshots[label].update(duids)
+
+    # Now convert to fuel_mix per timestamp and load into _fuel_history
+    reg = NEM_UNITS
+    loaded = 0
+    for label in sorted(all_snapshots.keys()):
+        duids = all_snapshots[label]
+        fuel_mix: dict = {r: {} for r in NEM_REGIONS}
+        for duid, mw in duids.items():
+            info = reg.get(duid, {})
+            region = info.get("region", "")
+            fuel   = info.get("fuel", "Other")
+            if region not in NEM_REGIONS:
+                continue
+            mw_pos = max(mw, 0) if mw is not None else 0
+            fuel_mix[region][fuel] = round(fuel_mix[region].get(fuel, 0) + mw_pos, 1)
+        # Store directly into _fuel_history keyed by label
+        for region in NEM_REGIONS:
+            if fuel_mix[region]:
+                _fuel_history[region][label] = dict(fuel_mix[region])
+        loaded += 1
+
+    logger.info(f"scrape_scada_history: loaded {loaded} time slots into fuel history")
+
+
 # scrape_gen — medium speed: fuel mix from SCADA + NEM_UNITS static registry
 # Refreshed every 15 min.
 # ---------------------------------------------------------------------------
