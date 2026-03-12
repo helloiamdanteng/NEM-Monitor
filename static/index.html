@@ -515,71 +515,98 @@ function drawGenChart(data) {
   ctx.style.display = '';
 
   const fc         = genData.fuel_colors || {};
-  const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Battery','Liquid','Other'];
-  const fuelHist   = genData.fuel_history || {};   // { region: [{interval, Black Coal:mw, Wind:mw, ...}] }
-  const pdGen      = data.predispatch_gen || {};    // { region: [{interval, Scheduled, SemiScheduled}] }
-  const fuelMix    = genData.fuel_mix || {};        // current snapshot
-
-  // Determine which regions to include
+  const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Rooftop Solar','Battery','Liquid','Other'];
+  const fuelHist   = genData.fuel_history || {};
+  const fuelMix    = genData.fuel_mix || {};
   const activeRegions = genRegion === 'NEM' ? REGIONS : [genRegion];
+  const regionLabel = genRegion === 'NEM' ? 'NEM' : genRegion.replace('1','');
+  const card = ctx.closest('.chart-card');
 
-  // --- Build unified time spine (HH:MM) from fuel history ---
-  const labelSet = new Set();
-  for (const r of activeRegions) {
-    for (const pt of (fuelHist[r] || [])) labelSet.add(pt.interval);
-  }
-  // Add predispatch labels
-  for (const r of activeRegions) {
-    for (const pt of (pdGen[r] || [])) labelSet.add(pt.interval);
-  }
-  const labels = Array.from(labelSet).sort();
+  // Count actual history points
+  const histPts = Math.max(...activeRegions.map(r => (fuelHist[r] || []).length));
 
-  if (labels.length === 0) {
-    const card = ctx.closest('.chart-card');
-    if (card) card.querySelector('.chart-title').textContent = 'Accumulating history… check back in 15 min';
-    ctx.style.display = 'none';
-    // Still render breakdown from current snapshot
+  // ── MODE A: stacked bar (current snapshot) when history < 4 points ──────────
+  if (histPts < 4) {
+    // Aggregate fuel mix across active regions
+    const totals = {};
+    for (const r of activeRegions) {
+      for (const [fuel, mw] of Object.entries(fuelMix[r] || {})) {
+        totals[fuel] = (totals[fuel] || 0) + mw;
+      }
+    }
+    const activeFuels = FUEL_ORDER.filter(f => (totals[f] || 0) > 10);
+    const totalMW = activeFuels.reduce((s, f) => s + totals[f], 0);
+
+    if (card) card.querySelector('.chart-title').textContent =
+      `${regionLabel} — Current snapshot ${fmt(Math.round(totalMW))} MW · history accumulating…`;
+
+    charts.gen = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [regionLabel],
+        datasets: activeFuels.map(fuel => ({
+          label: fuel,
+          data: [Math.round(totals[fuel] || 0)],
+          backgroundColor: (fc[fuel] || '#95a5a6') + 'dd',
+          borderColor:     (fc[fuel] || '#95a5a6'),
+          borderWidth: 1,
+        }))
+      },
+      options: {
+        ...CHART_DEFAULTS,
+        plugins: {
+          ...CHART_DEFAULTS.plugins,
+          legend: { display: true, position: 'bottom',
+            labels: { color: '#94a3b8', font: { family: 'Space Mono', size: 9 }, boxWidth: 10, padding: 6 }
+          },
+          tooltip: {
+            ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: {
+              label: c => ` ${c.dataset.label}: ${fmt(c.raw)} MW (${Math.round(c.raw/totalMW*100)}%)`
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, grid: { display: false },
+               ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 } } },
+          y: { stacked: true, min: 0,
+               ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
+                        callback: v => (v/1000).toFixed(1)+'GW' },
+               grid: { color: '#1e2d45' } }
+        }
+      }
+    });
     renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER);
     return;
   }
 
-  // --- For each time label, aggregate fuel MW across active regions ---
-  // Build lookup: region -> { interval -> { fuel: mw } }
+  // ── MODE B: 24hr stacked area (once history is rich enough) ─────────────────
+  const labelSet = new Set();
+  for (const r of activeRegions) for (const pt of (fuelHist[r] || [])) labelSet.add(pt.interval);
+  const pdGen = data.predispatch_gen || {};
+  for (const r of activeRegions) for (const pt of (pdGen[r] || [])) labelSet.add(pt.interval);
+  const labels = Array.from(labelSet).sort();
+
   const histLookup = {};
   for (const r of activeRegions) {
     histLookup[r] = {};
-    for (const pt of (fuelHist[r] || [])) {
-      histLookup[r][pt.interval] = pt;
-    }
+    for (const pt of (fuelHist[r] || [])) histLookup[r][pt.interval] = pt;
   }
-
-  // Build predispatch lookup: region -> { interval -> totalMW }
-  // PD only has Scheduled + SemiScheduled totals — no fuel split.
-  // We'll show it as a single dashed "Total" line per region overlay.
   const pdLookup = {};
   for (const r of activeRegions) {
     pdLookup[r] = {};
-    for (const pt of (pdGen[r] || [])) {
-      pdLookup[r][pt.interval] = (pt.Scheduled || 0) + (pt.SemiScheduled || 0);
-    }
+    for (const pt of (pdGen[r] || [])) pdLookup[r][pt.interval] = (pt.Scheduled||0)+(pt.SemiScheduled||0);
   }
 
-  // Find the last actual data point (for bridge to predispatch)
-  const now = nowAEST();
   const actualLabels  = labels.filter(l => histLookup[activeRegions[0]]?.[l]);
-  const lastActualIdx = actualLabels.length > 0
-    ? labels.indexOf(actualLabels[actualLabels.length - 1])
-    : -1;
+  const lastActualIdx = actualLabels.length > 0 ? labels.indexOf(actualLabels[actualLabels.length-1]) : -1;
 
-  // --- Build stacked fuel datasets (actuals only) ---
-  // Determine which fuels are active
   const activeFuels = FUEL_ORDER.filter(fuel =>
-    activeRegions.some(r => (fuelHist[r] || []).some(pt => (pt[fuel] || 0) > 0))
+    activeRegions.some(r => (fuelHist[r]||[]).some(pt => (pt[fuel]||0) > 0))
   );
 
   const actualDatasets = activeFuels.map(fuel => {
     const pts = labels.map(l => {
-      // Only include if at least one region has history for this label
       const hasData = activeRegions.some(r => histLookup[r]?.[l]);
       if (!hasData) return null;
       let total = 0;
@@ -588,53 +615,36 @@ function drawGenChart(data) {
     });
     const color = fc[fuel] || '#95a5a6';
     return {
-      label: fuel,
-      data: pts,
-      backgroundColor: color + 'cc',
-      borderColor: color,
-      borderWidth: 0.5,
-      fill: true,
-      pointRadius: 0,
-      tension: 0.2,
-      stack: 'actual',
-      spanGaps: false,
+      label: fuel, data: pts,
+      backgroundColor: color + 'cc', borderColor: color,
+      borderWidth: 0.5, fill: true, pointRadius: 0,
+      tension: 0.2, stack: 'actual', spanGaps: false,
     };
   });
 
-  // --- Build predispatch total line (dashed, on top) ---
   const pdDatasets = activeRegions.map(r => {
     const color = genRegion === 'NEM' ? '#94a3b8' : REGION_COLORS[r];
-    // Bridge: inject last actual total at boundary
-    let lastActualTotal = null;
+    let lastTotal = null;
     if (lastActualIdx >= 0) {
-      const bridgeLabel = labels[lastActualIdx];
-      let t = 0;
-      for (const fuel of activeFuels) t += histLookup[r]?.[bridgeLabel]?.[fuel] || 0;
-      lastActualTotal = Math.round(t);
+      const bl = labels[lastActualIdx];
+      lastTotal = Math.round(activeFuels.reduce((s,f) => s + (histLookup[r]?.[bl]?.[f]||0), 0));
     }
-    const pts = labels.map((l, i) => {
-      if (i === lastActualIdx && lastActualTotal !== null) return lastActualTotal;
+    const pts = labels.map((l,i) => {
+      if (i === lastActualIdx && lastTotal !== null) return lastTotal;
       if (pdLookup[r]?.[l] !== undefined) return Math.round(pdLookup[r][l]);
       return null;
     });
     return {
-      label: (genRegion === 'NEM' ? REGION_SHORT[r] : 'Predispatch') + ' PD',
-      data: pts,
-      borderColor: color,
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderDash: [5, 4],
-      fill: false,
-      pointRadius: 0,
-      tension: 0.2,
-      stack: 'pd',
-      spanGaps: true,
-      order: 0,  // draw on top
+      label: (genRegion==='NEM' ? REGION_SHORT[r] : 'Predispatch')+' PD',
+      data: pts, borderColor: color, backgroundColor: 'transparent',
+      borderWidth: 1.5, borderDash: [5,4], fill: false,
+      pointRadius: 0, tension: 0.2, stack: 'pd', spanGaps: true, order: 0,
     };
   });
 
-  const nowIdx = labels.findIndex(l => l >= now);
-  const regionLabel = genRegion === 'NEM' ? 'NEM' : genRegion.replace('1', '');
+  const nowIdx = labels.findIndex(l => l >= nowAEST());
+  if (card) card.querySelector('.chart-title').textContent =
+    `${regionLabel} — ${actualLabels.length} readings · ${Object.keys(pdLookup[activeRegions[0]]||{}).length} predispatch`;
 
   charts.gen = new Chart(ctx, {
     type: 'line',
@@ -654,39 +664,19 @@ function drawGenChart(data) {
         }
       },
       scales: {
-        x: {
-          stacked: true,
-          ticks: {
-            color: '#64748b', font: { family: 'Space Mono', size: 9 },
-            maxTicksLimit: 12, maxRotation: 0,
-            callback: (v, i) => labels[i]?.endsWith(':00') ? labels[i] : null,
-          },
-          grid: { color: '#1e2d4544' }
-        },
-        y: {
-          stacked: true,
-          min: 0,
-          ticks: {
-            color: '#94a3b8', font: { family: 'Space Mono', size: 10 },
-            callback: v => (v / 1000).toFixed(1) + 'GW'
-          },
-          grid: { color: '#1e2d45' }
-        }
+        x: { stacked: true, ticks: { color:'#64748b', font:{family:'Space Mono',size:9},
+               maxTicksLimit:12, maxRotation:0,
+               callback:(v,i) => labels[i]?.endsWith(':00') ? labels[i] : null },
+             grid:{color:'#1e2d4544'} },
+        y: { stacked: true, min: 0,
+             ticks:{ color:'#94a3b8', font:{family:'Space Mono',size:10},
+                     callback: v => (v/1000).toFixed(1)+'GW' },
+             grid:{color:'#1e2d45'} }
       }
     },
     plugins: [nowLinePlugin(nowIdx)]
   });
 
-  // Update title
-  const card = ctx.closest('.chart-card');
-  if (card) {
-    const pts = actualLabels.length;
-    const pdPts = Object.values(pdLookup[activeRegions[0]] || {}).length;
-    card.querySelector('.chart-title').textContent =
-      `${regionLabel} — ${pts} actual readings · ${pdPts} predispatch intervals`;
-  }
-
-  // Current snapshot breakdown
   renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER);
 }
 
