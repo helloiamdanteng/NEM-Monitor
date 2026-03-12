@@ -153,6 +153,7 @@ async def debug():
             "price_regions": list(th["prices"].keys()),
             "price_counts": {r: len(v) for r, v in th["prices"].items()},
             "price_sample": {r: v[:2] for r, v in th["prices"].items()},
+            "fetch_stats": th.get("fetch_stats", {}),
         }
     except Exception:
         result["trading_history_error"] = traceback.format_exc()
@@ -227,10 +228,12 @@ async def debug():
             "demand":        d.get("demand", {}),
             "hist_prices":   {r: len(v) for r, v in d.get("historical_prices", {}).items()},
             "hist_prices_sample": {r: v[:2] for r, v in d.get("historical_prices", {}).items()},
+            "hist_fetch_stats": d.get("price_fetch_stats", {}),
             "pd_prices":     {r: len(v) for r, v in d.get("predispatch_prices", {}).items()},
             "dispatch_hist": {r: len(v) for r, v in d.get("dispatch_history", {}).items()},
             "dispatch_hist_sample": {r: v[:2] for r, v in d.get("dispatch_history", {}).items()},
             "demand_hist":   {r: len(v) for r, v in d.get("demand_history", {}).items()},
+            "demand_fetch_stats": d.get("demand_fetch_stats", {}),
             "fuel_mix":      {r: len(v) for r, v in d.get("fuel_mix_history", {}).items()},
             "ic_history":    {k: len(v) for k, v in d.get("ic_history", {}).items()},
         }
