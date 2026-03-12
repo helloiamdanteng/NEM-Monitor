@@ -459,6 +459,7 @@ def _fetch_predispatch() -> str:
 
 def scrape_predispatch_prices(text: str) -> dict:
     now_aest = datetime.now(AEST).replace(tzinfo=None)
+    today    = now_aest.date()
     region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     for tk in ["PREDISPATCH_REGION_PRICES", "PREDISPATCH_PRICE", "PREDISPATCH_REGIONPRICE"]:
         rows = _parse_aemo(text, tk)
@@ -476,9 +477,10 @@ def scrape_predispatch_prices(text: str) -> dict:
                 continue
             try:
                 rrp = round(float(rrp_str), 2)
-                # Predispatch DATETIME is end-of-interval — shift back 30min
+                # DATETIME is end-of-interval; shift back 30min for display
                 dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
-                if dt >= now_aest:
+                # Only keep today's intervals (AEST) that are >= now
+                if dt.date() == today and dt >= now_aest:
                     region_series[region][dt.strftime("%H:%M")] = rrp
             except (ValueError, TypeError):
                 pass
@@ -493,6 +495,7 @@ def scrape_predispatch_prices(text: str) -> dict:
 
 def scrape_predispatch_demand(text: str) -> dict:
     now_aest = datetime.now(AEST).replace(tzinfo=None)
+    today    = now_aest.date()
     region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     for tk in ["PREDISPATCH_REGION_SOLUTION", "PREDISPATCH_REGIONSOLUTION"]:
         rows = _parse_aemo(text, tk)
@@ -510,9 +513,9 @@ def scrape_predispatch_demand(text: str) -> dict:
                 continue
             try:
                 demand = round(float(demand_str), 1)
-                # Predispatch DATETIME is end-of-interval — shift back 30min
+                # DATETIME is end-of-interval; shift back 30min for display
                 dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
-                if dt >= now_aest:
+                if dt.date() == today and dt >= now_aest:
                     region_series[region][dt.strftime("%H:%M")] = demand
             except (ValueError, TypeError):
                 pass
