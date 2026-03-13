@@ -873,7 +873,105 @@ def scrape_predispatch_demand(text: str) -> dict:
     return result
 
 
-def scrape_predispatch_generation(text: str) -> dict:
+def scrape_tomorrow_prices(text: str) -> dict:
+    """
+    Extract tomorrow's predispatch price forecast from PREDISPATCH files.
+    Returns { region: [{interval: "HH:MM", rrp: float}] } for tomorrow only.
+    """
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    tomorrow = (now_aest + timedelta(days=1)).date()
+    region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    for tk in ["PREDISPATCH_REGION_PRICES", "PREDISPATCH_PRICE", "PREDISPATCH_REGIONPRICE"]:
+        rows = _parse_aemo(text, tk)
+        if not rows:
+            continue
+        for row in rows:
+            region = row.get("REGIONID", "")
+            if region not in NEM_REGIONS:
+                continue
+            if row.get("INTERVENTION", "0") not in ("0", ""):
+                continue
+            dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
+            rrp_str = row.get("RRP", "")
+            if not dt_str or not rrp_str:
+                continue
+            try:
+                rrp = round(float(rrp_str), 2)
+                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                if dt.date() == tomorrow:
+                    region_series[region][dt.strftime("%H:%M")] = rrp
+            except (ValueError, TypeError):
+                pass
+        break
+    result = {}
+    for region, series in region_series.items():
+        if series:
+            result[region] = [{"interval": k, "rrp": v} for k, v in sorted(series.items())]
+    logger.info(f"Tomorrow prices: {sum(len(v) for v in result.values())} pts")
+    return result
+
+
+def scrape_tomorrow_demand(text: str, stpasa: dict) -> dict:
+    """
+    Tomorrow's demand forecast — combines predispatch (finer resolution near midnight)
+    and STPASA (broader 30-min intervals for the full day).
+    Returns { region: [{interval: "HH:MM", demand: float}] }
+    """
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    tomorrow = (now_aest + timedelta(days=1)).date()
+    region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+
+    # First: predispatch region solution (high-res near midnight)
+    for tk in ["PREDISPATCH_REGION_SOLUTION", "PREDISPATCH_REGIONSOLUTION"]:
+        rows = _parse_aemo(text, tk)
+        if not rows:
+            continue
+        for row in rows:
+            region = row.get("REGIONID", "")
+            if region not in NEM_REGIONS:
+                continue
+            if row.get("INTERVENTION", "0") not in ("0", ""):
+                continue
+            dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
+            demand_str = row.get("DEMAND_AND_NONSCHEDGEN", row.get("TOTALDEMAND", row.get("DEMAND", "")))
+            if not dt_str or not demand_str:
+                continue
+            try:
+                demand = round(float(demand_str), 1)
+                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                if dt.date() == tomorrow:
+                    region_series[region][dt.strftime("%H:%M")] = demand
+            except (ValueError, TypeError):
+                pass
+        break
+
+    # Second: fill remainder from STPASA (30-min intervals)
+    for region, pts in stpasa.items():
+        if region not in NEM_REGIONS:
+            continue
+        for pt in pts:
+            label_full = pt.get("interval", "")  # "YYYY-MM-DD HH:MM"
+            d50 = pt.get("demand_50")
+            if not label_full or d50 is None:
+                continue
+            try:
+                dt = datetime.strptime(label_full, "%Y-%m-%d %H:%M")
+                if dt.date() == tomorrow:
+                    hhmm = dt.strftime("%H:%M")
+                    if hhmm not in region_series[region]:  # don't overwrite predispatch
+                        region_series[region][hhmm] = d50
+            except ValueError:
+                pass
+
+    result = {}
+    for region, series in region_series.items():
+        if series:
+            result[region] = [{"interval": k, "demand": v} for k, v in sorted(series.items())]
+    logger.info(f"Tomorrow demand: {sum(len(v) for v in result.values())} pts")
+    return result
+
+
+
     now_aest = datetime.now(AEST).replace(tzinfo=None)
     region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     for tk in ["PREDISPATCH_REGION_SOLUTION", "PREDISPATCH_REGIONSOLUTION"]:
@@ -1161,6 +1259,10 @@ def scrape_all() -> dict:
     pd_demand = scrape_predispatch_demand(predispatch_text)
     pd_gen    = scrape_predispatch_generation(predispatch_text)
 
+    # Tomorrow's forecasts from same predispatch file
+    tomorrow_prices = scrape_tomorrow_prices(predispatch_text)
+    tomorrow_demand = scrape_tomorrow_demand(predispatch_text, {})
+
     # In-memory accumulators — IC builds up over process lifetime
     _update_demand_history(region_summary)
     _update_ic_history(interconnectors)
@@ -1230,6 +1332,8 @@ def scrape_all() -> dict:
         "origin_assets":         origin_assets_out,
         "fuel_colors":           FUEL_COLORS,
         "all_fuels":             ALL_FUELS,
+        "tomorrow_prices":       tomorrow_prices,
+        "tomorrow_demand":       tomorrow_demand,
     }
 
 
@@ -1826,12 +1930,34 @@ def scrape_slow() -> dict:
     """
     logger.info("scrape_slow starting...")
     pasa = scrape_stpasa_demand()
+
+    # Extract tomorrow's demand from STPASA for Day Ahead page
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    tomorrow = (now_aest + timedelta(days=1)).date()
+    tomorrow_demand_stpasa: dict[str, list] = {}
+    for region, pts in pasa.items():
+        series = []
+        for pt in pts:
+            label_full = pt.get("interval", "")
+            d50 = pt.get("demand_50")
+            if not label_full or d50 is None:
+                continue
+            try:
+                dt = datetime.strptime(label_full, "%Y-%m-%d %H:%M")
+                if dt.date() == tomorrow:
+                    series.append({"interval": dt.strftime("%H:%M"), "demand": d50})
+            except ValueError:
+                pass
+        if series:
+            tomorrow_demand_stpasa[region] = series
+
     logger.info("scrape_slow done")
     return {
-        "timestamp":     datetime.now(timezone.utc).isoformat(),
-        "stpasa_demand": pasa,
-        "fuel_colors":   FUEL_COLORS,
-        "all_fuels":     ALL_FUELS,
+        "timestamp":              datetime.now(timezone.utc).isoformat(),
+        "stpasa_demand":          pasa,
+        "tomorrow_demand_stpasa": tomorrow_demand_stpasa,
+        "fuel_colors":            FUEL_COLORS,
+        "all_fuels":              ALL_FUELS,
     }
 
 
