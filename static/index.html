@@ -1369,17 +1369,19 @@ function openOriginStationModal(stnName) {
 
   // Solid history + dashed predispatch per DUID
   const genDatasets = [];
+  const genHistDs = [];
+  const genPdDs   = [];
   duids.forEach((duid, i) => {
     const col = unitColor(i, duids.length);
-    const fillVal = duids.length > 1 ? (i === 0 ? 'origin' : '-1') : 'origin';
+    const bgCol = col.startsWith('rgba') ? col.replace('0.85)', '0.35)') : col + '59';
     // History (solid stacked area)
-    genDatasets.push({
+    genHistDs.push({
       label: duid,
       data: allLabels.map(t => t <= lastScadaSlot ? (histByDuid[duid]?.[t] ?? null) : null),
-      backgroundColor: col,
+      backgroundColor: bgCol,
       borderColor: col,
       borderWidth: 1,
-      fill: fillVal,
+      fill: 'origin',
       tension: 0.3,
       pointRadius: 0,
       spanGaps: false,
@@ -1389,7 +1391,7 @@ function openOriginStationModal(stnName) {
     // Predispatch forecast (dashed, no fill)
     const hasPd = futureLabels.some(t => pdDuidMap[duid]?.[t] !== undefined);
     if (hasPd) {
-      genDatasets.push({
+      genPdDs.push({
         label: duid + ' (pd)',
         data: allLabels.map(t => t > lastScadaSlot ? (pdDuidMap[duid]?.[t] ?? null) : null),
         backgroundColor: 'transparent',
@@ -1405,6 +1407,7 @@ function openOriginStationModal(stnName) {
       });
     }
   });
+  genDatasets.push(...genHistDs, ...genPdDs);
 
   // ── Price datasets ──────────────────────────────────────────────────────
   // Stitch: hist prices up to lastScadaSlot, then live price at lastScadaSlot, then pd prices
@@ -1486,7 +1489,7 @@ function openOriginStationModal(stnName) {
           grid:{color:'#1e2d4522'}
         },
         yGen: {
-          type:'linear', position:'left', min:0,
+          type:'linear', position:'left', min:0, stacked:true,
           ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>fmt(v)},
           grid:{color:'#1e2d45'},
           title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:8}}
@@ -1655,29 +1658,36 @@ async function openStationModal(regIdx) {
   const allLabels = [...labels, ...futureLabels];
 
   const datasets = [];
+  const histDatasets = [];
+  const pdDatasets   = [];
+
   results.forEach((d, i) => {
     const hm = {};
     d.history.forEach(p => { if (p.interval) hm[p.interval] = Math.max(p.mw, 0); });
     const color = unitColor(i, results.length);
-    const fillVal = results.length > 1 ? (i === 0 ? 'origin' : '-1') : 'origin';
-    // History (solid stacked area)
-    datasets.push({
+    // Safe background: replace rgba alpha, or add 55 opacity suffix to hex
+    const bgColor = color.startsWith('rgba')
+      ? color.replace('0.85)', '0.35)')
+      : color + '59';  // hex + ~35% alpha
+
+    histDatasets.push({
       label: d.duid,
       data: allLabels.map(l => l <= lastSlot ? (hm[l] !== undefined ? hm[l] : null) : null),
       borderColor: color,
-      backgroundColor: color.replace('0.85)', '0.35)'),
+      backgroundColor: bgColor,
       borderWidth: 1.5,
       pointRadius: 0,
       tension: 0.2,
       spanGaps: false,
-      fill: fillVal,
+      fill: 'origin',   // always fill to origin — stacking handled by y: { stacked: true }
       yAxisID: 'y',
       order: 2,
     });
-    // Predispatch (dashed, no fill to avoid stacking confusion)
+
+    // Predispatch (dashed, separate pass so fill refs are clean)
     const hasPd = futureLabels.some(t => pdDuidMap[d.duid]?.[t] !== undefined);
     if (hasPd) {
-      datasets.push({
+      pdDatasets.push({
         label: d.duid + ' (forecast)',
         data: allLabels.map(l => l > lastSlot ? (pdDuidMap[d.duid]?.[l] ?? null) : null),
         borderColor: color,
@@ -1693,6 +1703,9 @@ async function openStationModal(regIdx) {
       });
     }
   });
+
+  // All history first, then forecasts, then prices — keeps fill refs clean
+  datasets.push(...histDatasets, ...pdDatasets);
 
   // Price datasets (actual + forecast)
   datasets.push({
@@ -1777,7 +1790,7 @@ async function openStationModal(regIdx) {
           grid: { color:'#1e293b' },
         },
         y: {
-          stacked: results.length > 1,
+          stacked: true,
           min: 0,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
           grid: { color:'#1e293b' },
@@ -2389,18 +2402,22 @@ async function renderAbout(data) {
       <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--accent)">${views.total.toLocaleString()}</div>
     </div>
     <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TODAY</div>
-      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:#2ed573">${views.today.toLocaleString()}</div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">THIS MONTH</div>
+      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:#2ed573">${(views.this_month||0).toLocaleString()}</div>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
     <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE VISITORS</div>
-      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:#a855f7">${(views.unique_total||0).toLocaleString()}</div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TODAY</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#f39c12">${(views.today||0).toLocaleString()}</div>
     </div>
     <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE TODAY</div>
-      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:#38bdf8">${(views.unique_today||0).toLocaleString()}</div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE TOTAL</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#a855f7">${(views.unique_total||0).toLocaleString()}</div>
+    </div>
+    <div class="chart-card" style="text-align:center;padding:14px 8px">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE / MTH</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#38bdf8">${(views.unique_month||0).toLocaleString()}</div>
     </div>
   </div>
 
