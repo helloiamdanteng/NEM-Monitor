@@ -912,6 +912,63 @@ def scrape_predispatch_generation(text: str) -> dict:
     return result
 
 
+def scrape_predispatch_unit_solution(text: str) -> dict:
+    """
+    Extract DUID-level MW forecasts from PREDISPATCH_UNIT_SOLUTION.
+    Returns { duid: [{interval: "HH:MM", mw: float}] } for today's future intervals only.
+    DATETIME is end-of-period — subtract 30min for display label.
+    INTERVENTION=0 only. Uses TOTALCLEARED (cleared MW incl semi-schedule).
+    """
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    today    = now_aest.date()
+    now_hhmm = now_aest.strftime("%H:%M")
+
+    result: dict[str, dict] = {}  # duid -> {hhmm: mw}
+
+    for tk in ["PREDISPATCH_UNIT_SOLUTION", "PREDISPATCH_UNITSOLUTION"]:
+        rows = _parse_aemo(text, tk)
+        if not rows:
+            continue
+        for row in rows:
+            if row.get("INTERVENTION", "0") not in ("0", ""):
+                continue
+            duid = row.get("DUID", "").strip()
+            if not duid:
+                continue
+            dt_str = row.get("DATETIME", row.get("PREDISPATCH_SEQNO", ""))
+            if not dt_str:
+                continue
+            try:
+                dt = datetime.strptime(dt_str[:16], "%Y/%m/%d %H:%M")
+                # subtract 30 min (end-of-interval → start label)
+                dt -= timedelta(minutes=30)
+            except Exception:
+                try:
+                    dt = datetime.strptime(dt_str[:16], "%Y-%m-%d %H:%M")
+                    dt -= timedelta(minutes=30)
+                except Exception:
+                    continue
+            if dt.date() != today:
+                continue
+            hhmm = dt.strftime("%H:%M")
+            if hhmm <= now_hhmm:
+                continue  # past intervals — skip, SCADA history covers these
+            mw_str = row.get("TOTALCLEARED", row.get("SEMIDISPATCHCAP", ""))
+            try:
+                mw = float(mw_str)
+            except Exception:
+                continue
+            if duid not in result:
+                result[duid] = {}
+            result[duid][hhmm] = mw
+        if result:
+            break
+
+    # Convert to sorted lists
+    return {duid: [{"interval": k, "mw": v} for k, v in sorted(pts.items())]
+            for duid, pts in result.items() if pts}
+
+
 def scrape_tomorrow_prices(text: str) -> dict:
     """
     Extract tomorrow's predispatch price forecast from PREDISPATCH files.
@@ -1297,6 +1354,7 @@ def scrape_all() -> dict:
     pd_prices = scrape_predispatch_prices(predispatch_text)
     pd_demand = scrape_predispatch_demand(predispatch_text)
     pd_gen    = scrape_predispatch_generation(predispatch_text)
+    pd_units  = scrape_predispatch_unit_solution(predispatch_text)
 
     # Tomorrow's forecasts from same predispatch file
     tomorrow_prices = scrape_tomorrow_prices(predispatch_text)
@@ -1369,6 +1427,7 @@ def scrape_all() -> dict:
         "dispatch_history":      dispatch_demand,
         "predispatch_demand":    pd_demand,
         "predispatch_gen":       pd_gen,
+        "predispatch_units":     pd_units,
         "ic_history":            ic_history,
         "predispatch_ic":        pd_interconnectors,
         "origin_assets":         origin_assets_out,
