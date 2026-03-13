@@ -26,7 +26,6 @@ AEST = ZoneInfo("Australia/Brisbane")  # UTC+10 fixed — AEMO never uses daylig
 NEMWEB_BASE       = "https://www.nemweb.com.au"
 DISPATCH_IS_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/PredispatchIS_Reports/"
-P5MIN_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/P5_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/Dispatch_SCADA/"
 TRADING_CURRENT   = f"{NEMWEB_BASE}/Reports/CURRENT/TradingIS_Reports/"
 ST_PASA_URL       = f"{NEMWEB_BASE}/Reports/CURRENT/Short_Term_PASA_Reports/"
@@ -809,12 +808,6 @@ def _fetch_predispatch() -> str:
     return _read_zip(url) if url else ""
 
 
-def _fetch_p5min() -> str:
-    """Fetch latest P5MIN file — contains unit-level 5-min predispatch forecasts."""
-    url = get_latest_file_url(P5MIN_URL, "PUBLIC_P5MIN")
-    return _read_zip(url) if url else ""
-
-
 def scrape_predispatch_prices(text: str) -> dict:
     now_aest = datetime.now(AEST).replace(tzinfo=None)
     today    = now_aest.date()
@@ -1339,17 +1332,15 @@ def scrape_all() -> dict:
     logger.info("scrape_all starting...")
 
     # Run all IO-bound fetches concurrently — prices/demand/history/predispatch only
-    with ThreadPoolExecutor(max_workers=7) as ex:
+    with ThreadPoolExecutor(max_workers=6) as ex:
         f_dispatch_is   = ex.submit(_fetch_dispatch_is)
         f_predispatch   = ex.submit(_fetch_predispatch)
-        f_p5min         = ex.submit(_fetch_p5min)
         f_trading       = ex.submit(scrape_trading_history)
         f_dispatch_hist = ex.submit(scrape_dispatch_history)
         f_scada         = ex.submit(scrape_scada_duids, ORIGIN_DUIDS)
 
     dispatch_text    = f_dispatch_is.result()
     predispatch_text = f_predispatch.result()
-    pd_units_text    = f_p5min.result()   # P5MIN has unit-level forecasts
     trading          = f_trading.result()
     dispatch_hist    = f_dispatch_hist.result()
     scada_vals       = f_scada.result()
@@ -1372,7 +1363,7 @@ def scrape_all() -> dict:
     pd_prices = scrape_predispatch_prices(predispatch_text)
     pd_demand = scrape_predispatch_demand(predispatch_text)
     pd_gen    = scrape_predispatch_generation(predispatch_text)
-    pd_units  = scrape_predispatch_unit_solution(pd_units_text)
+    pd_units  = {}  # AEMO does not publish unit-level predispatch on public NEMWeb
 
     # Tomorrow's forecasts from same predispatch file
     tomorrow_prices = scrape_tomorrow_prices(predispatch_text)
@@ -1401,7 +1392,7 @@ def scrape_all() -> dict:
     for duid, info in ORIGIN_ASSETS.items():
         mw = scada_vals.get(duid)
         hist_raw = _duid_history.get(duid, {})
-        hist_series = [{"t": k, "mw": v} for k, v in sorted(hist_raw.items())]
+        hist_series = [{"interval": k, "mw": v} for k, v in sorted(hist_raw.items())]
         origin_assets_out[duid] = {
             **info,
             "mw":      mw,
