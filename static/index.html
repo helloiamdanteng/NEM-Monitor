@@ -714,11 +714,13 @@ function drawGenChart(data) {
   };
 
   // ── Demand + Non-Sched Gen: predispatch forecast line ───────────────────────
+  const lastDemSlotIdx = allSlots.indexOf(lastDemSlot);
   const demPdDataset = {
     label: 'Demand forecast PD',
     data: allSlots.map((l, i) => {
-      if (l === lastDemSlot && lastDemVal !== null) return lastDemVal; // bridge
-      if (i < allSlots.indexOf(lastDemSlot)) return null;
+      // Bridge: one null point before lastDemSlot so line connects visually
+      if (i === lastDemSlotIdx && lastDemVal !== null) return lastDemVal; // shared bridge point
+      if (i <= lastDemSlotIdx) return null; // strictly after actual
       const hasPd = activeRegions.some(r => pdDemLookup[r]?.[l] !== undefined);
       if (!hasPd) return null;
       return Math.round(activeRegions.reduce((s,r) => s + (pdDemLookup[r]?.[l] ?? 0), 0));
@@ -810,7 +812,7 @@ function renderDemand(data) {
   const demand   = data.demand    || {};
   const opDemand = data.op_demand || {};
   const raw = data.raw_summary || {};
-  let html = '<div class="section-title">Latest Operational Demand (MW)</div><div class="demand-grid">';
+  let html = '<div class="section-title">Demand + Non-Scheduled Generation (MW)</div><div class="demand-grid">';
   for (const r of REGIONS) {
     const op = opDemand[r];
     const sc = demand[r];
@@ -822,8 +824,8 @@ function renderDemand(data) {
     </div>`;
   }
   html += '</div>';
-  html += '<div class="section-title">Demand History + Predispatch</div>';
-  html += '<div class="chart-card"><div class="chart-title">Operational Demand — Actual (solid) · Predispatch (dashed)</div>';
+  html += '<div class="section-title">Demand + Non-Sched Gen History + Predispatch</div>';
+  html += '<div class="chart-card"><div class="chart-title">Demand + Non-Scheduled Gen — Actual (solid) · Predispatch (dashed)</div>';
   html += '<div class="chart-container" style="height:250px"><canvas id="demandHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
   for (const r of REGIONS) {
@@ -834,7 +836,7 @@ function renderDemand(data) {
   }
   html += '</div></div>';
   html += '<div class="chart-card"><div class="chart-title">Demand Details</div>';
-  html += '<div class="table-wrap"><table><tr><th>Region</th><th>Demand</th><th>Forecast</th><th>Initial Supply</th></tr>';
+  html += '<div class="table-wrap"><table><tr><th>Region</th><th>Demand+NonSched</th><th>Forecast</th><th>Initial Supply</th></tr>';
   for (const r of REGIONS) {
     const rw = raw[r] || {};
     const d = demand[r] !== undefined ? demand[r] : rw.TOTALDEMAND;
