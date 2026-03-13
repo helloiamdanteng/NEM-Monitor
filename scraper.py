@@ -82,7 +82,7 @@ _FUEL_MAP = {
 # DUID prefix/pattern → fuel — used when registry has no entry for a DUID
 _DUID_FUEL_PATTERNS = [
     # Black Coal
-    (re.compile(r"^(KOGAN|KSG|STAN|TARONG|TNPS|GLAD|MILLM|CALL|ERARING|MT.?PIPER|BAYSW|LIDDELL|LD0|VALES|VYWL|BPS|WORLD)", re.I), "Black Coal"),
+    (re.compile(r"^(KOGAN|KSG|STAN|SW[1-4]$|TARONG|TNPS|GLAD|MILLM|CALL|ERARING|MT.?PIPER|BAYSW|BW0[1-4]|VP[56]|LIDDELL|LD0|VALES|VYWL|BPS|WORLD)", re.I), "Black Coal"),
     # Brown Coal
     (re.compile(r"^(LYA|LYB|LOYYB|LOYANG|HAZEL|ANGLESEA|YYN|ENERGY.?BRIX)", re.I), "Brown Coal"),
     # Gas / CCGT / OCGT
