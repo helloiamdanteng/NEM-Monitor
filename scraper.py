@@ -764,7 +764,7 @@ def scrape_predispatch_demand(text: str) -> dict:
             if row.get("INTERVENTION", "0") not in ("0", ""):
                 continue
             dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
-            demand_str = row.get("TOTALDEMAND", row.get("DEMAND", ""))
+            demand_str = row.get("DEMAND_AND_NONSCHEDGEN", row.get("TOTALDEMAND", row.get("DEMAND", "")))
             if not dt_str or not demand_str:
                 continue
             try:
