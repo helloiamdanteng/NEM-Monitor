@@ -489,6 +489,26 @@ async def station_debug():
     })
 
 
+@app.post("/api/views")
+async def record_view():
+    import json, os
+    from datetime import datetime, timezone, timedelta
+    AEST = timezone(timedelta(hours=10))
+    today = datetime.now(AEST).strftime("%Y-%m-%d")
+    path = "/tmp/nem_views.json"
+    try:
+        data = json.loads(open(path).read()) if os.path.exists(path) else {"total": 0, "by_day": {}}
+    except Exception:
+        data = {"total": 0, "by_day": {}}
+    data["total"] = data.get("total", 0) + 1
+    data["by_day"][today] = data["by_day"].get(today, 0) + 1
+    try:
+        open(path, "w").write(json.dumps(data))
+    except Exception:
+        pass
+    return {"total": data["total"], "today": data["by_day"].get(today, 0)}
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
     html_path = Path(__file__).parent / "static" / "index.html"
