@@ -1286,202 +1286,215 @@ function _drawOriginPortfolioChart(stationMap, fc) {
 
 // ── Origin station modal (reuses station modal overlay) ───────────────────────
 
-function openOriginStationModal(stnName) {
+async function openOriginStationModal(stnName) {
   const s = window._originStationMap?.[stnName];
   const fc = window._originFc || {};
   if (!s) return;
 
-  const fuelCol = fc[s.fuel] || '#64748b';
+  const fuel     = s.fuel;
+  const region   = s.region;
+  const baseColor = fc[fuel] || '#64748b';
+  const duids    = s.duids || [];
+
   document.getElementById('stationModalTitle').textContent = stnName;
   document.getElementById('stationModalSub').textContent =
-    `${s.fuel}  ·  ${REGION_SHORT[s.region] || s.region}  ·  ${fmt(s.totalCap)} MW cap`;
-  document.getElementById('stationModalStats').innerHTML = '';
+    `${fuel}  ·  ${REGION_SHORT[region] || region}  ·  ${fmt(s.totalCap)} MW cap`;
+  document.getElementById('stationModalStats').innerHTML = '<span style="color:#64748b">Loading…</span>';
   document.getElementById('stationModal').classList.add('open');
-
-  if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
-
-  // ── Build 5-min spine ───────────────────────────────────────────────────
-  const allSlots = [];
-  for (let h=0;h<24;h++) for (let m=0;m<60;m+=5)
-    allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
-
-  // Last SCADA slot
-  let lastScadaSlot = '';
-  for (const info of Object.values(s.duidHists))
-    for (const pt of info.history) if (pt.interval > lastScadaSlot) lastScadaSlot = pt.interval;
-
-  if (!lastScadaSlot) {
-    document.getElementById('stationModalStats').innerHTML =
-      '<span style="color:#64748b">No SCADA history yet — builds within 15 min</span>';
-    return;
-  }
-
-  let lastScadaIdx = allSlots.findIndex(sl => sl > lastScadaSlot) - 1;
-  if (lastScadaIdx < 0) lastScadaIdx = allSlots.length - 1;
-
-  // ── Price lookups ───────────────────────────────────────────────────────
-  const pdPricesArr  = (latestData?.predispatch_prices  || {})[s.region] || [];
-  const histPricesArr = (latestData?.historical_prices  || {})[s.region] || [];
-  const livePrices    = latestData?.prices || {};
-  const histPriceMap = {};
-  for (const pt of histPricesArr) histPriceMap[pt.interval] = pt.rrp;
-  const pdPriceMap = {};
-  for (const pt of pdPricesArr) pdPriceMap[pt.interval] = pt.rrp;
-
-  // Extend x-axis using predispatch price slots (no unit-level predispatch on NEMWeb)
-  const futurePriceSlots = allSlots.filter(t => t > lastScadaSlot && pdPriceMap[t] !== undefined);
-  const allLabels = [...allSlots.slice(0, lastScadaIdx + 1), ...futurePriceSlots];
-
-  // ── Generation datasets ─────────────────────────────────────────────────
-  const duids = Object.keys(s.duidHists);
-  const histByDuid = {};
-  for (const [duid, info] of Object.entries(s.duidHists)) {
-    histByDuid[duid] = {};
-    for (const pt of info.history) histByDuid[duid][pt.interval] = pt.mw;  // fix: pt.interval not pt.t
-  }
-
-  function unitColor(i, total) {
-    if (total <= 1) return fuelCol;
-    const r = parseInt(fuelCol.slice(1,3),16);
-    const g = parseInt(fuelCol.slice(3,5),16);
-    const b = parseInt(fuelCol.slice(5,7),16);
-    const f = 0.45 + (i / Math.max(total-1,1)) * 0.55;
-    return `rgba(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)},0.85)`;
-  }
-
-  // Solid history per DUID — no unit-level predispatch available on public NEMWeb
-  const genDatasets = [];
-  duids.forEach((duid, i) => {
-    const col = unitColor(i, duids.length);
-    const bgCol = col.startsWith('rgba') ? col.replace('0.85)', '0.35)') : col + '59';
-    genDatasets.push({
-      label: duid,
-      data: allLabels.map(t => t <= lastScadaSlot ? (histByDuid[duid]?.[t] ?? null) : null),
-      backgroundColor: bgCol,
-      borderColor: col,
-      borderWidth: 1,
-      fill: 'origin',
-      tension: 0.3,
-      pointRadius: 0,
-      spanGaps: false,
-      yAxisID: 'yGen',
-      order: 2,
-    });
-  });
-
-  // ── Price datasets ──────────────────────────────────────────────────────
-  // Stitch: hist prices up to lastScadaSlot, then live price at lastScadaSlot, then pd prices
-  const histPriceData = allLabels.map(t => {
-    if (t < lastScadaSlot) return histPriceMap[t] ?? null;
-    if (t === lastScadaSlot) return histPriceMap[t] ?? livePrices[s.region] ?? null;
-    return null;
-  });
-  const pdPriceData = allLabels.map(t => t > lastScadaSlot ? (pdPriceMap[t] ?? null) : null);
-
-  const priceDatasets = [
-    {
-      label: 'Price (actual)',
-      data: histPriceData,
-      borderColor: '#f39c12',
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      fill: false,
-      tension: 0.2,
-      pointRadius: 0,
-      spanGaps: true,
-      yAxisID: 'yPrice',
-      order: 1,
-    },
-    {
-      label: 'Price (forecast)',
-      data: pdPriceData,
-      borderColor: '#f39c12',
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderDash: [5, 4],
-      fill: false,
-      tension: 0.2,
-      pointRadius: 0,
-      spanGaps: true,
-      yAxisID: 'yPrice',
-      order: 1,
-    },
-  ];
-
-  const nowStr = nowAEST();
-  const nowIdx = allLabels.reduce((best,l,i) => l<=nowStr ? i : best, -1);
 
   const _existingOrigin = Chart.getChart('stationModalChart');
   if (_existingOrigin) { _existingOrigin.destroy(); }
   if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
-  const canvas = document.getElementById('stationModalChart');
-  _stationModalChart = new Chart(canvas, {
-    type: 'line',
-    data: { labels: allLabels, datasets: [...genDatasets, ...priceDatasets] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode:'index', intersect:false },
-      plugins: {
-        legend: {
-          display: duids.length > 1,
-          position: 'bottom',
-          labels: {
-            color:'#94a3b8',
-            font:{family:'Space Mono',size:8},
-            boxWidth:8, padding:5,
-            filter: item => !String(item.label||'').endsWith('(pd)'),
-          }
-        },
-        tooltip: {
-          backgroundColor:'#111827', borderColor:'#1e2d45', borderWidth:1,
-          titleColor:'#94a3b8', bodyColor:'#e2e8f0',
-          titleFont:{family:'Space Mono',size:9}, bodyFont:{family:'Space Mono',size:10},
-          callbacks: {
-            label: c => {
-              if (c.raw === null || c.raw === undefined) return null;
-              const lbl = c.dataset.label || '';
-              if (lbl.startsWith('Price')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
-              return ` ${lbl}: ${fmt(c.raw)} MW`;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxTicksLimit:8,maxRotation:0},
-          grid:{color:'#1e2d4522'}
-        },
-        yGen: {
-          type:'linear', position:'left', min:0, stacked:true,
-          ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>fmt(v)},
-          grid:{color:'#1e2d45'},
-          title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:8}}
-        },
-        yPrice: {
-          type:'linear', position:'right',
-          ticks:{color:'#f39c12',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
-          grid:{drawOnChartArea:false},
-          title:{display:true,text:'$/MWh',color:'#f39c12',font:{family:'Space Mono',size:8}}
-        }
-      }
-    },
-    plugins:[nowLinePlugin(nowIdx)]
+
+  // Fetch all DUIDs in parallel — same approach as openStationModal
+  let results;
+  try {
+    results = await Promise.all(duids.map(d => fetch(`/api/station/${encodeURIComponent(d)}`).then(r => r.json())));
+  } catch(e) {
+    document.getElementById('stationModalStats').innerHTML = '<span style="color:#e74c3c">Failed to load data</span>';
+    return;
+  }
+
+  results = results.filter(d => d.history && d.history.length > 0);
+  if (!results.length) {
+    document.getElementById('stationModalStats').innerHTML = '<span style="color:#64748b">No SCADA data yet — builds after first gen refresh (~15 min)</span>';
+    return;
+  }
+
+  // Build 5-min time spine
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  let lastSlot = '';
+  for (const d of results) {
+    const slots = d.history.map(p => p.interval).filter(Boolean).sort();
+    if (slots.length && slots[slots.length-1] > lastSlot) lastSlot = slots[slots.length-1];
+  }
+  if (!lastSlot) {
+    document.getElementById('stationModalStats').innerHTML = '<span style="color:#64748b">No data yet</span>';
+    return;
+  }
+
+  let lastIdx = allSlots.findIndex(s => s > lastSlot) - 1;
+  if (lastIdx < 0) lastIdx = allSlots.length - 1;
+  const labels = allSlots.slice(0, lastIdx + 1);
+
+  // Price overlay
+  const pdPricesArr   = (latestData?.predispatch_prices || {})[region] || [];
+  const histPricesArr = (latestData?.historical_prices  || {})[region] || [];
+  const livePrices    = latestData?.prices || {};
+  const pdPriceMap   = {};
+  for (const pt of pdPricesArr)   pdPriceMap[pt.interval]  = pt.rrp;
+  const histPriceMap = {};
+  for (const pt of histPricesArr) histPriceMap[pt.interval] = pt.rrp;
+
+  const futurePriceSlots = allSlots.filter(t => t > lastSlot && pdPriceMap[t] !== undefined);
+  const allLabels = [...labels, ...futurePriceSlots];
+
+  function unitColor(i, total) {
+    if (total <= 1) return baseColor;
+    const r = parseInt(baseColor.slice(1,3),16);
+    const g = parseInt(baseColor.slice(3,5),16);
+    const b = parseInt(baseColor.slice(5,7),16);
+    const factor = 0.5 + (i / Math.max(total-1, 1)) * 0.5;
+    return `rgba(${Math.round(r*factor)},${Math.round(g*factor)},${Math.round(b*factor)},0.85)`;
+  }
+
+  const datasets = [];
+  const histDatasets = [];
+  results.forEach((d, i) => {
+    const hm = {};
+    d.history.forEach(p => { if (p.interval) hm[p.interval] = Math.max(p.mw, 0); });
+    const color  = unitColor(i, results.length);
+    const bgColor = color.startsWith('rgba') ? color.replace('0.85)', '0.35)') : color + '59';
+    histDatasets.push({
+      label: d.duid,
+      data: allLabels.map(l => l <= lastSlot ? (hm[l] !== undefined ? hm[l] : null) : null),
+      borderColor: color,
+      backgroundColor: bgColor,
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.2,
+      spanGaps: false,
+      fill: 'origin',
+      yAxisID: 'y',
+      order: 2,
+    });
+  });
+  datasets.push(...histDatasets);
+
+  // Price datasets
+  datasets.push({
+    label: 'Price (actual)',
+    data: allLabels.map(t => {
+      if (t < lastSlot) return histPriceMap[t] ?? null;
+      if (t === lastSlot) return histPriceMap[t] ?? livePrices[region] ?? null;
+      return null;
+    }),
+    borderColor: '#f39c12', backgroundColor: 'transparent',
+    borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+    spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
+  });
+  datasets.push({
+    label: 'Price (forecast)',
+    data: allLabels.map(t => t > lastSlot ? (pdPriceMap[t] ?? null) : null),
+    borderColor: '#f39c12', backgroundColor: 'transparent',
+    borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, tension: 0.2,
+    spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
   });
 
-  // Stats row
-  let totalNow = 0;
-  for (const info of Object.values(s.duidHists)) {
-    const last = info.history.at(-1);
-    if (last) totalNow += last.mw;
-  }
-  const liveP = livePrices[s.region];
-  document.getElementById('stationModalStats').innerHTML =
-    `<span>${fmt(totalNow)} MW live</span>` +
-    `<span>${duids.length} unit${duids.length>1?'s':''}</span>` +
-    `<span>${fmt(s.totalCap)} MW cap</span>` +
-    (liveP !== undefined ? `<span style="color:#f39c12">$${liveP.toFixed(2)}/MWh</span>` : '');
-}
+  const nowStr = nowAEST();
+  const nowIdx = allLabels.reduce((best,l,i) => l<=nowStr ? i : best, -1);
 
+  try {
+    const _ec = Chart.getChart('stationModalChart');
+    if (_ec) { _ec.destroy(); }
+    if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
+    const ctx = document.getElementById('stationModalChart');
+    _stationModalChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: allLabels, datasets },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: results.length > 1,
+            labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6,
+              filter: item => !String(item.label||'').endsWith('(forecast)') },
+          },
+          tooltip: {
+            backgroundColor:'#1e293b', titleColor:'#94a3b8', bodyColor:'#e2e8f0',
+            borderColor:'#334155', borderWidth:1,
+            callbacks: {
+              title: items => items[0]?.label || '',
+              label: c => {
+                if (c.raw === null || c.raw === undefined) return null;
+                const lbl = c.dataset.label || '';
+                if (lbl.startsWith('Price')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
+                return ` ${lbl}: ${fmt(c.raw, 0)} MW`;
+              },
+              footer: items => {
+                const gi = items.filter(i => i.raw !== null && !String(i.dataset.label||'').startsWith('Price'));
+                const total = gi.reduce((s,i) => s + (i.raw||0), 0);
+                return gi.length > 1 ? `Total: ${fmt(total,0)} MW` : null;
+              }
+            }
+          },
+          ...(nowIdx >= 0 ? { nowLinePlugin: true } : {}),
+        },
+        scales: {
+          x: { ticks:{ color:'#94a3b8', font:{family:'Space Mono',size:9}, maxRotation:0,
+                callback(v,i){ const l=this.getLabelForValue(i); return l&&l.endsWith(':00')?l:null; } },
+               grid:{color:'#1e2d45'} },
+          y: { stacked: true, min: 0,
+               ticks:{color:'#94a3b8', font:{family:'Space Mono',size:9}, callback:v=>fmt(v,0)},
+               grid:{color:'#1e2d45'},
+               title:{display:true, text:'MW', color:'#475569', font:{size:9}} },
+          yPrice: { type:'linear', position:'right', beginAtZero:false,
+               ticks:{color:'#f39c12', font:{family:'Space Mono',size:9}, callback:v=>'$'+v.toFixed(0)},
+               grid:{drawOnChartArea:false},
+               title:{display:true, text:'$/MWh', color:'#f39c12', font:{size:9}} },
+        }
+      },
+      plugins: [nowLinePlugin],
+    });
+  } catch(chartErr) {
+    console.error('Origin modal chart error:', chartErr);
+    document.getElementById('stationModalStats').innerHTML =
+      `<span style="color:#e74c3c">Chart error: ${chartErr.message}</span>`;
+    return;
+  }
+
+  // Stats
+  const totalMw = results.reduce((s,d) => {
+    const pts = d.history;
+    return s + (pts.length ? pts[pts.length-1].mw : 0);
+  }, 0);
+  const liveP = livePrices[region];
+  document.getElementById('stationModalStats').innerHTML =
+    `<span style="color:#e2e8f0;font-weight:700">${fmt(totalMw,0)} MW</span>` +
+    `<span style="color:#475569"> of ${fmt(s.totalCap,0)} MW cap</span>` +
+    (liveP !== undefined ? ` <span style="color:#f39c12">$${liveP.toFixed(2)}/MWh</span>` : '');
+}
+  const s = window._originStationMap?.[stnName];
+  const fc = window._originFc || {};
+  if (!s) return;
+
+  // Build a temporary registry entry and delegate to openStationModal
+  // so both modals share identical chart-building code
+  const tempIdx = '__origin__';
+  _stationRegistry[tempIdx] = {
+    duids:    Object.keys(s.duidHists),
+    name:     stnName,
+    fuel:     s.fuel,
+    region:   s.region,
+    capacity: s.totalCap || 0,
+  };
+  openStationModal(tempIdx);
+}
 
 
 // ── Stations (all NEM generators) ────────────────────────────────────────────
@@ -1828,7 +1841,7 @@ function renderStations(fastData) {
     border:1px solid ${stationsHideSmall ? '#2ed573' : '#475569'};
     background:${stationsHideSmall ? '#2ed57322' : 'transparent'};
     color:${stationsHideSmall ? '#2ed573' : '#94a3b8'}">
-    ${stationsHideSmall ? '✓' : ''} Hide &lt;100 MW
+    ${stationsHideSmall ? '✓' : ''} Hide &lt;100 MW output now
   </button>`;
   html += '</div>';
 
@@ -1859,8 +1872,7 @@ function renderStations(fastData) {
         if (stationsHideOffline && st.totalMw <= 5) return false;
         // Hide small: use capacity if known, otherwise use current MW output as proxy
         if (stationsHideSmall) {
-          const size = st.totalCap > 0 ? st.totalCap : st.totalMw;
-          if (size > 0 && size < 100) return false;
+          if (st.totalMw < 100) return false;
         }
         return true;
       });
