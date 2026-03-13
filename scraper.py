@@ -225,13 +225,17 @@ def _fetch_aemo_registration() -> dict:
         duid_col     = find_col("duid")
         station_col  = find_col("station name", "station", "generating unit name", "name")
         region_col   = find_col("region", "regionid")
-        fuel_col     = find_col("fuel source - primary", "fuel source", "fuel type", "primary fuel")
-        tech_col     = find_col("technology type - primary", "technology type", "tech type")
+        # AEMO XLSX actual column: "Fuel Source - Descriptor" (not "primary")
+        fuel_col     = find_col("fuel source - descriptor", "fuel source - primary", "fuel source", "fuel type", "primary fuel", "fuel")
+        tech_col     = find_col("technology type - primary", "technology type - descriptor", "technology type", "tech type", "technology")
         capacity_col = find_col("reg cap (mw)", "registered capacity", "capacity", "max cap", "reg cap")
 
         if duid_col is None:
             logger.warning("Could not find DUID column in registration list")
             return {}
+
+        logger.info(f"Registration columns found — duid:{duid_col} station:{station_col} "
+                    f"region:{region_col} fuel:{fuel_col} tech:{tech_col} cap:{capacity_col}")
 
         result = {}
         for row in rows[header_idx + 1:]:
@@ -804,6 +808,12 @@ def _fetch_predispatch() -> str:
     return _read_zip(url) if url else ""
 
 
+def _fetch_predispatch_unit_solution() -> str:
+    """Fetch the separate PREDISPATCH_UNIT_SOLUTION file (different filename from PREDISPATCHIS)."""
+    url = get_latest_file_url(PREDISPATCH_URL, "PUBLIC_PREDISPATCH_UNIT_SOLUTION")
+    return _read_zip(url) if url else ""
+
+
 def scrape_predispatch_prices(text: str) -> dict:
     now_aest = datetime.now(AEST).replace(tzinfo=None)
     today    = now_aest.date()
@@ -1323,15 +1333,17 @@ def scrape_all() -> dict:
     logger.info("scrape_all starting...")
 
     # Run all IO-bound fetches concurrently — prices/demand/history/predispatch only
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=7) as ex:
         f_dispatch_is   = ex.submit(_fetch_dispatch_is)
         f_predispatch   = ex.submit(_fetch_predispatch)
+        f_pd_units      = ex.submit(_fetch_predispatch_unit_solution)
         f_trading       = ex.submit(scrape_trading_history)
         f_dispatch_hist = ex.submit(scrape_dispatch_history)
         f_scada         = ex.submit(scrape_scada_duids, ORIGIN_DUIDS)
 
     dispatch_text    = f_dispatch_is.result()
     predispatch_text = f_predispatch.result()
+    pd_units_text    = f_pd_units.result()
     trading          = f_trading.result()
     dispatch_hist    = f_dispatch_hist.result()
     scada_vals       = f_scada.result()
@@ -1354,7 +1366,7 @@ def scrape_all() -> dict:
     pd_prices = scrape_predispatch_prices(predispatch_text)
     pd_demand = scrape_predispatch_demand(predispatch_text)
     pd_gen    = scrape_predispatch_generation(predispatch_text)
-    pd_units  = scrape_predispatch_unit_solution(predispatch_text)
+    pd_units  = scrape_predispatch_unit_solution(pd_units_text)
 
     # Tomorrow's forecasts from same predispatch file
     tomorrow_prices = scrape_tomorrow_prices(predispatch_text)
