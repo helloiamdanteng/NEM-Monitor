@@ -830,8 +830,8 @@ def scrape_predispatch_prices(text: str) -> dict:
                 rrp = round(float(rrp_str), 2)
                 # DATETIME is end-of-interval; shift back 30min for display
                 dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
-                # Only keep today's intervals (AEST) that are >= now
-                if dt.date() == today and dt >= now_aest:
+                # Only keep today's future intervals (AEST) — keep anything within last 30min too
+                if dt.date() == today and dt >= now_aest - timedelta(minutes=30):
                     region_series[region][dt.strftime("%H:%M")] = rrp
             except (ValueError, TypeError):
                 pass
@@ -1915,14 +1915,15 @@ def scrape_scada_history() -> None:
             region = info.get("region", "") or cpid_map.get(duid, "")
             raw_fuel = info.get("fuel", "")
             fuel   = raw_fuel if (raw_fuel and raw_fuel != "Other") else _infer_fuel_from_duid(duid)
+            # Always store per-DUID history regardless of region match
+            if mw is not None:
+                if duid not in _duid_history:
+                    _duid_history[duid] = {}
+                _duid_history[duid][label] = round(mw, 1)
             if region not in NEM_REGIONS:
                 continue
             mw_pos = max(mw, 0) if mw is not None else 0
             fuel_mix[region][fuel] = round(fuel_mix[region].get(fuel, 0) + mw_pos, 1)
-            # Populate per-DUID history
-            if duid not in _duid_history:
-                _duid_history[duid] = {}
-            _duid_history[duid][label] = round(mw, 1)
         # Store into _fuel_history
         for region in NEM_REGIONS:
             if fuel_mix[region]:
