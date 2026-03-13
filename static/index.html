@@ -1353,7 +1353,8 @@ async function openOriginStationModal(stnName) {
   const histPriceMap = {};
   for (const pt of histPricesArr) histPriceMap[pt.interval] = pt.rrp;
 
-  const futurePriceSlots = allSlots.filter(t => t > lastSlot && pdPriceMap[t] !== undefined);
+  // Use full 5-min spine for future so x-axis is proportional (not compressed)
+  const futurePriceSlots = allSlots.filter(t => t > lastSlot);
   const allLabels = [...labels, ...futurePriceSlots];
 
   function unitColor(i, total) {
@@ -1615,8 +1616,8 @@ async function openStationModal(regIdx) {
   const histPriceMap = {};
   for (const pt of histPricesArr) histPriceMap[pt.interval] = pt.rrp;
 
-  // Extend x-axis into the future using predispatch price slots
-  const futurePriceSlots = allSlots.filter(t => t > lastSlot && pdPriceMap[t] !== undefined);
+  // Use full 5-min spine for future so x-axis is proportional (not compressed)
+  const futurePriceSlots = allSlots.filter(t => t > lastSlot);
   const allLabels = [...labels, ...futurePriceSlots];
 
   const datasets = [];
