@@ -1272,16 +1272,16 @@
     "station": "Snapper Point"
   },
   "SNOWSF1": {
-    "capacity": 100,
+    "station": "Snowtown North",
     "fuel": "Wind",
     "region": "SA1",
-    "station": "Snowtown Wind"
+    "capacity": 100
   },
   "SNOWTWN1": {
-    "capacity": 100,
+    "station": "Snowtown South",
     "fuel": "Wind",
     "region": "SA1",
-    "station": "Snowtown Wind"
+    "capacity": 270
   },
   "SNUGGERY1": {
     "capacity": 72,
@@ -1840,5 +1840,65 @@
     "fuel": "Brown Coal",
     "region": "VIC1",
     "station": "Yallourn W"
+  },
+  "CLARESF1": {
+    "station": "Clare Solar Farm",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 100
+  },
+  "DDSF1": {
+    "station": "Darling Downs Solar",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 110
+  },
+  "DAYDSF1": {
+    "station": "Daydream Solar",
+    "fuel": "Solar",
+    "region": "QLD1",
+    "capacity": 150
+  },
+  "SNBESS1": {
+    "station": "Supernode Battery 1",
+    "fuel": "Battery",
+    "region": "QLD1",
+    "capacity": 260
+  },
+  "SNBESS2": {
+    "station": "Supernode Battery 1",
+    "fuel": "Battery",
+    "region": "QLD1",
+    "capacity": 260
+  },
+  "MOREESF1": {
+    "station": "Moree Solar Farm",
+    "fuel": "Solar",
+    "region": "NSW1",
+    "capacity": 56
+  },
+  "ERABESS1": {
+    "station": "Eraring Battery",
+    "fuel": "Battery",
+    "region": "NSW1",
+    "capacity": 460
+  },
+  "ERABESS2": {
+    "station": "Eraring Battery",
+    "fuel": "Battery",
+    "region": "NSW1",
+    "capacity": 460
+  },
+  "STOCKYD1": {
+    "station": "Stockyard Hill",
+    "fuel": "Wind",
+    "region": "VIC1",
+    "capacity": 530
+  },
+  "OSBOROPS": {
+    "station": "Osborne",
+    "fuel": "Gas",
+    "region": "SA1",
+    "capacity": 180
   }
 }
