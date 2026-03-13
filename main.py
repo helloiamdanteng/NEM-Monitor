@@ -37,6 +37,8 @@ _FAST_EMPTY = {
     "predispatch_gen": {}, "predispatch_ic": {}, "ic_flows": {}, "ic_history": {},
     "origin_assets": {}, "tomorrow_prices": {}, "tomorrow_demand": {},
     "dispatch_history": {}, "fuel_mix": {}, "predispatch_units": {},
+    "dispatch_prices_5min": {}, "demand_history": {}, "op_demand_history": {},
+    "interconnectors": {}, "generation": {}, "fuel_colors": {}, "all_fuels": [],
 }
 
 async def _run_fast():
