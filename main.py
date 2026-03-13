@@ -491,35 +491,64 @@ async def station_debug():
 
 @app.post("/api/views")
 async def record_view(request: Request):
-    import json, os, hashlib
+    import json, hashlib
     from datetime import datetime, timezone, timedelta
     AEST = timezone(timedelta(hours=10))
-    today = datetime.now(AEST).strftime("%Y-%m-%d")
-    path = "/tmp/nem_views.json"
-    # Get IP — respect X-Forwarded-For from Render's proxy
+    now_aest = datetime.now(AEST)
+    today   = now_aest.strftime("%Y-%m-%d")
+    month   = now_aest.strftime("%Y-%m")
+    # Persist in static/data/ — survives Render dyno restarts (unlike /tmp)
+    data_dir = Path(__file__).parent / "static" / "data"
+    data_dir.mkdir(exist_ok=True)
+    path = data_dir / "views.json"
     forwarded = request.headers.get("x-forwarded-for")
     raw_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
-    ip_hash = hashlib.sha256(raw_ip.encode()).hexdigest()[:16]  # anonymised
+    ip_hash = hashlib.sha256(raw_ip.encode()).hexdigest()[:16]
     try:
-        data = json.loads(open(path).read()) if os.path.exists(path) else {"total": 0, "by_day": {}, "unique_ips": [], "unique_by_day": {}}
+        data = json.loads(path.read_text()) if path.exists() else {}
     except Exception:
-        data = {"total": 0, "by_day": {}, "unique_ips": [], "unique_by_day": {}}
-    data["total"] = data.get("total", 0) + 1
-    data["by_day"][today] = data["by_day"].get(today, 0) + 1
-    if ip_hash not in data.get("unique_ips", []):
-        data.setdefault("unique_ips", []).append(ip_hash)
-    today_ips = data.setdefault("unique_by_day", {}).setdefault(today, [])
+        data = {}
+    # Schema: { total, by_day, by_month, unique_ips, unique_by_day, unique_by_month }
+    data.setdefault("total", 0)
+    data.setdefault("by_day", {})
+    data.setdefault("by_month", {})
+    data.setdefault("unique_ips", [])
+    data.setdefault("unique_by_day", {})
+    data.setdefault("unique_by_month", {})
+
+    data["total"] += 1
+    data["by_day"][today]   = data["by_day"].get(today, 0) + 1
+    data["by_month"][month] = data["by_month"].get(month, 0) + 1
+
+    is_new_global = ip_hash not in data["unique_ips"]
+    if is_new_global:
+        data["unique_ips"].append(ip_hash)
+
+    today_ips = data["unique_by_day"].setdefault(today, [])
     if ip_hash not in today_ips:
         today_ips.append(ip_hash)
+
+    month_ips = data["unique_by_month"].setdefault(month, [])
+    if ip_hash not in month_ips:
+        month_ips.append(ip_hash)
+
+    # Prune daily buckets older than 60 days (keep monthly forever)
+    if len(data["by_day"]) > 60:
+        for old in sorted(data["by_day"].keys())[:-60]:
+            data["by_day"].pop(old, None)
+            data["unique_by_day"].pop(old, None)
+
     try:
-        open(path, "w").write(json.dumps(data))
+        path.write_text(json.dumps(data))
     except Exception:
         pass
     return {
-        "total": data["total"],
-        "today": data["by_day"].get(today, 0),
-        "unique_total": len(data.get("unique_ips", [])),
-        "unique_today": len(data.get("unique_by_day", {}).get(today, [])),
+        "total":          data["total"],
+        "today":          data["by_day"].get(today, 0),
+        "this_month":     data["by_month"].get(month, 0),
+        "unique_total":   len(data["unique_ips"]),
+        "unique_today":   len(data["unique_by_day"].get(today, [])),
+        "unique_month":   len(data["unique_by_month"].get(month, [])),
     }
 
 
