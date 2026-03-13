@@ -79,6 +79,31 @@ _FUEL_MAP = {
     "kerosene": "Liquid",
 }
 
+# DUID prefix/pattern → fuel — used when registry has no entry for a DUID
+_DUID_FUEL_PATTERNS = [
+    # Black Coal
+    (re.compile(r"^(KOGAN|KSG|STAN|TARONG|TNPS|GLAD|MILLM|CALL|ERARING|MT.?PIPER|BAYSW|LIDDELL|LD0|VALES|VYWL|BPS|WORLD)", re.I), "Black Coal"),
+    # Brown Coal
+    (re.compile(r"^(LYA|LYB|LOYYB|LOYANG|HAZEL|ANGLESEA|YYN|ENERGY.?BRIX)", re.I), "Brown Coal"),
+    # Gas / CCGT / OCGT
+    (re.compile(r"(OCGT|CCGT|GT\d|_GT|GAS|JEERALANGS|MORTLAKE|HALLETT|OSBORNE|TORRENS|LADBROKE|SWANBANK|QPS|BRAEMAR|OAKEY|DARLING)", re.I), "Gas"),
+    # Hydro
+    (re.compile(r"(HYDRO|TUMUT|HUME|MURRAY|DARTMOUTH|EILDON|GORDON|POATINA|TREVALLYN|JOHN.?BUTTERS|SNOWY|SHOALHAVEN)", re.I), "Hydro"),
+    # Wind
+    (re.compile(r"(WIND|WF\d|_WF|SNOWYWIND|HORNSDALE_W)", re.I), "Wind"),
+    # Solar
+    (re.compile(r"(SOLAR|_SF|SF\d|_PV|PV\d|BUNGALA|DARLINGTON.?PT|TAILEM)", re.I), "Solar"),
+    # Battery
+    (re.compile(r"(BATT|BATTERY|_BAT|BAT_|HORNSDALE.?P|HPR|BYP|BESSi?)", re.I), "Battery"),
+]
+
+def _infer_fuel_from_duid(duid: str) -> str:
+    """Last-resort fuel type inference from DUID name patterns."""
+    for pattern, fuel in _DUID_FUEL_PATTERNS:
+        if pattern.search(duid):
+            return fuel
+    return "Other"
+
 def _fetch_aemo_registration() -> dict:
     """
     Download and parse the AEMO NEM Registration and Exemption List XLSX.
@@ -1605,7 +1630,7 @@ def scrape_scada_history() -> None:
         for duid, mw in duids.items():
             info   = reg.get(duid, {})
             region = info.get("region", "") or cpid_map.get(duid, "")
-            fuel   = info.get("fuel", "Other")
+            fuel   = info.get("fuel", "") or _infer_fuel_from_duid(duid)
             if region not in NEM_REGIONS:
                 continue
             mw_pos = max(mw, 0) if mw is not None else 0
@@ -1662,7 +1687,7 @@ def scrape_gen() -> dict:
     for duid, mw in scada.items():
         info     = reg.get(duid.upper(), {})
         region   = info.get("region", "") or cpid_map.get(duid.upper(), "")
-        fuel     = info.get("fuel", "Other")
+        fuel     = info.get("fuel", "") or _infer_fuel_from_duid(duid)
         station  = info.get("station", duid)
         capacity = info.get("capacity")
 
