@@ -1371,20 +1371,20 @@ function openOriginStationModal(stnName) {
   const genDatasets = [];
   duids.forEach((duid, i) => {
     const col = unitColor(i, duids.length);
-    // History (solid fill)
+    const fillVal = duids.length > 1 ? (i === 0 ? 'origin' : '-1') : 'origin';
+    // History (solid stacked area)
     genDatasets.push({
       label: duid,
       data: allLabels.map(t => t <= lastScadaSlot ? (histByDuid[duid]?.[t] ?? null) : null),
       backgroundColor: col,
       borderColor: col,
       borderWidth: 1,
-      fill: true,
+      fill: fillVal,
       tension: 0.3,
       pointRadius: 0,
-      spanGaps: true,
+      spanGaps: false,
       yAxisID: 'yGen',
       order: 2,
-      stack: 'hist',
     });
     // Predispatch forecast (dashed, no fill)
     const hasPd = futureLabels.some(t => pdDuidMap[duid]?.[t] !== undefined);
@@ -1392,17 +1392,16 @@ function openOriginStationModal(stnName) {
       genDatasets.push({
         label: duid + ' (pd)',
         data: allLabels.map(t => t > lastScadaSlot ? (pdDuidMap[duid]?.[t] ?? null) : null),
-        backgroundColor: col.replace('0.85', '0.25'),
+        backgroundColor: 'transparent',
         borderColor: col,
         borderWidth: 1.5,
         borderDash: [4, 3],
-        fill: true,
+        fill: false,
         tension: 0.3,
         pointRadius: 0,
         spanGaps: true,
         yAxisID: 'yGen',
         order: 2,
-        stack: 'pd',
       });
     }
   });
@@ -1429,7 +1428,6 @@ function openOriginStationModal(stnName) {
       spanGaps: true,
       yAxisID: 'yPrice',
       order: 1,
-      stack: 'price',
     },
     {
       label: 'Price (forecast)',
@@ -1444,7 +1442,6 @@ function openOriginStationModal(stnName) {
       spanGaps: true,
       yAxisID: 'yPrice',
       order: 1,
-      stack: 'price',
     },
   ];
 
@@ -1662,7 +1659,8 @@ async function openStationModal(regIdx) {
     const hm = {};
     d.history.forEach(p => { if (p.interval) hm[p.interval] = Math.max(p.mw, 0); });
     const color = unitColor(i, results.length);
-    // History (solid)
+    const fillVal = results.length > 1 ? (i === 0 ? 'origin' : '-1') : 'origin';
+    // History (solid stacked area)
     datasets.push({
       label: d.duid,
       data: allLabels.map(l => l <= lastSlot ? (hm[l] !== undefined ? hm[l] : null) : null),
@@ -1672,28 +1670,26 @@ async function openStationModal(regIdx) {
       pointRadius: 0,
       tension: 0.2,
       spanGaps: false,
-      fill: results.length > 1 ? (i === 0 ? 'origin' : '-1') : 'origin',
+      fill: fillVal,
       yAxisID: 'y',
       order: 2,
-      stack: 'hist',
     });
-    // Predispatch (dashed)
+    // Predispatch (dashed, no fill to avoid stacking confusion)
     const hasPd = futureLabels.some(t => pdDuidMap[d.duid]?.[t] !== undefined);
     if (hasPd) {
       datasets.push({
         label: d.duid + ' (forecast)',
         data: allLabels.map(l => l > lastSlot ? (pdDuidMap[d.duid]?.[l] ?? null) : null),
         borderColor: color,
-        backgroundColor: color.replace('0.85)', '0.15)'),
+        backgroundColor: 'transparent',
         borderWidth: 1.5,
-        borderDash: [4,3],
+        borderDash: [4, 3],
         pointRadius: 0,
         tension: 0.2,
         spanGaps: true,
-        fill: true,
+        fill: false,
         yAxisID: 'y',
         order: 2,
-        stack: 'pd',
       });
     }
   });
