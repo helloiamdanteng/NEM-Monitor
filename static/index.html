@@ -1092,7 +1092,7 @@ function renderOrigin(data) {
     s.duids.push(duid);
     if (a.mw !== null && a.mw !== undefined) s.totalMw += a.mw;
     s.totalCap += (a.capacity || 0);
-    for (const pt of (a.history || [])) s.histMap[pt.t] = (s.histMap[pt.t] || 0) + pt.mw;
+    for (const pt of (a.history || [])) s.histMap[pt.interval] = (s.histMap[pt.interval] || 0) + pt.mw;
     s.duidHists[duid] = { history: a.history || [], fuel: a.fuel, capacity: a.capacity || 0 };
   }
 
@@ -1308,7 +1308,7 @@ function openOriginStationModal(stnName) {
   // Last SCADA slot
   let lastScadaSlot = '';
   for (const info of Object.values(s.duidHists))
-    for (const pt of info.history) if (pt.t > lastScadaSlot) lastScadaSlot = pt.t;
+    for (const pt of info.history) if (pt.interval > lastScadaSlot) lastScadaSlot = pt.interval;
 
   if (!lastScadaSlot) {
     document.getElementById('stationModalStats').innerHTML =
@@ -1319,43 +1319,25 @@ function openOriginStationModal(stnName) {
   let lastScadaIdx = allSlots.findIndex(sl => sl > lastScadaSlot) - 1;
   if (lastScadaIdx < 0) lastScadaIdx = allSlots.length - 1;
 
-  // ── Price lookups (fix: arrays of {interval, rrp}) ──────────────────────
+  // ── Price lookups ───────────────────────────────────────────────────────
   const pdPricesArr  = (latestData?.predispatch_prices  || {})[s.region] || [];
   const histPricesArr = (latestData?.historical_prices  || {})[s.region] || [];
   const livePrices    = latestData?.prices || {};
-  // Build fast lookup maps
   const histPriceMap = {};
   for (const pt of histPricesArr) histPriceMap[pt.interval] = pt.rrp;
   const pdPriceMap = {};
   for (const pt of pdPricesArr) pdPriceMap[pt.interval] = pt.rrp;
 
-  // ── DUID-level predispatch (fix: {interval, mw}) ────────────────────────
-  const pdUnits = latestData?.predispatch_units || {};
-  // Build per-duid future MW map
-  const pdDuidMap = {}; // duid -> {hhmm -> mw}
-  for (const duid of Object.keys(s.duidHists)) {
-    pdDuidMap[duid] = {};
-    for (const pt of (pdUnits[duid] || [])) pdDuidMap[duid][pt.interval] = pt.mw;
-  }
-
-  // Extend x-axis into future where we have predispatch data
-  const futureSlots = allSlots.filter(t => t > lastScadaSlot);
-  // Only include future slots that have DUID predispatch OR price predispatch
-  const hasPdData = slot => {
-    if (pdPriceMap[slot] !== undefined) return true;
-    for (const duid of Object.keys(s.duidHists))
-      if (pdDuidMap[duid]?.[slot] !== undefined) return true;
-    return false;
-  };
-  const futureLabels = futureSlots.filter(hasPdData);
-  const allLabels = [...allSlots.slice(0, lastScadaIdx + 1), ...futureLabels];
+  // Extend x-axis using predispatch price slots (no unit-level predispatch on NEMWeb)
+  const futurePriceSlots = allSlots.filter(t => t > lastScadaSlot && pdPriceMap[t] !== undefined);
+  const allLabels = [...allSlots.slice(0, lastScadaIdx + 1), ...futurePriceSlots];
 
   // ── Generation datasets ─────────────────────────────────────────────────
   const duids = Object.keys(s.duidHists);
   const histByDuid = {};
   for (const [duid, info] of Object.entries(s.duidHists)) {
     histByDuid[duid] = {};
-    for (const pt of info.history) histByDuid[duid][pt.t] = pt.mw;
+    for (const pt of info.history) histByDuid[duid][pt.interval] = pt.mw;  // fix: pt.interval not pt.t
   }
 
   function unitColor(i, total) {
@@ -1367,15 +1349,12 @@ function openOriginStationModal(stnName) {
     return `rgba(${Math.round(r*f)},${Math.round(g*f)},${Math.round(b*f)},0.85)`;
   }
 
-  // Solid history + dashed predispatch per DUID
+  // Solid history per DUID — no unit-level predispatch available on public NEMWeb
   const genDatasets = [];
-  const genHistDs = [];
-  const genPdDs   = [];
   duids.forEach((duid, i) => {
     const col = unitColor(i, duids.length);
     const bgCol = col.startsWith('rgba') ? col.replace('0.85)', '0.35)') : col + '59';
-    // History (solid stacked area)
-    genHistDs.push({
+    genDatasets.push({
       label: duid,
       data: allLabels.map(t => t <= lastScadaSlot ? (histByDuid[duid]?.[t] ?? null) : null),
       backgroundColor: bgCol,
@@ -1388,26 +1367,7 @@ function openOriginStationModal(stnName) {
       yAxisID: 'yGen',
       order: 2,
     });
-    // Predispatch forecast (dashed, no fill)
-    const hasPd = futureLabels.some(t => pdDuidMap[duid]?.[t] !== undefined);
-    if (hasPd) {
-      genPdDs.push({
-        label: duid + ' (pd)',
-        data: allLabels.map(t => t > lastScadaSlot ? (pdDuidMap[duid]?.[t] ?? null) : null),
-        backgroundColor: 'transparent',
-        borderColor: col,
-        borderWidth: 1.5,
-        borderDash: [4, 3],
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
-        spanGaps: true,
-        yAxisID: 'yGen',
-        order: 2,
-      });
-    }
   });
-  genDatasets.push(...genHistDs, ...genPdDs);
 
   // ── Price datasets ──────────────────────────────────────────────────────
   // Stitch: hist prices up to lastScadaSlot, then live price at lastScadaSlot, then pd prices
@@ -1635,31 +1595,22 @@ async function openStationModal(regIdx) {
 
   // Build stacked area line datasets — one per DUID, ordered lightest→darkest
   // ── DUID predispatch + price overlay ──────────────────────────────────
-  const pdUnits     = latestData?.predispatch_units || {};
-  const pdPricesArr = (latestData?.predispatch_prices || {})[region] || [];
-  const histPricesArr = (latestData?.historical_prices || {})[region] || [];
-  const livePrices  = latestData?.prices || {};
+  // Price overlay data (actual + 30-min predispatch forecast — regional, not unit-level)
+  const pdPricesArr   = (latestData?.predispatch_prices || {})[region] || [];
+  const histPricesArr = (latestData?.historical_prices  || {})[region] || [];
+  const livePrices    = latestData?.prices || {};
 
-  const pdPriceMap  = {};
-  for (const pt of pdPricesArr)  pdPriceMap[pt.interval]  = pt.rrp;
+  const pdPriceMap   = {};
+  for (const pt of pdPricesArr)   pdPriceMap[pt.interval]  = pt.rrp;
   const histPriceMap = {};
   for (const pt of histPricesArr) histPriceMap[pt.interval] = pt.rrp;
 
-  // Future slots with DUID predispatch or price predispatch
-  const futureSlotsAll = allSlots.filter(t => t > lastSlot);
-  const pdDuidMap = {};
-  for (const d of results) {
-    pdDuidMap[d.duid] = {};
-    for (const pt of (pdUnits[d.duid] || [])) pdDuidMap[d.duid][pt.interval] = pt.mw;
-  }
-  const futureLabels = futureSlotsAll.filter(t =>
-    pdPriceMap[t] !== undefined || results.some(d => pdDuidMap[d.duid]?.[t] !== undefined)
-  );
-  const allLabels = [...labels, ...futureLabels];
+  // Extend x-axis into the future using predispatch price slots
+  const futurePriceSlots = allSlots.filter(t => t > lastSlot && pdPriceMap[t] !== undefined);
+  const allLabels = [...labels, ...futurePriceSlots];
 
   const datasets = [];
   const histDatasets = [];
-  const pdDatasets   = [];
 
   results.forEach((d, i) => {
     const hm = {};
@@ -1679,33 +1630,14 @@ async function openStationModal(regIdx) {
       pointRadius: 0,
       tension: 0.2,
       spanGaps: false,
-      fill: 'origin',   // always fill to origin — stacking handled by y: { stacked: true }
+      fill: 'origin',
       yAxisID: 'y',
       order: 2,
     });
-
-    // Predispatch (dashed, separate pass so fill refs are clean)
-    const hasPd = futureLabels.some(t => pdDuidMap[d.duid]?.[t] !== undefined);
-    if (hasPd) {
-      pdDatasets.push({
-        label: d.duid + ' (forecast)',
-        data: allLabels.map(l => l > lastSlot ? (pdDuidMap[d.duid]?.[l] ?? null) : null),
-        borderColor: color,
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        borderDash: [4, 3],
-        pointRadius: 0,
-        tension: 0.2,
-        spanGaps: true,
-        fill: false,
-        yAxisID: 'y',
-        order: 2,
-      });
-    }
   });
 
-  // All history first, then forecasts, then prices — keeps fill refs clean
-  datasets.push(...histDatasets, ...pdDatasets);
+  // History first, then prices — no unit-level predispatch available on NEMWeb
+  datasets.push(...histDatasets);
 
   // Price datasets (actual + forecast)
   datasets.push({
