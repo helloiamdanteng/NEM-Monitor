@@ -477,21 +477,29 @@ async def station_detail(duid: str):
 @app.get("/api/pd-debug")
 async def pd_debug():
     """Verify predispatch unit solution is being fetched and parsed correctly."""
-    from scraper import _fetch_predispatch_unit_solution, scrape_predispatch_unit_solution
+    from scraper import _fetch_predispatch_unit_solution, scrape_predispatch_unit_solution, _list_hrefs, PREDISPATCH_URL
     loop = asyncio.get_event_loop()
+
+    # First list what's actually in the directory
+    hrefs = await loop.run_in_executor(None, _list_hrefs, PREDISPATCH_URL)
+    # Show unique filename prefixes (strip timestamps)
+    import re
+    prefixes = sorted(set(re.sub(r'_\d{12,}.*', '', h.split('/')[-1]) for h in hrefs))
+
     try:
         text = await asyncio.wait_for(loop.run_in_executor(None, _fetch_predispatch_unit_solution), timeout=20)
         pd_units = scrape_predispatch_unit_solution(text)
-        # Sample first 5 DUIDs with data
         sample = {k: v[:3] for k, v in list(pd_units.items())[:5]}
         return {
+            "directory_prefixes": prefixes,
+            "total_files": len(hrefs),
             "text_len": len(text),
             "duid_count": len(pd_units),
             "sample": sample,
             "has_predispatch_unit_solution": "PREDISPATCH_UNIT_SOLUTION" in text.upper() if text else False,
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"directory_prefixes": prefixes, "total_files": len(hrefs), "error": str(e)}
 
 
 @app.get("/api/station-debug")
