@@ -930,20 +930,31 @@ _demand_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 # Keyed by AEST time string; old entries pruned to keep only today's data.
 # ---------------------------------------------------------------------------
 _fuel_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+_duid_history: dict[str, dict] = {}  # { duid: { "HH:MM": mw } } — per-unit today history
 
-def _update_fuel_history(fuel_mix: dict) -> None:
-    """Store a fuel mix snapshot. Prune entries from before midnight today."""
+def _update_fuel_history(fuel_mix: dict, scada: dict | None = None) -> None:
+    """Store a fuel mix snapshot and per-DUID snapshot. Prune to today only."""
     label = datetime.now(AEST).strftime("%H:%M")
-    today = datetime.now(AEST).date()
     for region in NEM_REGIONS:
         if region not in fuel_mix:
             continue
         _fuel_history[region][label] = dict(fuel_mix[region])
-        # Prune old entries — only keep today (handles midnight rollover)
-        # We can't compare HH:MM to dates easily, so just keep last 290 slots (24hrs @ 5min)
+        # Prune old entries — keep last 290 slots (24hrs @ 5min)
         if len(_fuel_history[region]) > 290:
             oldest = sorted(_fuel_history[region].keys())[0]
             del _fuel_history[region][oldest]
+
+    # Store per-DUID history for station drill-down
+    if scada:
+        for duid, mw in scada.items():
+            if mw is None:
+                continue
+            if duid not in _duid_history:
+                _duid_history[duid] = {}
+            _duid_history[duid][label] = round(mw, 1)
+            if len(_duid_history[duid]) > 290:
+                oldest = sorted(_duid_history[duid].keys())[0]
+                del _duid_history[duid][oldest]
 
 def _get_fuel_history() -> dict:
     result = {}
@@ -1572,21 +1583,38 @@ def scrape_scada_history() -> None:
                         all_snapshots[label] = {}
                     all_snapshots[label].update(duids)
 
-    # Now convert to fuel_mix per timestamp and load into _fuel_history
+    # Build CPID→region map from the latest DispatchIS for unregistered DUIDs
+    _CPID_REGION = {"N": "NSW1", "Q": "QLD1", "V": "VIC1", "S": "SA1", "T": "TAS1"}
+    cpid_map: dict = {}
+    try:
+        dispatch_text = _fetch_dispatch_is()
+        for row in _parse_aemo(dispatch_text, "DISPATCH_UNIT_SOLUTION"):
+            duid = row.get("DUID", "").strip().upper()
+            cpid = row.get("CONNECTIONPOINTID", "").strip().upper()
+            if duid and cpid and cpid[0] in _CPID_REGION:
+                cpid_map[duid] = _CPID_REGION[cpid[0]]
+    except Exception as e:
+        logger.warning(f"scrape_scada_history: CPID map fetch failed: {e}")
+
+    # Now convert to fuel_mix per timestamp and load into _fuel_history + _duid_history
     reg = NEM_UNITS
     loaded = 0
     for label in sorted(all_snapshots.keys()):
         duids = all_snapshots[label]
         fuel_mix: dict = {r: {} for r in NEM_REGIONS}
         for duid, mw in duids.items():
-            info = reg.get(duid, {})
-            region = info.get("region", "")
+            info   = reg.get(duid, {})
+            region = info.get("region", "") or cpid_map.get(duid, "")
             fuel   = info.get("fuel", "Other")
             if region not in NEM_REGIONS:
                 continue
             mw_pos = max(mw, 0) if mw is not None else 0
             fuel_mix[region][fuel] = round(fuel_mix[region].get(fuel, 0) + mw_pos, 1)
-        # Store directly into _fuel_history keyed by label
+            # Populate per-DUID history
+            if duid not in _duid_history:
+                _duid_history[duid] = {}
+            _duid_history[duid][label] = round(mw, 1)
+        # Store into _fuel_history
         for region in NEM_REGIONS:
             if fuel_mix[region]:
                 _fuel_history[region][label] = dict(fuel_mix[region])
@@ -1671,7 +1699,7 @@ def scrape_gen() -> dict:
                     + ", ".join(f"{d}={mw:.0f}MW" for d, mw in top if mw and mw > 1))
 
     # Accumulate into in-memory history
-    _update_fuel_history(fuel_mix)
+    _update_fuel_history(fuel_mix, scada)
 
     logger.info(f"scrape_gen done — {len(scada)} SCADA DUIDs, "
                 f"reg={len(reg)}, buckets={sum(len(v) for v in fuel_mix.values())}")
