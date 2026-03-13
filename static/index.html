@@ -1055,161 +1055,120 @@ function drawIcChart(data) {
 }
 // ── Origin ────────────────────────────────────────────────────────────────────
 
-// Origin page state
-let originStateFilter = new Set(['QLD1','NSW1','VIC1','SA1']);
-let originStationFilter = new Set();   // empty = all visible
-let originChart = null;
+let originStationFilter = new Set();
+let originChartObj = null;
 
-// Canonical station order per state (as requested)
 const ORIGIN_STATION_ORDER = {
   QLD1: ['Darling Downs','Mt Stuart','Roma','Clare Solar Farm','Darling Downs Solar','Daydream Solar','Supernode Battery 1'],
   NSW1: ['Eraring','Uranquinty','Shoalhaven','Moree Solar Farm','Gunning Wind Farm','Eraring Battery'],
   VIC1: ['Mortlake','Stockyard Hill'],
   SA1:  ['Osborne','Quarantine','Ladbroke Grove','Snowtown North','Snowtown South','Bungala Solar'],
 };
-
 const STATE_LABELS = {QLD1:'QLD',NSW1:'NSW',VIC1:'VIC',SA1:'SA'};
 const STATE_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#2ed573',SA1:'#e74c3c'};
 
 function renderOrigin(data) {
   const assets = data.origin_assets || {};
-  const fc = data.fuel_colors || {};
+  const fc     = data.fuel_colors   || {};
+  const prices = data.prices        || {};
 
-  // ── Group DUIDs → stations ────────────────────────────────────────────────
-  const stationMap = {};  // station name → { fuel, region, duids[], totalMw, totalCap, history }
+  // Group DUIDs → stations
+  const stationMap = {};
   for (const [duid, a] of Object.entries(assets)) {
     const key = a.station;
-    if (!stationMap[key]) {
-      stationMap[key] = {
-        fuel: a.fuel, region: a.region,
-        duids: [], totalMw: 0, totalCap: 0,
-        histMap: {}   // t → mw (summed across DUIDs)
-      };
-    }
+    if (!stationMap[key]) stationMap[key] = {fuel:a.fuel, region:a.region, duids:[], totalMw:0, totalCap:0, histMap:{}};
     const s = stationMap[key];
     s.duids.push(duid);
     if (a.mw !== null && a.mw !== undefined) s.totalMw += a.mw;
     s.totalCap += (a.capacity || 0);
-    // Merge history
-    for (const pt of (a.history || [])) {
-      s.histMap[pt.t] = (s.histMap[pt.t] || 0) + pt.mw;
-    }
+    for (const pt of (a.history || [])) s.histMap[pt.t] = (s.histMap[pt.t] || 0) + pt.mw;
   }
 
-  // Init originStationFilter to all stations on first load
-  if (originStationFilter.size === 0) {
+  if (originStationFilter.size === 0)
     for (const stn of Object.keys(stationMap)) originStationFilter.add(stn);
-  }
 
-  // ── Fuel totals (for summary strip) ───────────────────────────────────────
-  const fuelTotals = {};
-  for (const s of Object.values(stationMap)) {
-    if (!originStateFilter.has(s.region)) continue;
-    fuelTotals[s.fuel] = (fuelTotals[s.fuel] || 0) + s.totalMw;
-  }
-  const grandTotal = Object.values(fuelTotals).reduce((a,b)=>a+b,0);
-
-  // ── Build HTML ────────────────────────────────────────────────────────────
   let html = '';
 
-  // Header
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div class="section-title" style="margin:0">🟠 Origin Portfolio</div>
-    <div style="font-family:var(--font-mono);font-size:13px;color:#f39c12;font-weight:700">${fmt(grandTotal)} <span style="font-size:10px;color:var(--text-muted)">MW live</span></div>
-  </div>`;
-
-  // State toggle buttons
-  html += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">`;
-  for (const [reg, label] of Object.entries(STATE_LABELS)) {
-    const active = originStateFilter.has(reg);
-    const col = STATE_COLORS[reg];
-    html += `<button onclick="toggleOriginState('${reg}')" style="
-      flex:1;min-width:60px;padding:7px 4px;border-radius:8px;border:2px solid ${col};
-      background:${active ? col+'33' : 'transparent'};color:${active ? col : 'var(--text-muted)'};
-      font-family:var(--font-mono);font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s">
-      ${label}
-    </button>`;
-  }
-  html += `</div>`;
-
-  // Fuel summary pills
-  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">`;
-  for (const [fuel, mw] of Object.entries(fuelTotals).sort((a,b)=>b[1]-a[1])) {
-    const col = fc[fuel] || '#95a5a6';
-    html += `<div style="background:${col}22;border:1px solid ${col}55;border-radius:20px;padding:4px 10px;
-      font-family:var(--font-mono);font-size:11px;color:${col}">
-      ${FUEL_ICONS[fuel]||'⚡'} ${fuel} <strong>${fmt(mw)}</strong> MW
+  // ── Spot prices — same style as Prices page ───────────────────────────────
+  html += `<div class="price-grid" style="margin-bottom:10px">`;
+  for (const r of ['QLD1','NSW1','VIC1','SA1','TAS1']) {
+    const p   = prices[r];
+    const cls = p !== undefined ? priceClass(p) : 'low';
+    html += `<div class="price-card ${REGION_CLASS[r]}">
+      <div class="region">${REGION_SHORT[r]}</div>
+      <div class="price ${cls}">${p !== undefined ? fmtPrice(p) : '—'}</div>
+      <div class="unit">$/MWh</div>
     </div>`;
   }
   html += `</div>`;
 
-  // Stacked chart card
-  html += `<div class="chart-card" style="margin-bottom:14px">
-    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:8px;display:flex;justify-content:space-between">
-      <span>OUTPUT TODAY (MW) — tap station to toggle</span>
-      <button onclick="originSelectAll()" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:4px;cursor:pointer">ALL</button>
+  // ── Stacked output chart ──────────────────────────────────────────────────
+  html += `<div class="chart-card" style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+      <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">ORIGIN OUTPUT TODAY (MW) — tap station to toggle</span>
+      <button onclick="originSelectAll()" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-family:var(--font-mono);font-size:8px;padding:2px 7px;border-radius:4px;cursor:pointer">ALL</button>
     </div>
-    <div style="position:relative;height:220px"><canvas id="origin-chart"></canvas></div>
+    <div style="position:relative;height:180px"><canvas id="origin-chart"></canvas></div>
   </div>`;
 
-  // Station list — grouped by state
-  for (const [reg, stateLabel] of Object.entries(STATE_LABELS)) {
-    if (!originStateFilter.has(reg)) continue;
-    const stateStations = (ORIGIN_STATION_ORDER[reg] || []).filter(stn => stationMap[stn]);
-    if (!stateStations.length) continue;
+  // ── 4-column station grid ─────────────────────────────────────────────────
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;align-items:start">`;
+
+  for (const reg of ['QLD1','NSW1','VIC1','SA1']) {
+    const col  = STATE_COLORS[reg];
+    const stns = (ORIGIN_STATION_ORDER[reg] || []).filter(s => stationMap[s]);
+    const stateMw = stns.reduce((acc, stn) => acc + (stationMap[stn]?.totalMw || 0), 0);
+
+    html += `<div>`;
 
     // State header
-    const col = STATE_COLORS[reg];
-    const stateMw = stateStations.reduce((s,stn) => s + (stationMap[stn]?.totalMw||0), 0);
-    html += `<div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px">
-      <div style="width:3px;height:16px;background:${col};border-radius:2px"></div>
-      <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:${col}">${stateLabel}</div>
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">${fmt(stateMw)} MW</div>
+    html += `<div style="display:flex;align-items:baseline;justify-content:space-between;
+      padding:3px 5px 3px;margin-bottom:4px;background:${col}22;border-radius:5px;border-left:2px solid ${col}">
+      <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:${col}">${STATE_LABELS[reg]}</span>
+      <span style="font-family:var(--font-mono);font-size:8px;color:var(--text-muted)">${fmt(stateMw)}<span style="font-size:7px"> MW</span></span>
     </div>`;
 
-    for (const stnName of stateStations) {
+    // Station cards — very compact
+    for (const stnName of stns) {
       const s = stationMap[stnName];
       if (!s) continue;
-      const mw = s.totalMw;
-      const cap = s.totalCap;
-      const pct = cap > 0 ? Math.min(mw / cap * 100, 100) : 0;
+      const mw      = s.totalMw;
+      const cap     = s.totalCap;
+      const pct     = cap > 0 ? Math.min(mw / cap * 100, 100) : 0;
       const fuelCol = fc[s.fuel] || '#95a5a6';
-      const isOn = mw > 5;
-      const isVisible = originStationFilter.has(stnName);
-      const rowOpacity = isVisible ? '1' : '0.35';
+      const isOn    = mw > 5;
+      const isVis   = originStationFilter.has(stnName);
 
-      html += `<div onclick="toggleOriginStation('${stnName}')" style="
-        background:var(--surface);border:1px solid ${isVisible ? fuelCol+'55' : 'var(--border)'};
-        border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;
-        transition:all 0.15s;opacity:${rowOpacity}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="width:8px;height:8px;border-radius:50%;background:${isOn ? fuelCol : '#374151'};flex-shrink:0"></div>
-            <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--text)">${stnName}</div>
-            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);background:var(--bg);padding:2px 6px;border-radius:4px">${s.fuel}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:${fuelCol}">${isOn ? fmt(mw) : '—'} <span style="font-size:9px;color:var(--text-muted)">MW</span></div>
-            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">${cap > 0 ? fmt(cap)+' MW cap' : ''}</div>
-          </div>
+      html += `<div onclick="toggleOriginStation('${stnName.replace(/'/g, "\\'")}')"
+        style="background:var(--surface);
+               border:1px solid ${isVis ? fuelCol + '77' : 'var(--border)'};
+               border-left:2px solid ${isVis ? fuelCol : 'var(--border)'};
+               border-radius:5px;padding:5px 6px;margin-bottom:3px;cursor:pointer;
+               opacity:${isVis ? '1' : '0.35'};transition:opacity 0.15s">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:2px">
+          <div style="font-family:var(--font-mono);font-size:8px;font-weight:600;color:var(--text);
+               line-height:1.25;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+               title="${stnName}">${stnName}</div>
+          <div style="font-family:var(--font-mono);font-size:9px;font-weight:700;
+               color:${isOn ? fuelCol : 'var(--text-muted)'};flex-shrink:0;margin-left:2px">${isOn ? fmt(mw) : '—'}</div>
         </div>
-        <div style="height:4px;background:var(--bg);border-radius:2px;overflow:hidden">
-          <div style="height:100%;width:${pct.toFixed(1)}%;background:${fuelCol};border-radius:2px;transition:width 0.3s"></div>
+        <div style="height:2px;background:var(--bg);border-radius:1px;margin-top:4px;overflow:hidden">
+          <div style="height:100%;width:${pct.toFixed(1)}%;background:${fuelCol};border-radius:1px"></div>
         </div>
-        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:3px">${pct > 0 ? pct.toFixed(0)+'% capacity' : 'offline'} · ${s.duids.length} unit${s.duids.length>1?'s':''}</div>
+        <div style="font-family:var(--font-mono);font-size:7px;color:var(--text-muted);margin-top:2px;
+             display:flex;justify-content:space-between">
+          <span>${FUEL_ICONS[s.fuel] || '⚡'} ${s.fuel}</span>
+          <span>${cap > 0 ? fmt(cap) + ' MW' : ''}</span>
+        </div>
       </div>`;
     }
+    html += `</div>`; // end column
   }
 
-  // Return html + schedule chart draw after DOM update
-  setTimeout(() => drawOriginChart(stationMap, data.fuel_colors || {}), 0);
-  return html;
-}
+  html += `</div>`; // end 4-col grid
 
-function toggleOriginState(reg) {
-  if (originStateFilter.has(reg)) originStateFilter.delete(reg);
-  else originStateFilter.add(reg);
-  if (latestData) showPanel('origin');
+  setTimeout(() => drawOriginChart(stationMap, fc), 0);
+  return html;
 }
 
 function toggleOriginStation(stnName) {
@@ -1220,27 +1179,20 @@ function toggleOriginStation(stnName) {
 
 function originSelectAll() {
   const assets = latestData?.origin_assets || {};
-  // Rebuild from all stations
-  const allStations = new Set();
-  for (const a of Object.values(assets)) allStations.add(a.station);
-  originStationFilter = new Set(allStations);
+  originStationFilter = new Set(Object.values(assets).map(a => a.station));
   if (latestData) showPanel('origin');
 }
 
 function drawOriginChart(stationMap, fc) {
-  destroyChart('origin-chart');
+  if (originChartObj) { originChartObj.destroy(); originChartObj = null; }
   const canvas = document.getElementById('origin-chart');
   if (!canvas) return;
 
-  // Collect all time labels across visible stations
   const labelSet = new Set();
   const visibleStations = [];
-
-  for (const [reg, stations] of Object.entries(ORIGIN_STATION_ORDER)) {
-    if (!originStateFilter.has(reg)) continue;
-    for (const stn of stations) {
-      if (!stationMap[stn]) continue;
-      if (!originStationFilter.has(stn)) continue;
+  for (const [reg, stns] of Object.entries(ORIGIN_STATION_ORDER)) {
+    for (const stn of stns) {
+      if (!stationMap[stn] || !originStationFilter.has(stn)) continue;
       visibleStations.push({name: stn, ...stationMap[stn]});
       for (const t of Object.keys(stationMap[stn].histMap)) labelSet.add(t);
     }
@@ -1249,15 +1201,14 @@ function drawOriginChart(stationMap, fc) {
   const labels = Array.from(labelSet).sort();
   if (!labels.length || !visibleStations.length) return;
 
-  // Build stacked datasets — one per station
   const datasets = visibleStations.map(s => {
-    const fuelCol = fc[s.fuel] || '#95a5a6';
+    const c = fc[s.fuel] || '#95a5a6';
     return {
       label: s.name,
       data: labels.map(t => s.histMap[t] ?? null),
-      backgroundColor: fuelCol + 'cc',
-      borderColor: fuelCol,
-      borderWidth: 1,
+      backgroundColor: c + 'bb',
+      borderColor: c,
+      borderWidth: 0,
       fill: true,
       tension: 0.2,
       pointRadius: 0,
@@ -1265,40 +1216,27 @@ function drawOriginChart(stationMap, fc) {
     };
   });
 
-  // Now line
   const nowStr = nowAEST();
   const nowIdx = labels.findLastIndex(l => l <= nowStr);
 
-  originChart = new Chart(canvas, {
+  originChartObj = new Chart(canvas, {
     type: 'bar',
     data: {labels, datasets},
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       interaction: {mode:'index', intersect:false},
       plugins: {
-        legend: {display: false},
+        legend: {display:false},
         tooltip: {
-          backgroundColor: '#111827', borderColor: '#1e2d45', borderWidth: 1,
-          titleColor: '#94a3b8', bodyColor: '#e2e8f0',
-          titleFont: {family:'Space Mono',size:9}, bodyFont: {family:'Space Mono',size:10},
-          callbacks: {
-            label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null
-          }
+          backgroundColor:'#111827', borderColor:'#1e2d45', borderWidth:1,
+          titleColor:'#94a3b8', bodyColor:'#e2e8f0',
+          titleFont:{family:'Space Mono',size:9}, bodyFont:{family:'Space Mono',size:10},
+          callbacks: { label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null }
         }
       },
       scales: {
-        x: {
-          stacked: true,
-          ticks: {color:'#64748b', font:{family:'Space Mono',size:9}, maxTicksLimit:8, maxRotation:0},
-          grid: {color:'#1e2d4522'}
-        },
-        y: {
-          stacked: true,
-          min: 0,
-          ticks: {color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => fmt(v)+' MW'},
-          grid: {color:'#1e2d45'}
-        }
+        x: {stacked:true, ticks:{color:'#64748b',font:{family:'Space Mono',size:8},maxTicksLimit:8,maxRotation:0}, grid:{color:'#1e2d4522'}},
+        y: {stacked:true, min:0, ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9}, callback: v=>fmt(v)}, grid:{color:'#1e2d45'}}
       }
     },
     plugins: [nowLinePlugin(nowIdx)]
