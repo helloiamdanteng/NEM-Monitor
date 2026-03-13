@@ -26,6 +26,7 @@ AEST = ZoneInfo("Australia/Brisbane")  # UTC+10 fixed — AEMO never uses daylig
 NEMWEB_BASE       = "https://www.nemweb.com.au"
 DISPATCH_IS_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/PredispatchIS_Reports/"
+P5MIN_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/P5_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/Dispatch_SCADA/"
 TRADING_CURRENT   = f"{NEMWEB_BASE}/Reports/CURRENT/TradingIS_Reports/"
 ST_PASA_URL       = f"{NEMWEB_BASE}/Reports/CURRENT/Short_Term_PASA_Reports/"
@@ -808,8 +809,10 @@ def _fetch_predispatch() -> str:
     return _read_zip(url) if url else ""
 
 
-# Unit solution is in the same PUBLIC_PREDISPATCHIS file — alias for clarity
-_fetch_predispatch_unit_solution = _fetch_predispatch
+def _fetch_p5min() -> str:
+    """Fetch latest P5MIN file — contains unit-level 5-min predispatch forecasts."""
+    url = get_latest_file_url(P5MIN_URL, "PUBLIC_P5MIN")
+    return _read_zip(url) if url else ""
 
 
 def scrape_predispatch_prices(text: str) -> dict:
@@ -920,20 +923,23 @@ def scrape_predispatch_generation(text: str) -> dict:
     return result
 
 
-def scrape_predispatch_unit_solution(text: str) -> dict:
+def scrape_p5min_unit_solution(text: str) -> dict:
     """
-    Extract DUID-level MW forecasts from PREDISPATCH_UNIT_SOLUTION.
-    Returns { duid: [{interval: "HH:MM", mw: float}] } for today's future intervals only.
-    DATETIME is end-of-period — subtract 30min for display label.
-    INTERVENTION=0 only. Uses TOTALCLEARED (cleared MW incl semi-schedule).
+    Extract DUID-level MW forecasts from P5MIN_UNIT_SOLUTION.
+    Returns { duid: [{interval: "HH:MM", mw: float}] } for future intervals today.
+    P5MIN covers ~1hr ahead in 5-min intervals.
+    INTERVAL_DATETIME is end-of-period — subtract 5min for display label.
     """
+    if not text:
+        return {}
+
     now_aest = datetime.now(AEST).replace(tzinfo=None)
     today    = now_aest.date()
     now_hhmm = now_aest.strftime("%H:%M")
 
-    result: dict[str, dict] = {}  # duid -> {hhmm: mw}
+    result: dict[str, dict] = {}
 
-    for tk in ["PREDISPATCH_UNIT_SOLUTION", "PREDISPATCH_UNITSOLUTION"]:
+    for tk in ["P5MIN_UNIT_SOLUTION", "P5MIN_UNITSOLUTION"]:
         rows = _parse_aemo(text, tk)
         if not rows:
             continue
@@ -943,38 +949,40 @@ def scrape_predispatch_unit_solution(text: str) -> dict:
             duid = row.get("DUID", "").strip()
             if not duid:
                 continue
-            dt_str = row.get("DATETIME", row.get("PREDISPATCH_SEQNO", ""))
+            dt_str = row.get("INTERVAL_DATETIME", "")
             if not dt_str:
                 continue
             try:
                 dt = datetime.strptime(dt_str[:16], "%Y/%m/%d %H:%M")
-                # subtract 30 min (end-of-interval → start label)
-                dt -= timedelta(minutes=30)
+                dt -= timedelta(minutes=5)
             except Exception:
                 try:
                     dt = datetime.strptime(dt_str[:16], "%Y-%m-%d %H:%M")
-                    dt -= timedelta(minutes=30)
+                    dt -= timedelta(minutes=5)
                 except Exception:
                     continue
             if dt.date() != today:
                 continue
             hhmm = dt.strftime("%H:%M")
             if hhmm <= now_hhmm:
-                continue  # past intervals — skip, SCADA history covers these
+                continue
             mw_str = row.get("TOTALCLEARED", row.get("SEMIDISPATCHCAP", ""))
             try:
                 mw = float(mw_str)
             except Exception:
                 continue
-            if duid not in result:
-                result[duid] = {}
-            result[duid][hhmm] = mw
+            result.setdefault(duid, {})[hhmm] = mw
         if result:
             break
 
-    # Convert to sorted lists
     return {duid: [{"interval": k, "mw": v} for k, v in sorted(pts.items())]
             for duid, pts in result.items() if pts}
+
+
+# Keep old name as alias so nothing else breaks
+scrape_predispatch_unit_solution = scrape_p5min_unit_solution
+
+
 
 
 def scrape_tomorrow_prices(text: str) -> dict:
@@ -1331,16 +1339,17 @@ def scrape_all() -> dict:
     logger.info("scrape_all starting...")
 
     # Run all IO-bound fetches concurrently — prices/demand/history/predispatch only
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=7) as ex:
         f_dispatch_is   = ex.submit(_fetch_dispatch_is)
         f_predispatch   = ex.submit(_fetch_predispatch)
+        f_p5min         = ex.submit(_fetch_p5min)
         f_trading       = ex.submit(scrape_trading_history)
         f_dispatch_hist = ex.submit(scrape_dispatch_history)
         f_scada         = ex.submit(scrape_scada_duids, ORIGIN_DUIDS)
 
     dispatch_text    = f_dispatch_is.result()
     predispatch_text = f_predispatch.result()
-    pd_units_text    = predispatch_text   # unit solution is in the same file
+    pd_units_text    = f_p5min.result()   # P5MIN has unit-level forecasts
     trading          = f_trading.result()
     dispatch_hist    = f_dispatch_hist.result()
     scada_vals       = f_scada.result()
