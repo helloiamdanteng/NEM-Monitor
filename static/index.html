@@ -1055,98 +1055,254 @@ function drawIcChart(data) {
 }
 // ── Origin ────────────────────────────────────────────────────────────────────
 
+// Origin page state
+let originStateFilter = new Set(['QLD1','NSW1','VIC1','SA1']);
+let originStationFilter = new Set();   // empty = all visible
+let originChart = null;
+
+// Canonical station order per state (as requested)
+const ORIGIN_STATION_ORDER = {
+  QLD1: ['Darling Downs','Mt Stuart','Roma','Clare Solar Farm','Darling Downs Solar','Daydream Solar','Supernode Battery 1'],
+  NSW1: ['Eraring','Uranquinty','Shoalhaven','Moree Solar Farm','Gunning Wind Farm','Eraring Battery'],
+  VIC1: ['Mortlake','Stockyard Hill'],
+  SA1:  ['Osborne','Quarantine','Ladbroke Grove','Snowtown North','Snowtown South','Bungala Solar'],
+};
+
+const STATE_LABELS = {QLD1:'QLD',NSW1:'NSW',VIC1:'VIC',SA1:'SA'};
+const STATE_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#2ed573',SA1:'#e74c3c'};
+
 function renderOrigin(data) {
   const assets = data.origin_assets || {};
-  const prices = data.prices || {};
   const fc = data.fuel_colors || {};
 
-  // Group by station
-  const stations = {};
+  // ── Group DUIDs → stations ────────────────────────────────────────────────
+  const stationMap = {};  // station name → { fuel, region, duids[], totalMw, totalCap, history }
   for (const [duid, a] of Object.entries(assets)) {
-    if (!stations[a.station]) stations[a.station] = {fuel:a.fuel, region:a.region, units:[], totalMw:0, totalCap:0};
-    stations[a.station].units.push({duid, ...a});
-    if (a.mw !== null && a.mw !== undefined) stations[a.station].totalMw += a.mw;
-    stations[a.station].totalCap += a.capacity || 0;
+    const key = a.station;
+    if (!stationMap[key]) {
+      stationMap[key] = {
+        fuel: a.fuel, region: a.region,
+        duids: [], totalMw: 0, totalCap: 0,
+        histMap: {}   // t → mw (summed across DUIDs)
+      };
+    }
+    const s = stationMap[key];
+    s.duids.push(duid);
+    if (a.mw !== null && a.mw !== undefined) s.totalMw += a.mw;
+    s.totalCap += (a.capacity || 0);
+    // Merge history
+    for (const pt of (a.history || [])) {
+      s.histMap[pt.t] = (s.histMap[pt.t] || 0) + pt.mw;
+    }
   }
 
-  // Fuel totals
+  // Init originStationFilter to all stations on first load
+  if (originStationFilter.size === 0) {
+    for (const stn of Object.keys(stationMap)) originStationFilter.add(stn);
+  }
+
+  // ── Fuel totals (for summary strip) ───────────────────────────────────────
   const fuelTotals = {};
-  for (const a of Object.values(assets)) {
-    if (a.mw !== null && a.mw !== undefined) fuelTotals[a.fuel] = (fuelTotals[a.fuel]||0) + a.mw;
+  for (const s of Object.values(stationMap)) {
+    if (!originStateFilter.has(s.region)) continue;
+    fuelTotals[s.fuel] = (fuelTotals[s.fuel] || 0) + s.totalMw;
   }
-  const totalMw = Object.values(fuelTotals).reduce((s,v)=>s+v,0);
-  const totalCap = Object.values(assets).reduce((s,a)=>s+(a.capacity||0),0);
+  const grandTotal = Object.values(fuelTotals).reduce((a,b)=>a+b,0);
 
-  let html = '<div class="section-title">Origin Portfolio</div>';
+  // ── Build HTML ────────────────────────────────────────────────────────────
+  let html = '';
 
-  // Fuel summary
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">';
-  for (const [fuel, mw] of Object.entries(fuelTotals).sort((a,b)=>b[1]-a[1])) {
-    const color = fc[fuel] || '#95a5a6';
-    html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;
-      padding:10px 8px;text-align:center;border-top:3px solid ${color}">
-      <div style="font-size:16px;margin-bottom:2px">${FUEL_ICONS[fuel]||'⚡'}</div>
-      <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:${color}">${fmt(mw)} <span style="font-size:9px;color:var(--text-muted)">MW</span></div>
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:2px">${fuel}</div>
-    </div>`;
-  }
-  html += '</div>';
-
-  // Total bar
-  const pct = totalCap > 0 ? Math.min(totalMw/totalCap*100, 100) : 0;
-  html += `<div class="chart-card" style="margin:10px 0">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim)">Total Output</div>
-      <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:#ff6b35">${fmt(totalMw)} <span style="font-size:10px;color:var(--text-muted)">/ ${fmt(totalCap)} MW</span></div>
-    </div>
-    <div style="height:8px;background:var(--surface2);border-radius:4px;overflow:hidden">
-      <div style="height:100%;width:${pct.toFixed(1)}%;background:linear-gradient(90deg,#ff6b35,#ffd32a);border-radius:4px"></div>
-    </div>
-    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-top:4px;text-align:right">${pct.toFixed(1)}% capacity</div>
+  // Header
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div class="section-title" style="margin:0">🟠 Origin Portfolio</div>
+    <div style="font-family:var(--font-mono);font-size:13px;color:#f39c12;font-weight:700">${fmt(grandTotal)} <span style="font-size:10px;color:var(--text-muted)">MW live</span></div>
   </div>`;
 
-  // Stations
-  html += '<div class="section-title">Stations</div>';
-  for (const [name, st] of Object.entries(stations).sort((a,b)=>b[1].totalMw-a[1].totalMw)) {
-    const color = fc[st.fuel] || '#95a5a6';
-    const icon = FUEL_ICONS[st.fuel] || '⚡';
-    const sPct = st.totalCap > 0 ? Math.min(st.totalMw/st.totalCap*100,100) : 0;
-    const rrp = prices[st.region];
-    const rc = REGION_COLORS[st.region] || '#64748b';
-    html += `<div class="chart-card" style="margin-bottom:8px;border-left:3px solid ${color}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-        <div>
-          <div style="font-family:var(--font-mono);font-size:12px;font-weight:700">${icon} ${name}</div>
-          <div style="font-family:var(--font-mono);font-size:9px;color:${color};margin-top:2px">
-            ${st.fuel} · <span style="color:${rc}">${REGION_SHORT[st.region]||st.region}</span>${rrp!==undefined?' · $'+rrp.toFixed(2)+'/MWh':''}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:${st.totalMw>0?'#2ed573':'#64748b'}">${fmt(st.totalMw)}</div>
-          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">/ ${fmt(st.totalCap)} MW</div>
-        </div>
-      </div>
-      <div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-bottom:8px">
-        <div style="height:100%;width:${sPct.toFixed(1)}%;background:${color};opacity:0.8;border-radius:3px"></div>
-      </div>`;
-    if (st.units.length > 1) {
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:4px">';
-      for (const u of st.units.sort((a,b)=>a.duid.localeCompare(b.duid))) {
-        const on = u.mw !== null && u.mw > 5;
-        const uPct = (u.mw !== null && u.capacity) ? Math.min(u.mw/u.capacity*100,100).toFixed(0) : 0;
-        html += `<div style="background:var(--surface2);border-radius:6px;padding:5px 7px;border:1px solid ${on?color+'55':'var(--border)'}">
-          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">${u.duid}</div>
-          <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${on?color:'#475569'};margin-top:2px">${u.mw!==null?fmt(u.mw)+' MW':'—'}</div>
-          <div style="height:3px;background:var(--surface);border-radius:2px;margin-top:3px;overflow:hidden">
-            <div style="height:100%;width:${uPct}%;background:${color};opacity:0.7"></div>
-          </div>
-        </div>`;
-      }
-      html += '</div>';
-    }
-    html += '</div>';
+  // State toggle buttons
+  html += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">`;
+  for (const [reg, label] of Object.entries(STATE_LABELS)) {
+    const active = originStateFilter.has(reg);
+    const col = STATE_COLORS[reg];
+    html += `<button onclick="toggleOriginState('${reg}')" style="
+      flex:1;min-width:60px;padding:7px 4px;border-radius:8px;border:2px solid ${col};
+      background:${active ? col+'33' : 'transparent'};color:${active ? col : 'var(--text-muted)'};
+      font-family:var(--font-mono);font-size:12px;font-weight:700;cursor:pointer;transition:all 0.15s">
+      ${label}
+    </button>`;
   }
+  html += `</div>`;
+
+  // Fuel summary pills
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">`;
+  for (const [fuel, mw] of Object.entries(fuelTotals).sort((a,b)=>b[1]-a[1])) {
+    const col = fc[fuel] || '#95a5a6';
+    html += `<div style="background:${col}22;border:1px solid ${col}55;border-radius:20px;padding:4px 10px;
+      font-family:var(--font-mono);font-size:11px;color:${col}">
+      ${FUEL_ICONS[fuel]||'⚡'} ${fuel} <strong>${fmt(mw)}</strong> MW
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Stacked chart card
+  html += `<div class="chart-card" style="margin-bottom:14px">
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);margin-bottom:8px;display:flex;justify-content:space-between">
+      <span>OUTPUT TODAY (MW) — tap station to toggle</span>
+      <button onclick="originSelectAll()" style="background:none;border:1px solid var(--border);color:var(--text-muted);font-family:var(--font-mono);font-size:9px;padding:2px 7px;border-radius:4px;cursor:pointer">ALL</button>
+    </div>
+    <div style="position:relative;height:220px"><canvas id="origin-chart"></canvas></div>
+  </div>`;
+
+  // Station list — grouped by state
+  for (const [reg, stateLabel] of Object.entries(STATE_LABELS)) {
+    if (!originStateFilter.has(reg)) continue;
+    const stateStations = (ORIGIN_STATION_ORDER[reg] || []).filter(stn => stationMap[stn]);
+    if (!stateStations.length) continue;
+
+    // State header
+    const col = STATE_COLORS[reg];
+    const stateMw = stateStations.reduce((s,stn) => s + (stationMap[stn]?.totalMw||0), 0);
+    html += `<div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px">
+      <div style="width:3px;height:16px;background:${col};border-radius:2px"></div>
+      <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:${col}">${stateLabel}</div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)">${fmt(stateMw)} MW</div>
+    </div>`;
+
+    for (const stnName of stateStations) {
+      const s = stationMap[stnName];
+      if (!s) continue;
+      const mw = s.totalMw;
+      const cap = s.totalCap;
+      const pct = cap > 0 ? Math.min(mw / cap * 100, 100) : 0;
+      const fuelCol = fc[s.fuel] || '#95a5a6';
+      const isOn = mw > 5;
+      const isVisible = originStationFilter.has(stnName);
+      const rowOpacity = isVisible ? '1' : '0.35';
+
+      html += `<div onclick="toggleOriginStation('${stnName}')" style="
+        background:var(--surface);border:1px solid ${isVisible ? fuelCol+'55' : 'var(--border)'};
+        border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;
+        transition:all 0.15s;opacity:${rowOpacity}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:8px;height:8px;border-radius:50%;background:${isOn ? fuelCol : '#374151'};flex-shrink:0"></div>
+            <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--text)">${stnName}</div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);background:var(--bg);padding:2px 6px;border-radius:4px">${s.fuel}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--font-mono);font-size:14px;font-weight:700;color:${fuelCol}">${isOn ? fmt(mw) : '—'} <span style="font-size:9px;color:var(--text-muted)">MW</span></div>
+            <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">${cap > 0 ? fmt(cap)+' MW cap' : ''}</div>
+          </div>
+        </div>
+        <div style="height:4px;background:var(--bg);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${pct.toFixed(1)}%;background:${fuelCol};border-radius:2px;transition:width 0.3s"></div>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-top:3px">${pct > 0 ? pct.toFixed(0)+'% capacity' : 'offline'} · ${s.duids.length} unit${s.duids.length>1?'s':''}</div>
+      </div>`;
+    }
+  }
+
+  // Return html + schedule chart draw after DOM update
+  setTimeout(() => drawOriginChart(stationMap, data.fuel_colors || {}), 0);
   return html;
+}
+
+function toggleOriginState(reg) {
+  if (originStateFilter.has(reg)) originStateFilter.delete(reg);
+  else originStateFilter.add(reg);
+  if (latestData) showPanel('origin');
+}
+
+function toggleOriginStation(stnName) {
+  if (originStationFilter.has(stnName)) originStationFilter.delete(stnName);
+  else originStationFilter.add(stnName);
+  if (latestData) showPanel('origin');
+}
+
+function originSelectAll() {
+  const assets = latestData?.origin_assets || {};
+  // Rebuild from all stations
+  const allStations = new Set();
+  for (const a of Object.values(assets)) allStations.add(a.station);
+  originStationFilter = new Set(allStations);
+  if (latestData) showPanel('origin');
+}
+
+function drawOriginChart(stationMap, fc) {
+  destroyChart('origin-chart');
+  const canvas = document.getElementById('origin-chart');
+  if (!canvas) return;
+
+  // Collect all time labels across visible stations
+  const labelSet = new Set();
+  const visibleStations = [];
+
+  for (const [reg, stations] of Object.entries(ORIGIN_STATION_ORDER)) {
+    if (!originStateFilter.has(reg)) continue;
+    for (const stn of stations) {
+      if (!stationMap[stn]) continue;
+      if (!originStationFilter.has(stn)) continue;
+      visibleStations.push({name: stn, ...stationMap[stn]});
+      for (const t of Object.keys(stationMap[stn].histMap)) labelSet.add(t);
+    }
+  }
+
+  const labels = Array.from(labelSet).sort();
+  if (!labels.length || !visibleStations.length) return;
+
+  // Build stacked datasets — one per station
+  const datasets = visibleStations.map(s => {
+    const fuelCol = fc[s.fuel] || '#95a5a6';
+    return {
+      label: s.name,
+      data: labels.map(t => s.histMap[t] ?? null),
+      backgroundColor: fuelCol + 'cc',
+      borderColor: fuelCol,
+      borderWidth: 1,
+      fill: true,
+      tension: 0.2,
+      pointRadius: 0,
+      spanGaps: true,
+    };
+  });
+
+  // Now line
+  const nowStr = nowAEST();
+  const nowIdx = labels.findLastIndex(l => l <= nowStr);
+
+  originChart = new Chart(canvas, {
+    type: 'bar',
+    data: {labels, datasets},
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {mode:'index', intersect:false},
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          backgroundColor: '#111827', borderColor: '#1e2d45', borderWidth: 1,
+          titleColor: '#94a3b8', bodyColor: '#e2e8f0',
+          titleFont: {family:'Space Mono',size:9}, bodyFont: {family:'Space Mono',size:10},
+          callbacks: {
+            label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: {color:'#64748b', font:{family:'Space Mono',size:9}, maxTicksLimit:8, maxRotation:0},
+          grid: {color:'#1e2d4522'}
+        },
+        y: {
+          stacked: true,
+          min: 0,
+          ticks: {color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => fmt(v)+' MW'},
+          grid: {color:'#1e2d45'}
+        }
+      }
+    },
+    plugins: [nowLinePlugin(nowIdx)]
+  });
 }
 
 // ── Stations (all NEM generators) ────────────────────────────────────────────
