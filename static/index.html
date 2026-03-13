@@ -1240,32 +1240,69 @@ function _drawOriginPortfolioChart(stationMap, fc) {
   }
   if (!visibleStns.length) return;
 
-  const labelSet = new Set();
-  for (const s of visibleStns) for (const t of Object.keys(s.histMap)) labelSet.add(t);
-  const labels = Array.from(labelSet).sort();
-  if (!labels.length) return;
+  // Full 24hr 5-min spine so x-axis is always proportional
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
 
-  const datasets = visibleStns.map(s => {
+  const nowStr = nowAEST();
+  const nowIdx = allSlots.reduce((best,l,i) => l<=nowStr ? i : best, -1);
+
+  // Generation datasets — stacked area
+  const genDatasets = visibleStns.map(s => {
     const col = fc[s.fuel] || '#64748b';
     return {
       label: s.name,
-      data: labels.map(t => s.histMap[t] ?? null),
+      data: allSlots.map(t => s.histMap[t] ?? null),
       backgroundColor: col + 'bb',
       borderColor: col,
-      borderWidth: 0,
+      borderWidth: 1,
       fill: true,
       tension: 0.2,
       pointRadius: 0,
       spanGaps: true,
+      yAxisID: 'y',
+      order: 2,
     };
   });
 
-  const nowStr = nowAEST();
-  const nowIdx = labels.reduce((best,l,i) => l<=nowStr ? i : best, -1);
+  // Price overlay — only if a single region is selected
+  const priceDatasets = [];
+  if (visibleRegs.length === 1) {
+    const reg = visibleRegs[0];
+    const pdArr   = (latestData?.predispatch_prices || {})[reg] || [];
+    const histArr = (latestData?.historical_prices  || {})[reg] || [];
+    const live    = (latestData?.prices || {})[reg];
+    const pdMap = {}, histMap = {};
+    for (const p of pdArr)   pdMap[p.interval]   = p.rrp;
+    for (const p of histArr) histMap[p.interval]  = p.rrp;
+    priceDatasets.push({
+      label: 'Price (actual)',
+      data: allSlots.map(t => {
+        if (histMap[t] !== undefined) return histMap[t];
+        if (t === nowStr && live !== undefined) return live;
+        return null;
+      }),
+      borderColor: '#f39c12', backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+      spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
+    });
+    priceDatasets.push({
+      label: 'Price (forecast)',
+      data: allSlots.map(t => pdMap[t] !== undefined ? pdMap[t] : null),
+      borderColor: '#f39c12', backgroundColor: 'transparent',
+      borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, tension: 0.2,
+      spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
+    });
+  }
+
+  const datasets = [...genDatasets, ...priceDatasets];
+  const hasPrices = priceDatasets.length > 0;
 
   originPortfolioChart = new Chart(canvas, {
-    type: 'bar',
-    data: {labels, datasets},
+    type: 'line',
+    data: {labels: allSlots, datasets},
     options: {
       responsive:true, maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
@@ -1275,12 +1312,30 @@ function _drawOriginPortfolioChart(stationMap, fc) {
           backgroundColor:'#111827',borderColor:'#1e2d45',borderWidth:1,
           titleColor:'#94a3b8',bodyColor:'#e2e8f0',
           titleFont:{family:'Space Mono',size:9},bodyFont:{family:'Space Mono',size:10},
-          callbacks:{label:c=>c.raw!==null?` ${c.dataset.label}: ${fmt(c.raw)} MW`:null}
+          callbacks:{
+            label: c => {
+              if (c.raw === null) return null;
+              if ((c.dataset.label||'').startsWith('Price')) return ` ${c.dataset.label}: $${Number(c.raw).toFixed(2)}/MWh`;
+              return ` ${c.dataset.label}: ${fmt(c.raw)} MW`;
+            }
+          }
         }
       },
       scales:{
-        x:{stacked:true,ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxTicksLimit:8,maxRotation:0},grid:{color:'#1e2d4522'}},
-        y:{stacked:true,min:0,ticks:{color:'#94a3b8',font:{family:'Space Mono',size:10},callback:v=>fmt(v)},grid:{color:'#1e2d45'}}
+        x:{
+          stacked:true,
+          ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
+            callback(v,i){ const l=this.getLabelForValue(i); return l&&l.endsWith(':00')?l:null; }
+          },
+          grid:{color:'#1e2d4522'}
+        },
+        y:{stacked:true,min:0,ticks:{color:'#94a3b8',font:{family:'Space Mono',size:10},callback:v=>fmt(v)},grid:{color:'#1e2d45'}},
+        yPrice: hasPrices ? {
+          type:'linear', position:'right',
+          ticks:{color:'#f39c12', font:{family:'Space Mono',size:9}, callback:v=>'$'+v.toFixed(0)},
+          grid:{drawOnChartArea:false},
+          title:{display:true, text:'$/MWh', color:'#f39c12', font:{size:9}}
+        } : {display:false}
       }
     },
     plugins:[nowLinePlugin(nowIdx)]
@@ -2353,31 +2408,6 @@ async function renderAbout(data) {
   return `
   <div class="section-title" style="margin-bottom:14px">About</div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-    <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TOTAL VIEWS</div>
-      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--accent)">${views.total.toLocaleString()}</div>
-    </div>
-    <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">THIS MONTH</div>
-      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:#2ed573">${(views.this_month||0).toLocaleString()}</div>
-    </div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
-    <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TODAY</div>
-      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#f39c12">${(views.today||0).toLocaleString()}</div>
-    </div>
-    <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE TOTAL</div>
-      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#a855f7">${(views.unique_total||0).toLocaleString()}</div>
-    </div>
-    <div class="chart-card" style="text-align:center;padding:14px 8px">
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE / MTH</div>
-      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#38bdf8">${(views.unique_month||0).toLocaleString()}</div>
-    </div>
-  </div>
-
   <div class="chart-card" style="margin-bottom:12px;padding:14px">
     <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text);margin-bottom:8px">WHAT IS THE NEM?</div>
     <div style="font-size:13px;color:var(--text-muted);line-height:1.6">
@@ -2422,6 +2452,35 @@ async function renderAbout(data) {
         <td style="padding:6px 0;color:var(--accent);text-align:right">Every 30 min</td>
       </tr>
     </table>
+    <div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      If you have any feedback on this dashboard, you can contact Daniel Teng at Origin Energy.
+    </div>
+  </div>
+
+  <div style="margin-top:16px;margin-bottom:8px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted);letter-spacing:0.05em">DASHBOARD USAGE</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    <div class="chart-card" style="text-align:center;padding:14px 8px">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TOTAL VIEWS</div>
+      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--accent)">${views.total.toLocaleString()}</div>
+    </div>
+    <div class="chart-card" style="text-align:center;padding:14px 8px">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">THIS MONTH</div>
+      <div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:#2ed573">${(views.this_month||0).toLocaleString()}</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+    <div class="chart-card" style="text-align:center;padding:14px 8px">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">TODAY</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#f39c12">${(views.today||0).toLocaleString()}</div>
+    </div>
+    <div class="chart-card" style="text-align:center;padding:14px 8px">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE TOTAL</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#a855f7">${(views.unique_total||0).toLocaleString()}</div>
+    </div>
+    <div class="chart-card" style="text-align:center;padding:14px 8px">
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);margin-bottom:4px">UNIQUE / MTH</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#38bdf8">${(views.unique_month||0).toLocaleString()}</div>
+    </div>
   </div>`;
 }
 
