@@ -330,49 +330,50 @@ ALL_FUELS = list(FUEL_COLORS.keys())
 # These are Origin's registered generating units in the NEM
 # ---------------------------------------------------------------------------
 ORIGIN_ASSETS = {
-    # Eraring Power Station (Coal, NSW) — largest power station in Australia
-    "ERARING1": {"name": "Eraring 1", "station": "Eraring",     "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
-    "ERARING2": {"name": "Eraring 2", "station": "Eraring",     "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
-    "ERARING3": {"name": "Eraring 3", "station": "Eraring",     "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
-    "ERARING4": {"name": "Eraring 4", "station": "Eraring",     "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
-    # Mortlake (Gas, VIC)
-    "MORTLK1":  {"name": "Mortlake 1","station": "Mortlake",    "fuel": "Gas",        "region": "VIC1", "capacity": 282},
-    "MORTLK2":  {"name": "Mortlake 2","station": "Mortlake",    "fuel": "Gas",        "region": "VIC1", "capacity": 282},
-    # Darlington Point Solar (NSW)
-    "DARLPNT1": {"name": "Darlington Pt","station":"Darlington Point","fuel":"Solar",  "region": "NSW1", "capacity": 275},
-    # Shoalhaven (Hydro, NSW)
-    "SHGEN":    {"name": "Shoalhaven","station": "Shoalhaven",  "fuel": "Hydro",      "region": "NSW1", "capacity": 240},
-    # Quarantine (Gas, SA)
-    "QPSCL1":   {"name": "Quarantine 1","station":"Quarantine", "fuel": "Gas",        "region": "SA1",  "capacity": 60},
-    "QPSCL2":   {"name": "Quarantine 2","station":"Quarantine", "fuel": "Gas",        "region": "SA1",  "capacity": 60},
-    "QPSCL3":   {"name": "Quarantine 3","station":"Quarantine", "fuel": "Gas",        "region": "SA1",  "capacity": 60},
-    "QPSCL4":   {"name": "Quarantine 4","station":"Quarantine", "fuel": "Gas",        "region": "SA1",  "capacity": 60},
-    # Uranquinty (Gas, NSW)
-    "URANQ1":   {"name": "Uranquinty 1","station":"Uranquinty", "fuel": "Gas",        "region": "NSW1", "capacity": 170},
-    "URANQ2":   {"name": "Uranquinty 2","station":"Uranquinty", "fuel": "Gas",        "region": "NSW1", "capacity": 170},
-    "URANQ3":   {"name": "Uranquinty 3","station":"Uranquinty", "fuel": "Gas",        "region": "NSW1", "capacity": 170},
-    "URANQ4":   {"name": "Uranquinty 4","station":"Uranquinty", "fuel": "Gas",        "region": "NSW1", "capacity": 170},
-    # Osborne (Gas/Cogen, SA)
-    "OSBORNPS": {"name": "Osborne",    "station": "Osborne",    "fuel": "Gas",        "region": "SA1",  "capacity": 180},
-    # Ladbroke Grove (Gas, SA)
-    "LBBG1":    {"name": "Ladbroke 1", "station": "Ladbroke Grove","fuel":"Gas",      "region": "SA1",  "capacity": 80},
-    # Hallett (Wind, SA)
-    "HALLWF1":  {"name": "Hallett Wind","station":"Hallett",    "fuel": "Wind",       "region": "SA1",  "capacity": 95},
-    # Stockyard Hill (Wind, VIC) — Origin's large wind farm
-    "STOCKYD1": {"name": "Stockyard Hill","station":"Stockyard Hill","fuel":"Wind",   "region": "VIC1", "capacity": 530},
-    # Lake Bonney (Wind, SA)
-    "LKBONNY1": {"name": "Lake Bonney 1","station":"Lake Bonney","fuel":"Wind",       "region": "SA1",  "capacity": 81},
-    "LKBONNY2": {"name": "Lake Bonney 2","station":"Lake Bonney","fuel":"Wind",       "region": "SA1",  "capacity": 159},
-    "LKBONNY3": {"name": "Lake Bonney 3","station":"Lake Bonney","fuel":"Wind",       "region": "SA1",  "capacity": 39},
-    # Kareeya (Hydro, QLD)
-    "KAREEYA1": {"name": "Kareeya 1",  "station": "Kareeya",    "fuel": "Hydro",     "region": "QLD1", "capacity": 44},
-    "KAREEYA2": {"name": "Kareeya 2",  "station": "Kareeya",    "fuel": "Hydro",     "region": "QLD1", "capacity": 44},
-    "KAREEYA3": {"name": "Kareeya 3",  "station": "Kareeya",    "fuel": "Hydro",     "region": "QLD1", "capacity": 44},
-    "KAREEYA4": {"name": "Kareeya 4",  "station": "Kareeya",    "fuel": "Hydro",     "region": "QLD1", "capacity": 44},
-    # Cullerin Range (Wind, NSW)
-    "CULLRGWF1":{"name": "Cullerin",   "station": "Cullerin Range","fuel":"Wind",     "region": "NSW1", "capacity": 30},
-    # Shoal Point (TAS — Hydro)
-    "BARCALDN1":{"name": "Barcaldine", "station": "Barcaldine", "fuel": "Gas",        "region": "QLD1", "capacity": 58},
+    # ── QLD ──────────────────────────────────────────────────────────────────
+    "DDPS1":    {"name": "Darling Downs",      "station": "Darling Downs",       "fuel": "Gas",        "region": "QLD1", "capacity": 630},
+    "MSTUART1": {"name": "Mt Stuart 1",        "station": "Mt Stuart",           "fuel": "Gas",        "region": "QLD1", "capacity": 144},
+    "MSTUART2": {"name": "Mt Stuart 2",        "station": "Mt Stuart",           "fuel": "Gas",        "region": "QLD1", "capacity": 144},
+    "MSTUART3": {"name": "Mt Stuart 3",        "station": "Mt Stuart",           "fuel": "Gas",        "region": "QLD1", "capacity": 144},
+    "ROMA_7":   {"name": "Roma",               "station": "Roma",                "fuel": "Gas",        "region": "QLD1", "capacity": 80},
+    "CLARESF1": {"name": "Clare Solar",        "station": "Clare Solar Farm",    "fuel": "Solar",      "region": "QLD1", "capacity": 100},
+    "DDSF1":    {"name": "Darling Downs Solar","station": "Darling Downs Solar", "fuel": "Solar",      "region": "QLD1", "capacity": 110},
+    "DAYDSF1":  {"name": "Daydream Solar",     "station": "Daydream Solar",      "fuel": "Solar",      "region": "QLD1", "capacity": 150},
+    "SNBESS1":  {"name": "Supernode Batt 1",   "station": "Supernode Battery 1", "fuel": "Battery",    "region": "QLD1", "capacity": 260},
+    "SNBESS2":  {"name": "Supernode Batt 2",   "station": "Supernode Battery 1", "fuel": "Battery",    "region": "QLD1", "capacity": 260},
+    # ── NSW ──────────────────────────────────────────────────────────────────
+    "ER01":     {"name": "Eraring 1",          "station": "Eraring",             "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
+    "ER02":     {"name": "Eraring 2",          "station": "Eraring",             "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
+    "ER03":     {"name": "Eraring 3",          "station": "Eraring",             "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
+    "ER04":     {"name": "Eraring 4",          "station": "Eraring",             "fuel": "Black Coal", "region": "NSW1", "capacity": 720},
+    "URANQ1":   {"name": "Uranquinty 1",       "station": "Uranquinty",          "fuel": "Gas",        "region": "NSW1", "capacity": 160},
+    "URANQ2":   {"name": "Uranquinty 2",       "station": "Uranquinty",          "fuel": "Gas",        "region": "NSW1", "capacity": 160},
+    "URANQ3":   {"name": "Uranquinty 3",       "station": "Uranquinty",          "fuel": "Gas",        "region": "NSW1", "capacity": 160},
+    "URANQ4":   {"name": "Uranquinty 4",       "station": "Uranquinty",          "fuel": "Gas",        "region": "NSW1", "capacity": 160},
+    "SHGEN":    {"name": "Shoalhaven Gen",     "station": "Shoalhaven",          "fuel": "Hydro",      "region": "NSW1", "capacity": 240},
+    "SHNGEN":   {"name": "Shoalhaven N-Gen",   "station": "Shoalhaven",          "fuel": "Hydro",      "region": "NSW1", "capacity": 240},
+    "MOREESF1": {"name": "Moree Solar",        "station": "Moree Solar Farm",    "fuel": "Solar",      "region": "NSW1", "capacity": 56},
+    "GUNNING1": {"name": "Gunning Wind",       "station": "Gunning Wind Farm",   "fuel": "Wind",       "region": "NSW1", "capacity": 46},
+    "ERABESS1": {"name": "Eraring Batt 1",     "station": "Eraring Battery",     "fuel": "Battery",    "region": "NSW1", "capacity": 460},
+    "ERABESS2": {"name": "Eraring Batt 2",     "station": "Eraring Battery",     "fuel": "Battery",    "region": "NSW1", "capacity": 460},
+    # ── VIC ──────────────────────────────────────────────────────────────────
+    "MORTLK1":  {"name": "Mortlake 1",         "station": "Mortlake",            "fuel": "Gas",        "region": "VIC1", "capacity": 282},
+    "MORTLK2":  {"name": "Mortlake 2",         "station": "Mortlake",            "fuel": "Gas",        "region": "VIC1", "capacity": 282},
+    "STOCKYD1": {"name": "Stockyard Hill",     "station": "Stockyard Hill",      "fuel": "Wind",       "region": "VIC1", "capacity": 530},
+    # ── SA ───────────────────────────────────────────────────────────────────
+    "OSBORNE1": {"name": "Osborne 1",          "station": "Osborne",             "fuel": "Gas",        "region": "SA1",  "capacity": 180},
+    "OSBOROPS": {"name": "Osborne OPS",        "station": "Osborne",             "fuel": "Gas",        "region": "SA1",  "capacity": 180},
+    "QPSCL1":   {"name": "Quarantine 1",       "station": "Quarantine",          "fuel": "Gas",        "region": "SA1",  "capacity": 60},
+    "QPSCL2":   {"name": "Quarantine 2",       "station": "Quarantine",          "fuel": "Gas",        "region": "SA1",  "capacity": 60},
+    "QPSCL3":   {"name": "Quarantine 3",       "station": "Quarantine",          "fuel": "Gas",        "region": "SA1",  "capacity": 60},
+    "QPSCL4":   {"name": "Quarantine 4",       "station": "Quarantine",          "fuel": "Gas",        "region": "SA1",  "capacity": 60},
+    "LADBROKE1":{"name": "Ladbroke Grove 1",   "station": "Ladbroke Grove",      "fuel": "Gas",        "region": "SA1",  "capacity": 80},
+    "LADBROKE2":{"name": "Ladbroke Grove 2",   "station": "Ladbroke Grove",      "fuel": "Gas",        "region": "SA1",  "capacity": 80},
+    "LBBG1":    {"name": "Ladbroke Grove",     "station": "Ladbroke Grove",      "fuel": "Gas",        "region": "SA1",  "capacity": 80},
+    "SNOWSF1":  {"name": "Snowtown North",     "station": "Snowtown North",      "fuel": "Wind",       "region": "SA1",  "capacity": 100},
+    "SNOWTWN1": {"name": "Snowtown South",     "station": "Snowtown South",      "fuel": "Wind",       "region": "SA1",  "capacity": 270},
+    "BUNGWF1":  {"name": "Bungala Solar 1",    "station": "Bungala Solar",       "fuel": "Solar",      "region": "SA1",  "capacity": 110},
+    "BUNGWF2":  {"name": "Bungala Solar 2",    "station": "Bungala Solar",       "fuel": "Solar",      "region": "SA1",  "capacity": 110},
 }
 
 ORIGIN_DUIDS = set(ORIGIN_ASSETS.keys())
@@ -1319,15 +1320,18 @@ def scrape_all() -> dict:
         "Net Interchange":d.get("NETINTERCHANGE", 0),
     } for r, d in region_summary.items() if "DISPATCHABLEGENERATION" in d}
 
-    # Build Origin assets output
+    # Build Origin assets output — include today SCADA history per DUID
     origin_assets_out = {}
     for duid, info in ORIGIN_ASSETS.items():
         mw = scada_vals.get(duid)
+        hist_raw = _duid_history.get(duid, {})
+        hist_series = [{"t": k, "mw": v} for k, v in sorted(hist_raw.items())]
         origin_assets_out[duid] = {
             **info,
-            "mw":     mw,
-            "pct":    round(mw / info["capacity"] * 100, 1) if mw is not None and info["capacity"] else None,
-            "status": "running" if (mw is not None and mw > 5) else ("off" if mw is not None else "unknown"),
+            "mw":      mw,
+            "pct":     round(mw / info["capacity"] * 100, 1) if mw is not None and info["capacity"] else None,
+            "status":  "running" if (mw is not None and mw > 5) else ("off" if mw is not None else "unknown"),
+            "history": hist_series,
         }
 
     # Keep trading (firm 30-min) and dispatch 5-min prices separate
