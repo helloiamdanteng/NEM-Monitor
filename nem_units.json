@@ -335,6 +335,12 @@
     "region": "VIC1",
     "station": "Dartmouth"
   },
+  "DDPS1": {
+    "capacity": 630,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Darling Downs"
+  },
   "DEVILS_G1": {
     "capacity": 60,
     "fuel": "Hydro",
@@ -346,6 +352,24 @@
     "fuel": "Hydro",
     "region": "TAS1",
     "station": "Devils Gate"
+  },
+  "DRYCGT1": {
+    "capacity": 156,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Dry Creek"
+  },
+  "DRYCGT2": {
+    "capacity": 156,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Dry Creek"
+  },
+  "DRYCGT3": {
+    "capacity": 156,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Dry Creek"
   },
   "DUNDAS1": {
     "capacity": 132,
@@ -581,6 +605,12 @@
     "region": "NSW1",
     "station": "Hume"
   },
+  "HVGTS": {
+    "capacity": 50,
+    "fuel": "Gas",
+    "region": "NSW1",
+    "station": "Hunter Valley GT"
+  },
   "JBUTTONS1": {
     "capacity": 228,
     "fuel": "Gas",
@@ -599,6 +629,42 @@
     "region": "VIC1",
     "station": "Jeeralang B"
   },
+  "JEERALANG1": {
+    "capacity": 195,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Jeeralang A"
+  },
+  "JEERALANG2": {
+    "capacity": 195,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Jeeralang A"
+  },
+  "JEERALANG3": {
+    "capacity": 195,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Jeeralang A"
+  },
+  "JLBGT1": {
+    "capacity": 228,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Jeeralang B"
+  },
+  "JLBGT2": {
+    "capacity": 228,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Jeeralang B"
+  },
+  "JLBGT3": {
+    "capacity": 228,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Jeeralang B"
+  },
   "KANGAROO1": {
     "capacity": 160,
     "fuel": "Hydro",
@@ -612,25 +678,25 @@
     "station": "Kangaroo Valley"
   },
   "KAREEYA1": {
-    "capacity": 44,
+    "capacity": 43,
     "fuel": "Hydro",
     "region": "QLD1",
     "station": "Kareeya"
   },
   "KAREEYA2": {
-    "capacity": 44,
+    "capacity": 43,
     "fuel": "Hydro",
     "region": "QLD1",
     "station": "Kareeya"
   },
   "KAREEYA3": {
-    "capacity": 44,
+    "capacity": 43,
     "fuel": "Hydro",
     "region": "QLD1",
     "station": "Kareeya"
   },
   "KAREEYA4": {
-    "capacity": 44,
+    "capacity": 43,
     "fuel": "Hydro",
     "region": "QLD1",
     "station": "Kareeya"
@@ -653,8 +719,26 @@
     "region": "QLD1",
     "station": "Kogan Creek"
   },
+  "LADBROKE1": {
+    "capacity": 80,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Ladbroke Grove"
+  },
+  "LADBROKE2": {
+    "capacity": 80,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Ladbroke Grove"
+  },
   "LAVERTON1": {
     "capacity": 316,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Laverton North"
+  },
+  "LAVNORTH": {
+    "capacity": 312,
     "fuel": "Gas",
     "region": "VIC1",
     "station": "Laverton North"
@@ -750,7 +834,7 @@
     "station": "Crowlands"
   },
   "LOYNB1": {
-    "capacity": 100,
+    "capacity": 82,
     "fuel": "Gas",
     "region": "QLD1",
     "station": "Loynton"
@@ -791,6 +875,12 @@
     "region": "VIC1",
     "station": "Loy Yang A"
   },
+  "MACKAYGT1": {
+    "capacity": 34,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Mackay GT"
+  },
   "MACKNTSH1": {
     "capacity": 80,
     "fuel": "Hydro",
@@ -828,18 +918,24 @@
     "station": "Mount Emerald Wind"
   },
   "MILLMERRAN1": {
-    "capacity": 440,
+    "capacity": 432,
     "fuel": "Black Coal",
     "region": "QLD1",
     "station": "Millmerran"
   },
   "MILLMERRAN2": {
-    "capacity": 440,
+    "capacity": 432,
     "fuel": "Black Coal",
     "region": "QLD1",
     "station": "Millmerran"
   },
   "MINTARO": {
+    "capacity": 90,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Mintaro"
+  },
+  "MINTARO1": {
     "capacity": 90,
     "fuel": "Gas",
     "region": "SA1",
@@ -880,6 +976,24 @@
     "fuel": "Black Coal",
     "region": "NSW1",
     "station": "Mt Piper"
+  },
+  "MSTUART1": {
+    "capacity": 144,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Mt Stuart"
+  },
+  "MSTUART2": {
+    "capacity": 144,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Mt Stuart"
+  },
+  "MSTUART3": {
+    "capacity": 144,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Mt Stuart"
   },
   "MTPIPER1": {
     "capacity": 700,
@@ -941,6 +1055,12 @@
     "region": "NSW1",
     "station": "Nevertire Solar"
   },
+  "NEWPORT": {
+    "capacity": 500,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Newport"
+  },
   "NUMURKH1": {
     "capacity": 128,
     "fuel": "Solar",
@@ -964,6 +1084,12 @@
     "fuel": "Wind",
     "region": "VIC1",
     "station": "Oakland Hill"
+  },
+  "OSBORNE1": {
+    "capacity": 180,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Osborne"
   },
   "OSBORNPS": {
     "capacity": 180,
@@ -1014,10 +1140,10 @@
     "station": "Poatina"
   },
   "PPCCGT": {
-    "capacity": 120,
+    "capacity": 478,
     "fuel": "Gas",
     "region": "SA1",
-    "station": "Port Pirie GT"
+    "station": "Pelican Point"
   },
   "QPSCL1": {
     "capacity": 60,
@@ -1072,6 +1198,12 @@
     "fuel": "Hydro",
     "region": "TAS1",
     "station": "Repulse"
+  },
+  "ROMA_7": {
+    "capacity": 80,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Roma"
   },
   "ROOFTOP_NSW1": {
     "capacity": 3000,
@@ -1157,6 +1289,12 @@
     "region": "SA1",
     "station": "Snuggery"
   },
+  "SOMERTON": {
+    "capacity": 160,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Somerton"
+  },
   "SW1": {
     "capacity": 365,
     "fuel": "Black Coal",
@@ -1186,6 +1324,18 @@
     "fuel": "Gas",
     "region": "QLD1",
     "station": "Swanbank E"
+  },
+  "TALLAWARRA1": {
+    "capacity": 360,
+    "fuel": "Gas",
+    "region": "NSW1",
+    "station": "Tallawarra"
+  },
+  "TALLAWARRA2": {
+    "capacity": 316,
+    "fuel": "Gas",
+    "region": "NSW1",
+    "station": "Tallawarra B"
   },
   "TALLWRRA": {
     "capacity": 440,
@@ -1247,6 +1397,54 @@
     "region": "QLD1",
     "station": "Tarong North"
   },
+  "TORRA1": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island A"
+  },
+  "TORRA2": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island A"
+  },
+  "TORRA3": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island A"
+  },
+  "TORRA4": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island A"
+  },
+  "TORRB1": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island B"
+  },
+  "TORRB2": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island B"
+  },
+  "TORRB3": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island B"
+  },
+  "TORRB4": {
+    "capacity": 200,
+    "fuel": "Gas",
+    "region": "SA1",
+    "station": "Torrens Island B"
+  },
   "TORRSA1": {
     "capacity": 120,
     "fuel": "Gas",
@@ -1294,6 +1492,12 @@
     "fuel": "Gas",
     "region": "SA1",
     "station": "Torrens Island B"
+  },
+  "TOWNSVILLE": {
+    "capacity": 180,
+    "fuel": "Gas",
+    "region": "QLD1",
+    "station": "Townsville"
   },
   "TREVALLYN1": {
     "capacity": 23,
@@ -1398,25 +1602,25 @@
     "station": "Tyndall"
   },
   "URANQ1": {
-    "capacity": 170,
+    "capacity": 160,
     "fuel": "Gas",
     "region": "NSW1",
     "station": "Uranquinty"
   },
   "URANQ2": {
-    "capacity": 170,
+    "capacity": 160,
     "fuel": "Gas",
     "region": "NSW1",
     "station": "Uranquinty"
   },
   "URANQ3": {
-    "capacity": 170,
+    "capacity": 160,
     "fuel": "Gas",
     "region": "NSW1",
     "station": "Uranquinty"
   },
   "URANQ4": {
-    "capacity": 170,
+    "capacity": 160,
     "fuel": "Gas",
     "region": "NSW1",
     "station": "Uranquinty"
@@ -1468,6 +1672,54 @@
     "fuel": "Black Coal",
     "region": "NSW1",
     "station": "Vales Point B"
+  },
+  "VPGS1": {
+    "capacity": 51,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Valley Power"
+  },
+  "VPGS2": {
+    "capacity": 51,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Valley Power"
+  },
+  "VPGS3": {
+    "capacity": 51,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Valley Power"
+  },
+  "VPGS4": {
+    "capacity": 51,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Valley Power"
+  },
+  "VPGS5": {
+    "capacity": 51,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Valley Power"
+  },
+  "VPGS6": {
+    "capacity": 51,
+    "fuel": "Gas",
+    "region": "VIC1",
+    "station": "Valley Power"
+  },
+  "W/HOE_1": {
+    "capacity": 285,
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "station": "Wivenhoe"
+  },
+  "W/HOE_2": {
+    "capacity": 285,
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "station": "Wivenhoe"
   },
   "WANDBG1": {
     "capacity": 100,
@@ -1554,7 +1806,7 @@
     "station": "Willogoleche Wind"
   },
   "YABULU2": {
-    "capacity": 88,
+    "capacity": 242,
     "fuel": "Gas",
     "region": "QLD1",
     "station": "Yabulu"
