@@ -513,6 +513,18 @@ async def station_batch(duids: str):
     return JSONResponse(content=result)
 
 
+@app.get("/api/origin")
+async def origin_history():
+    """Return Origin asset history — separate from fast cache to keep /api/data lean."""
+    from scraper import _duid_history, ORIGIN_ASSETS
+    result = {}
+    for duid in ORIGIN_ASSETS:
+        history = _duid_history.get(duid, {})
+        if history:
+            result[duid] = [{"interval": k, "mw": v} for k, v in sorted(history.items())]
+    return JSONResponse(content=result)
+
+
 @app.get("/api/pd-debug")
 async def pd_debug():
     """Find where AEMO publishes unit-level dispatch forecasts."""
