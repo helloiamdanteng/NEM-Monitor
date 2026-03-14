@@ -2170,6 +2170,157 @@ def scrape_gen() -> dict:
 # scrape_slow — background fetch for generators + week-ahead
 # ---------------------------------------------------------------------------
 
+def scrape_yesterday() -> dict:
+    """
+    Fetch yesterday's full-day data from CURRENT directory files.
+    Returns price, demand, fuel_mix, ic_flows all keyed by region/interval.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+    now_aest    = datetime.now(AEST)
+    yesterday   = (now_aest - timedelta(days=1)).date()
+    ystr        = yesterday.strftime("%Y%m%d")
+    logger.info(f"scrape_yesterday: fetching {ystr}")
+
+    # ── Prices from TradingIS (30-min, firm) ──────────────────────────────────
+    try:
+        all_trading = _list_hrefs(TRADING_CURRENT)
+        yest_trading = sorted([u for u in all_trading if ystr in u and "PUBLIC_TRADINGIS" in u.upper()])
+    except Exception as e:
+        logger.warning(f"scrape_yesterday: TradingIS listing failed: {e}")
+        yest_trading = []
+
+    prices: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    for url in yest_trading:
+        try:
+            text = _read_zip(url)
+            if not text:
+                continue
+            for row in _parse_aemo(text, "TRADING_PRICE"):
+                region = row.get("REGIONID", "")
+                if region not in NEM_REGIONS:
+                    continue
+                if row.get("INVALIDFLAG", "0") not in ("0", ""):
+                    continue
+                dt_str = row.get("SETTLEMENTDATE", "")
+                rrp_str = row.get("RRP", "")
+                if not dt_str or not rrp_str:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                    if dt.date() == yesterday:
+                        prices[region][dt.strftime("%H:%M")] = round(float(rrp_str), 2)
+                except (ValueError, TypeError):
+                    pass
+        except Exception:
+            pass
+
+    # ── Demand + IC + fuel proxies from DispatchIS (5-min) ───────────────────
+    try:
+        all_dispatch = _list_hrefs(DISPATCH_IS_URL)
+        yest_dispatch = sorted([u for u in all_dispatch if ystr in u and "PUBLIC_DISPATCHIS" in u.upper()])
+    except Exception as e:
+        logger.warning(f"scrape_yesterday: DispatchIS listing failed: {e}")
+        yest_dispatch = []
+
+    demand:   dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    op_demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    ic_flows: dict[str, dict] = {}
+    ss_solar: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    ss_wind:  dict[str, dict] = {r: {} for r in NEM_REGIONS}
+
+    def _fetch_dispatch_yesterday(url):
+        try:
+            text = _read_zip(url)
+            if not text:
+                return []
+            pts = []
+            for row in _parse_aemo(text, "DISPATCH_REGIONSUM"):
+                region = row.get("REGIONID", "")
+                if region not in NEM_REGIONS:
+                    continue
+                if row.get("INTERVENTION", "0") not in ("0", ""):
+                    continue
+                dt_str = row.get("SETTLEMENTDATE", "")
+                if not dt_str:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=5)
+                    if dt.date() != yesterday:
+                        continue
+                    label = dt.strftime("%H:%M")
+                    d = row.get("TOTALDEMAND", "")
+                    od = row.get("DEMAND_AND_NONSCHEDGEN", "")
+                    sol = row.get("SS_SOLAR_CLEAREDMW", "")
+                    win = row.get("SS_WIND_CLEAREDMW", "")
+                    if d:  pts.append(("demand",   region, label, round(float(d), 1)))
+                    if od: pts.append(("op_demand", region, label, round(float(od), 1)))
+                    if sol: pts.append(("solar",   region, label, round(float(sol), 1)))
+                    if win: pts.append(("wind",    region, label, round(float(win), 1)))
+                except (ValueError, TypeError):
+                    pass
+            for row in _parse_aemo(text, "DISPATCH_INTERCONNECTORRES"):
+                ic_id = row.get("INTERCONNECTORID", "").strip()
+                if not ic_id:
+                    continue
+                if row.get("INTERVENTION", "0") not in ("0", ""):
+                    continue
+                dt_str = row.get("SETTLEMENTDATE", "")
+                flow_str = row.get("MWFLOW", "")
+                if not dt_str or not flow_str:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=5)
+                    if dt.date() == yesterday:
+                        pts.append(("ic", ic_id, dt.strftime("%H:%M"), round(float(flow_str), 1)))
+                except (ValueError, TypeError):
+                    pass
+            return pts
+        except Exception:
+            return []
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(_fetch_dispatch_yesterday, u): u for u in yest_dispatch}
+        for fut in _as_completed(futs):
+            for item in fut.result():
+                kind = item[0]
+                if kind == "demand":
+                    demand[item[1]][item[2]] = item[3]
+                elif kind == "op_demand":
+                    op_demand[item[1]][item[2]] = item[3]
+                elif kind == "solar":
+                    ss_solar[item[1]][item[2]] = item[3]
+                elif kind == "wind":
+                    ss_wind[item[1]][item[2]] = item[3]
+                elif kind == "ic":
+                    ic_id = item[1]
+                    if ic_id not in ic_flows:
+                        ic_flows[ic_id] = {}
+                    ic_flows[ic_id][item[2]] = item[3]
+
+    def _to_series(d):
+        return {r: [{"interval": k, "demand": v} for k, v in sorted(s.items())] for r, s in d.items() if s}
+    def _to_mw_series(d):
+        return {r: [{"interval": k, "mw": v} for k, v in sorted(s.items())] for r, s in d.items() if s}
+    def _to_rrp_series(d):
+        return {r: [{"interval": k, "rrp": v} for k, v in sorted(s.items())] for r, s in d.items() if s}
+    def _to_flow_series(d):
+        return {ic: [{"interval": k, "flow": v} for k, v in sorted(s.items())] for ic, s in d.items() if s}
+
+    total_pts = sum(len(v) for v in prices.values()) + sum(len(v) for v in demand.values())
+    logger.info(f"scrape_yesterday: {ystr} — price_pts={sum(len(v) for v in prices.values())} demand_pts={sum(len(v) for v in demand.values())}")
+    return {
+        "date":       yesterday.strftime("%Y-%m-%d"),
+        "label":      yesterday.strftime("%A %-d %b"),
+        "prices":     _to_rrp_series(prices),
+        "demand":     _to_series(demand),
+        "op_demand":  _to_series(op_demand),
+        "ss_solar":   _to_mw_series(ss_solar),
+        "ss_wind":    _to_mw_series(ss_wind),
+        "ic_flows":   _to_flow_series(ic_flows),
+        "fuel_colors": FUEL_COLORS,
+    }
+
+
 def scrape_slow() -> dict:
     """
     Week-ahead ST PASA demand forecast only.
@@ -2177,6 +2328,13 @@ def scrape_slow() -> dict:
     """
     logger.info("scrape_slow starting...")
     pasa = scrape_stpasa_demand()
+
+    # Yesterday's data for D-1 page
+    yesterday_data = {}
+    try:
+        yesterday_data = scrape_yesterday()
+    except Exception as e:
+        logger.warning(f"scrape_yesterday failed: {e}")
 
     # Extract tomorrow's demand from STPASA for Day Ahead page
     now_aest = datetime.now(AEST).replace(tzinfo=None)
@@ -2203,6 +2361,7 @@ def scrape_slow() -> dict:
         "timestamp":              datetime.now(timezone.utc).isoformat(),
         "stpasa_demand":          pasa,
         "tomorrow_demand_stpasa": tomorrow_demand_stpasa,
+        "yesterday":              yesterday_data,
         "fuel_colors":            FUEL_COLORS,
         "all_fuels":              ALL_FUELS,
     }
