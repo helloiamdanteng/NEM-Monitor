@@ -196,11 +196,10 @@ tr:last-child td { border-bottom:none; }
   <div class="header-left">
     <div class="logo">⚡ NEM</div>
     <div class="pulse-dot loading" id="statusDot"></div>
+    <button onclick="showPanel('about')" style="background:none;border:none;color:#475569;font-family:var(--font-mono);font-size:13px;cursor:pointer;padding:2px 4px;line-height:1" title="About">ℹ️</button>
   </div>
   <div class="last-updated" id="lastUpdated">Loading…</div>
-  <button onclick="showPanel('about')" style="background:none;border:none;color:#64748b;font-size:12px;cursor:pointer;font-family:var(--font-mono);padding:4px 8px;border-radius:6px" title="About">ℹ️</button>
   <button class="refresh-btn" onclick="fetchData()">↻</button>
-  <button onclick="showPanel('about')" style="background:none;border:none;color:#475569;font-family:var(--font-mono);font-size:11px;cursor:pointer;padding:4px 6px" title="About">ℹ️</button>
 </header>
 
 <main class="main" id="mainContent">
@@ -227,10 +226,7 @@ tr:last-child td { border-bottom:none; }
     <span class="icon">📆</span><span class="label">D-1</span>
   </button>
   <button class="nav-btn" onclick="showPanel('dayahead')" id="nav-dayahead">
-    <span class="icon">🌅</span><span class="label">D+1</span>
-  </button>
-  <button class="nav-btn" onclick="showPanel('weekahead')" id="nav-weekahead">
-    <span class="icon">📅</span><span class="label">Week</span>
+    <span class="icon">📅</span><span class="label">D-ahead</span>
   </button>
 </nav>
 
@@ -353,17 +349,17 @@ function renderPrices(data) {
       >${REGION_SHORT[r]}</button>`;
   }
   html += '</div></div>';
-  html += '<div class="section-title">Total Demand (MW)</div><div class="demand-grid">';
+  html += '<div class="section-title">Demand + Non-Sched Gen (MW)</div><div class="demand-grid">';
   for (const r of REGIONS) {
-    const d = demand[r];
+    const d = (data.op_demand || {})[r] ?? demand[r];
     html += `<div class="demand-card">
       <div class="region" style="color:${REGION_COLORS[r]}">${REGION_SHORT[r]}</div>
       <div class="value">${d !== undefined ? fmt(d) : '—'}</div>
       <div class="unit">MW</div></div>`;
   }
   html += '</div>';
-  html += '<div class="section-title">Demand History + Predispatch</div>';
-  html += '<div class="chart-card"><div class="chart-title">Total Demand — Actual (bright) · Predispatch (faded)</div>';
+  html += '<div class="section-title">Demand + Non-Sched Gen History + Predispatch</div>';
+  html += '<div class="chart-card"><div class="chart-title">Demand + Non-Sched Gen — Actual (bright) · Predispatch (faded)</div>';
   html += '<div class="chart-container" style="height:220px"><canvas id="demandHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
   for (const r of REGIONS) {
@@ -2132,7 +2128,13 @@ let battSortDescending   = true;   // default: highest output first
 
 function setBatteryRegion(r) {
   batteryRegionFilter = r;
-  if (latestData) renderPanel('batteries', latestData);
+  try {
+    if (latestData) renderPanel('batteries', latestData);
+  } catch(e) {
+    console.error('Battery region switch error:', e);
+    document.getElementById('mainContent').innerHTML =
+      `<div class="state-msg"><div class="icon">⚠️</div><div>Battery error: ${e.message}</div></div>`;
+  }
 }
 function toggleBattHideOffline() {
   battHideOffline = !battHideOffline;
@@ -2257,6 +2259,7 @@ function renderBatteries(data) {
 }
 
 function drawBatteryCharts(data) {
+  try {
   const bduHist    = data.bdu_history || {};
   const histPrices = data.historical_prices || {};
   const pdPrices   = data.predispatch_prices || {};
@@ -2280,7 +2283,7 @@ function drawBatteryCharts(data) {
       for (const r of REGIONS) {
         const color = REGION_COLORS[r];
         const hm = {};
-        (bduHist[r] || []).forEach(p => { hm[p.interval] = p.net_mw; });
+        (bduHist[r] || []).forEach(p => { if (p.net_mw !== undefined) hm[p.interval] = p.net_mw; });
         const lastSlot = allSlots.slice().reverse().find(l => hm[l] !== undefined) || '';
         const lastIdx  = lastSlot ? allSlots.indexOf(lastSlot) : -1;
         datasets.push({
@@ -2332,7 +2335,7 @@ function drawBatteryCharts(data) {
         // Fallback to regional aggregate
         const color = REGION_COLORS[r];
         const hm = {};
-        (bduHist[r] || []).forEach(p => { hm[p.interval] = p.net_mw; });
+        (bduHist[r] || []).forEach(p => { if (p.net_mw !== undefined) hm[p.interval] = p.net_mw; });
         const lastSlot = allSlots.slice().reverse().find(l => hm[l] !== undefined) || '';
         const lastIdx  = lastSlot ? allSlots.indexOf(lastSlot) : -1;
         datasets.push({
@@ -2417,7 +2420,7 @@ function drawBatteryCharts(data) {
     for (const r of socRegions) {
       const color = REGION_COLORS[r];
       const hm = {};
-      (bduHist[r] || []).forEach(p => { if (p.storage != null) hm[p.interval] = p.storage; });
+      (bduHist[r] || []).forEach(p => { if (p.storage != null && p.storage !== undefined) hm[p.interval] = p.storage; });
       if (!Object.keys(hm).length) continue;
       const lastSlot = allSlots.slice().reverse().find(l => hm[l] !== undefined) || '';
       const lastIdx  = lastSlot ? allSlots.indexOf(lastSlot) : -1;
@@ -2450,6 +2453,11 @@ function drawBatteryCharts(data) {
       },
       plugins: [nowLinePlugin(nowIdx)]
     });
+  }
+  } catch(e) {
+    console.error('drawBatteryCharts error:', e);
+    const mc = document.getElementById('mainContent');
+    if (mc) mc.innerHTML += `<div style="color:#e74c3c;font-size:11px;padding:8px">Battery chart error: ${e.message}</div>`;
   }
 }
 
@@ -3005,6 +3013,41 @@ function renderDayAhead(data) {
   }
   html += '</div></div>';
 
+  // ── Week-ahead section (merged from Week page) ────────────────────────────
+  html += '<div class="section-title" style="margin-top:16px">7-Day Ahead</div>';
+
+  // Region pills for week-ahead
+  html += '<div class="region-pills">';
+  for (const r of REGIONS) {
+    const active = weekRegionFilter.has(r) ? 'active' : '';
+    const color = REGION_COLORS[r];
+    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="toggleWeekRegion('${r}')">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div>';
+
+  const hasSlowPasa = slowData && slowData.stpasa_demand && Object.keys(slowData.stpasa_demand).length > 0;
+
+  if (!hasSlowPasa) {
+    html += `<div class="week-chart-card"><div class="chart-title">7-Day Demand + Non-Sched Gen Forecast (ST PASA)</div><div class="spinner"><div class="spinner-icon">📡</div><br>Loading…</div></div>`;
+    html += `<div class="week-chart-card" style="margin-top:8px"><div class="chart-title">7-Day Wind + Solar Forecast (ST PASA)</div><div class="spinner"><div class="spinner-icon">📡</div><br>Loading…</div></div>`;
+  } else {
+    html += `<div class="week-chart-card"><div class="chart-title">7-Day Demand + Non-Sched Gen — ST PASA 50%</div><div style="position:relative;height:200px"><canvas id="weekPasaChart"></canvas></div></div>`;
+
+    // Renewables chart with region toggles
+    html += `<div class="week-chart-card" style="margin-top:8px"><div class="chart-title">7-Day Wind + Solar + Demand (ST PASA)</div>`;
+    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">';
+    const allOn = REGIONS.every(r => weekRenewFilter.has(r));
+    const nemCol = allOn ? '#94a3b8' : '#475569';
+    html += `<button onclick="toggleWeekRenew('NEM')" style="font-family:var(--font-mono);font-size:10px;padding:4px 8px;border-radius:20px;cursor:pointer;border:1px solid ${nemCol};background:${allOn?'#94a3b822':'transparent'};color:${nemCol}">NEM</button>`;
+    for (const r of REGIONS) {
+      const on = weekRenewFilter.has(r);
+      const color = REGION_COLORS[r];
+      html += `<button onclick="toggleWeekRenew('${r}')" style="font-family:var(--font-mono);font-size:10px;padding:4px 8px;border-radius:20px;cursor:pointer;border:1px solid ${on?color:color+'55'};background:${on?color+'22':'transparent'};color:${on?color:color+'88'}">${REGION_SHORT[r]}</button>`;
+    }
+    html += '</div>';
+    html += `<div style="position:relative;height:200px"><canvas id="weekRenewChart"></canvas></div></div>`;
+  }
+
   return html;
 }
 
@@ -3200,7 +3243,7 @@ function renderPanel(panel, data) {
     else if (panel === 'stations')   html = renderStations(data);
     else if (panel === 'batteries')  html = renderBatteries(data);
     else if (panel === 'dminus1')    html = renderDMinus1(data);
-    else if (panel === 'weekahead')  html = renderWeekAhead(data);
+
     else if (panel === 'dayahead')   html = renderDayAhead(data);
     else if (panel === 'about') {
       renderAbout(data).then(h => { main.innerHTML = h; }).catch(e => {
@@ -3218,8 +3261,8 @@ function renderPanel(panel, data) {
       if (panel === 'prices')          { drawPriceChart(data); drawDemandChart(data); }
       else if (panel === 'generation') { drawGenChart(data); drawIcChart(data); }
       else if (panel === 'demand')     drawDemandChart(data);
-      else if (panel === 'weekahead')  drawWeekCharts(data);
-      else if (panel === 'dayahead')   drawDayAheadCharts(data);
+
+      else if (panel === 'dayahead')   { drawDayAheadCharts(data); drawWeekCharts(data); }
       else if (panel === 'batteries')  drawBatteryCharts(data);
       else if (panel === 'dminus1')    drawDMinus1Charts(data);
     } catch(e) {
