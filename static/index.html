@@ -218,6 +218,9 @@ tr:last-child td { border-bottom:none; }
   <button class="nav-btn" onclick="showPanel('stations')" id="nav-stations">
     <span class="icon">🏭</span><span class="label">Stations</span>
   </button>
+  <button class="nav-btn" onclick="showPanel('batteries')" id="nav-batteries">
+    <span class="icon">🔋</span><span class="label">Batteries</span>
+  </button>
   <button class="nav-btn" onclick="showPanel('dayahead')" id="nav-dayahead">
     <span class="icon">🌅</span><span class="label">D+1</span>
   </button>
@@ -1504,7 +1507,7 @@ async function openOriginStationModal(stnName) {
   // Fetch all DUIDs in parallel — same approach as openStationModal
   let results;
   try {
-    results = await Promise.all(duids.map(d => fetch(`/api/station/${encodeURIComponent(d)}`).then(r => r.json())));
+    results = await fetch(`/api/stations/batch?duids=${duids.map(encodeURIComponent).join(',')}`).then(r => r.json());
   } catch(e) {
     document.getElementById('stationModalStats').innerHTML = '<span style="color:#e74c3c">Failed to load data</span>';
     return;
@@ -1748,14 +1751,10 @@ async function openStationModal(regIdx) {
 
   if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
 
-  // Fetch all DUIDs in parallel
+  // Fetch all DUIDs in one batch request
   let results;
   try {
-    results = await Promise.all(duids.map(async d => {
-      const r = await fetch(`/api/station/${encodeURIComponent(d)}`);
-      if (!r.ok) { console.warn(`station API ${d} returned ${r.status}`); return {duid:d, history:[]}; }
-      return r.json();
-    }));
+    results = await fetch(`/api/stations/batch?duids=${duids.map(encodeURIComponent).join(',')}`).then(r => r.json());
   } catch(e) {
     console.error('Station fetch error:', e);
     document.getElementById('stationModalStats').innerHTML = `<span style="color:#e74c3c">Failed to load: ${e.message}</span>`;
@@ -2111,6 +2110,225 @@ function renderStations(fastData) {
     html += '</div>';
   }
   return html;
+}
+
+// ── Batteries ─────────────────────────────────────────────────────────────────
+
+let batteryRegionFilter = 'NEM';  // 'NEM' or a region string
+
+function setBatteryRegion(r) {
+  batteryRegionFilter = r;
+  if (latestData) renderPanel('batteries', latestData);
+}
+
+function renderBatteries(data) {
+  const bduHist = data.bdu_history || {};
+  const hasData = Object.values(bduHist).some(arr => arr && arr.length > 0);
+
+  let html = '<div class="section-title">NEM Batteries</div>';
+
+  // Region selector
+  html += '<div class="region-pills">';
+  const allRegs = ['NEM', ...REGIONS];
+  for (const r of allRegs) {
+    const label = r === 'NEM' ? 'NEM' : REGION_SHORT[r];
+    const color = r === 'NEM' ? '#9b59b6' : REGION_COLORS[r];
+    const active = batteryRegionFilter === r ? 'active' : '';
+    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setBatteryRegion('${r}')">${label}</button>`;
+  }
+  html += '</div>';
+
+  // Main battery MW chart
+  html += '<div class="chart-card">';
+  html += `<div class="chart-title">Battery Output — Actual (solid) · Predispatch (dashed)${batteryRegionFilter !== 'NEM' ? ' · with pool price' : ''}</div>`;
+  html += '<div class="chart-container" style="height:260px"><canvas id="battMwChart"></canvas></div>';
+  html += '</div>';
+
+  // SOC chart
+  html += '<div class="chart-card" style="margin-top:12px">';
+  html += '<div class="chart-title">State of Charge (MWh) — Regional Aggregate (AEMO BDU)</div>';
+  html += '<div class="chart-container" style="height:200px"><canvas id="battSocChart"></canvas></div>';
+  // SOC region legend
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">';
+  for (const r of REGIONS) {
+    const color = REGION_COLORS[r];
+    html += `<div style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:${color}"><div style="width:14px;height:2px;background:${color};border-radius:1px"></div>${REGION_SHORT[r]}</div>`;
+  }
+  html += '</div></div>';
+
+  // Summary table
+  if (hasData) {
+    const latest = {};
+    for (const r of REGIONS) {
+      const arr = bduHist[r] || [];
+      if (arr.length) latest[r] = arr[arr.length - 1];
+    }
+    html += '<div class="chart-card" style="margin-top:12px;padding:12px">';
+    html += '<div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text);margin-bottom:8px">CURRENT BATTERY STATUS</div>';
+    html += '<table style="width:100%;font-family:var(--font-mono);font-size:10px;border-collapse:collapse">';
+    html += '<tr style="border-bottom:1px solid var(--border)"><th style="text-align:left;padding:4px 0;color:var(--text-muted)">Region</th><th style="text-align:right;color:var(--text-muted)">Net MW</th><th style="text-align:right;color:var(--text-muted)">Discharge</th><th style="text-align:right;color:var(--text-muted)">Charge</th><th style="text-align:right;color:var(--text-muted)">Storage</th><th style="text-align:right;color:var(--text-muted)">SOC%</th></tr>';
+    for (const r of REGIONS) {
+      const d = latest[r];
+      if (!d) continue;
+      const color = REGION_COLORS[r];
+      const netColor = d.net_mw > 0 ? '#2ed573' : d.net_mw < 0 ? '#38bdf8' : 'var(--text-muted)';
+      const socPct = (d.storage != null && d.max_avail) ? Math.round(d.storage / d.max_avail * 100) : null;
+      html += `<tr style="border-bottom:1px solid var(--border)22">
+        <td style="padding:5px 0;color:${color};font-weight:700">${REGION_SHORT[r]}</td>
+        <td style="text-align:right;color:${netColor}">${d.net_mw > 0 ? '+' : ''}${fmt(d.net_mw,0)} MW</td>
+        <td style="text-align:right;color:#2ed573">${fmt(d.gen,0)} MW</td>
+        <td style="text-align:right;color:#38bdf8">${fmt(d.load,0)} MW</td>
+        <td style="text-align:right;color:var(--text)">${d.storage != null ? fmt(d.storage,0)+' MWh' : '—'}</td>
+        <td style="text-align:right;color:var(--accent)">${socPct != null ? socPct+'%' : '—'}</td>
+      </tr>`;
+    }
+    html += '</table></div>';
+  }
+
+  return html;
+}
+
+function drawBatteryCharts(data) {
+  const bduHist = data.bdu_history || {};
+  const pdDemand = data.predispatch_demand || {};
+  const histPrices = data.historical_prices || {};
+  const pdPrices = data.predispatch_prices || {};
+  const livePrices = data.prices || {};
+
+  // Full 5-min spine
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const now = nowAEST();
+  const nowIdx = allSlots.findIndex(l => l >= now);
+  const activeRegions = batteryRegionFilter === 'NEM' ? REGIONS : [batteryRegionFilter];
+
+  // ── Battery MW chart ────────────────────────────────────────────────────────
+  destroyChart('battMw');
+  const ctx1 = document.getElementById('battMwChart');
+  if (ctx1) {
+    const datasets = [];
+
+    // Net MW per region — stacked area
+    for (const r of activeRegions) {
+      const color = REGION_COLORS[r];
+      const hm = {};
+      (bduHist[r] || []).forEach(p => { hm[p.interval] = p.net_mw; });
+      const lastSlot = allSlots.slice().reverse().find(l => hm[l] !== undefined) || '';
+      const lastIdx = lastSlot ? allSlots.indexOf(lastSlot) : -1;
+
+      datasets.push({
+        label: REGION_SHORT[r],
+        data: allSlots.map((l,i) => i <= lastIdx ? (hm[l] ?? null) : null),
+        borderColor: color, backgroundColor: color + '44',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+        fill: 'origin', spanGaps: false, yAxisID: 'y',
+      });
+    }
+
+    // Price overlay when single region selected
+    const hasPriceAxis = batteryRegionFilter !== 'NEM';
+    if (hasPriceAxis) {
+      const r = batteryRegionFilter;
+      const hpm = {}, pdpm = {};
+      (histPrices[r] || []).forEach(p => { hpm[p.interval] = p.rrp; });
+      (pdPrices[r]  || []).forEach(p => { pdpm[p.interval] = p.rrp; });
+      const lastHistSlot = allSlots.slice().reverse().find(l => hpm[l] !== undefined) || '';
+      const lastHistIdx = lastHistSlot ? allSlots.indexOf(lastHistSlot) : -1;
+
+      datasets.push({
+        label: 'Price (actual)', yAxisID: 'yPrice',
+        data: allSlots.map((l,i) => {
+          if (i < lastHistIdx) return hpm[l] ?? null;
+          if (i === lastHistIdx) return hpm[l] ?? livePrices[r] ?? null;
+          return null;
+        }),
+        borderColor: '#f39c12', backgroundColor: 'transparent',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true, fill: false,
+      });
+      datasets.push({
+        label: 'Price (forecast)', yAxisID: 'yPrice',
+        data: allSlots.map((l,i) => i <= lastHistIdx ? null : (pdpm[l] ?? null)),
+        borderColor: '#f39c1299', backgroundColor: 'transparent',
+        borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, tension: 0.2, spanGaps: true, fill: false,
+      });
+    }
+
+    const scales = {
+      x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
+             callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null },
+           grid:{color:'#1e2d4544'} },
+      y: { ticks: { color:'#94a3b8', font:{family:'Space Mono',size:9},
+             callback: v => (v>0?'+':'')+fmt(v,0)+' MW' },
+           grid:{color:'#1e2d45'} },
+    };
+    if (hasPriceAxis) {
+      scales.yPrice = { type:'linear', position:'right',
+        ticks:{color:'#f39c12', font:{family:'Space Mono',size:9}, callback:v=>'$'+v.toFixed(0)},
+        grid:{drawOnChartArea:false} };
+    }
+
+    charts.battMw = new Chart(ctx1, {
+      type: 'line', data: { labels: allSlots, datasets },
+      options: { ...CHART_DEFAULTS,
+        plugins: { ...CHART_DEFAULTS.plugins,
+          legend: { display: activeRegions.length > 1, labels:{color:'#94a3b8',font:{family:'Space Mono',size:9},boxWidth:10,padding:6,
+            filter: item => !String(item.label||'').startsWith('Price') } },
+          tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+            filter: i => i.raw !== null,
+            callbacks: { label: c => {
+              if (c.raw === null) return null;
+              const lbl = c.dataset.label || '';
+              if (lbl.startsWith('Price')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
+              return ` ${lbl}: ${c.raw>0?'+':''}${fmt(c.raw,0)} MW`;
+            }}
+          }
+        },
+        scales
+      },
+      plugins: [nowLinePlugin(nowIdx)]
+    });
+  }
+
+  // ── SOC chart ───────────────────────────────────────────────────────────────
+  destroyChart('battSoc');
+  const ctx2 = document.getElementById('battSocChart');
+  if (ctx2) {
+    const socDatasets = [];
+    for (const r of REGIONS) {
+      const color = REGION_COLORS[r];
+      const hm = {};
+      (bduHist[r] || []).forEach(p => { if (p.storage != null) hm[p.interval] = p.storage; });
+      if (!Object.keys(hm).length) continue;
+      socDatasets.push({
+        label: REGION_SHORT[r],
+        data: allSlots.map(l => hm[l] ?? null),
+        borderColor: color, backgroundColor: color + '22',
+        borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+        fill: false, spanGaps: false,
+      });
+    }
+    charts.battSoc = new Chart(ctx2, {
+      type: 'line', data: { labels: allSlots, datasets: socDatasets },
+      options: { ...CHART_DEFAULTS,
+        plugins: { ...CHART_DEFAULTS.plugins,
+          legend: { display: false },
+          tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw !== null,
+            callbacks: { label: c => c.raw != null ? ` ${c.dataset.label}: ${fmt(c.raw,0)} MWh` : null }
+          }
+        },
+        scales: {
+          x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
+                 callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null },
+               grid:{color:'#1e2d4544'} },
+          y: { min:0, ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>fmt(v,0)+' MWh'}, grid:{color:'#1e2d45'} }
+        }
+      },
+      plugins: [nowLinePlugin(nowIdx)]
+    });
+  }
 }
 
 // ── Week Ahead ────────────────────────────────────────────────────────────────
@@ -2596,6 +2814,7 @@ function renderPanel(panel, data) {
     else if (panel === 'demand')     html = renderDemand(data);
     else if (panel === 'origin')     html = renderOrigin(data);
     else if (panel === 'stations')   html = renderStations(data);
+    else if (panel === 'batteries')  html = renderBatteries(data);
     else if (panel === 'weekahead')  html = renderWeekAhead(data);
     else if (panel === 'dayahead')   html = renderDayAhead(data);
     else if (panel === 'about') {
@@ -2616,6 +2835,7 @@ function renderPanel(panel, data) {
       else if (panel === 'demand')     drawDemandChart(data);
       else if (panel === 'weekahead')  drawWeekCharts(data);
       else if (panel === 'dayahead')   drawDayAheadCharts(data);
+      else if (panel === 'batteries')  drawBatteryCharts(data);
     } catch(e) {
       console.error(`Chart error [${panel}]:`, e);
       main.innerHTML += `<div style="color:#e74c3c;font-size:11px;padding:8px">Chart error in ${panel}: ${e.message}</div>`;
