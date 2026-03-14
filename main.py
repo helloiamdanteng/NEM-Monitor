@@ -73,7 +73,7 @@ async def _run_slow():
         loop = asyncio.get_running_loop()
         data = await asyncio.wait_for(
             loop.run_in_executor(None, scrape_slow),
-            timeout=45   # hard ceiling — if AEMO XLS hangs, don't block forever
+            timeout=120  # hard ceiling — if AEMO XLS hangs, don't block forever
         )
         slow_cache["data"] = data
         slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
