@@ -455,21 +455,21 @@ function drawPriceChart(data) {
       label: REGION_SHORT[r], regionId: r, isPD: false,
       data: labels.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor: color, backgroundColor: 'transparent',
-      borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false
     });
     // Dispatch 5-min fill — thinner solid
     datasets.push({
       label: REGION_SHORT[r]+' 5m', regionId: r, isPD: false,
       data: labels.map(l => dm[l] !== undefined ? dm[l] : null),
       borderColor: color+'cc', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false
+      borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: false
     });
     // Predispatch — dashed, spanGaps true to connect 30-min points on 5-min spine (future only)
     datasets.push({
       label: REGION_SHORT[r]+' PD', regionId: r, isPD: true,
       data: pdPriceData,
       borderColor: color+'99', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true,
+      borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: true,
       borderDash: [5, 5]
     });
   }
@@ -696,9 +696,6 @@ function drawGenChart(data) {
   const lastDemSlot = allSlots.slice().reverse().find(l =>
     activeRegions.some(r => demHistLookup[r]?.[l] !== undefined)
   ) || '';
-  const lastDemVal = lastDemSlot
-    ? Math.round(activeRegions.reduce((s,r) => s + (demHistLookup[r]?.[lastDemSlot] ?? 0), 0))
-    : null;
 
   const demActualDataset = {
     label: 'Demand + Non-Sched',
@@ -714,13 +711,16 @@ function drawGenChart(data) {
   };
 
   // ── Demand + Non-Sched Gen: predispatch forecast line ───────────────────────
+  // No bridge point — actual line ends at lastDemSlot, PD starts strictly after.
+  // spanGaps:true on PD line draws a connecting segment automatically.
   const lastDemSlotIdx = allSlots.indexOf(lastDemSlot);
   const demPdDataset = {
     label: 'Demand forecast PD',
     data: allSlots.map((l, i) => {
-      // Bridge: one null point before lastDemSlot so line connects visually
-      if (i === lastDemSlotIdx && lastDemVal !== null) return lastDemVal; // shared bridge point
-      if (i <= lastDemSlotIdx) return null; // strictly after actual
+      if (i < lastDemSlotIdx) return null; // null before bridge point
+      if (i === lastDemSlotIdx) {          // one shared bridge point — connects actual to PD
+        return Math.round(activeRegions.reduce((s,r) => s + (demHistLookup[r]?.[l] ?? 0), 0));
+      }
       const hasPd = activeRegions.some(r => pdDemLookup[r]?.[l] !== undefined);
       if (!hasPd) return null;
       return Math.round(activeRegions.reduce((s,r) => s + (pdDemLookup[r]?.[l] ?? 0), 0));
@@ -950,7 +950,7 @@ function drawDemandChart(data) {
         label: REGION_SHORT[r] + ' Op', regionId: r,
         data: labels.map(l => opHm[l] !== undefined ? opHm[l] : null),
         borderColor: color, backgroundColor: color + '18',
-        borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false,
+        borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
         fill: false,
       });
     } else {
@@ -959,7 +959,7 @@ function drawDemandChart(data) {
         label: REGION_SHORT[r], regionId: r,
         data: labels.map(l => l <= lastActualD ? (hm[l] !== undefined ? hm[l] : null) : null),
         borderColor: color, backgroundColor: 'transparent',
-        borderWidth: 2.5, pointRadius: 0, tension: 0.2, spanGaps: false,
+        borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: false,
       });
     }
 
@@ -968,7 +968,7 @@ function drawDemandChart(data) {
       label: REGION_SHORT[r] + ' PD', regionId: r,
       data: pdData,
       borderColor: color + '88', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2, spanGaps: true,
+      borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: true,
       borderDash: [5, 5]
     });
   }
