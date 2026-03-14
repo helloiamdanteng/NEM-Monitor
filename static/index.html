@@ -240,6 +240,7 @@ let currentPanel = 'prices';
 let charts = {};
 let latestData = null;
 let genRegion = 'NEM';
+let genShowRooftop = false;  // default: rooftop solar excluded
 let genData = null;
 let slowData = null;
 let stationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
@@ -519,8 +520,9 @@ function renderGeneration(data) {
   const IC_COLORS = ['#00d4ff','#ff6b35','#2ed573','#ffd32a','#9b59b6','#e74c3c'];
   let html = '<div class="section-title">NEM Generation — 24hr Fuel Mix</div>';
 
-  // Region selector
-  html += '<div class="region-pills">';
+  // Region selector + rooftop toggle
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  html += '<div class="region-pills" style="margin-bottom:0;flex:1">';
   const selRegions = ['NEM', ...REGIONS];
   for (const r of selRegions) {
     const label = r === 'NEM' ? 'NEM' : REGION_SHORT[r];
@@ -528,6 +530,14 @@ function renderGeneration(data) {
     const active = genRegion === r ? 'active' : '';
     html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setGenRegion('${r}')">${label}</button>`;
   }
+  html += '</div>';
+  html += `<button onclick="toggleGenRooftop()" style="
+    font-family:var(--font-mono);font-size:10px;padding:5px 10px;border-radius:20px;cursor:pointer;white-space:nowrap;
+    border:1px solid ${genShowRooftop ? '#ffd700' : '#475569'};
+    background:${genShowRooftop ? '#ffd70022' : 'transparent'};
+    color:${genShowRooftop ? '#ffd700' : '#94a3b8'}">
+    ☀️ Rooftop
+  </button>`;
   html += '</div>';
 
   // Main 24hr chart
@@ -541,6 +551,7 @@ function renderGeneration(data) {
   // Legend
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
   for (const [fuel, color] of Object.entries(fc)) {
+    if (fuel === 'Rooftop Solar' && !genShowRooftop) continue;
     html += `<div style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:#94a3b8"><div style="width:10px;height:10px;border-radius:2px;background:${color}"></div>${fuel}</div>`;
   }
   html += `<div style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:#94a3b8"><div style="width:18px;height:2px;background:#ffffff;border-radius:1px"></div>Demand + Non-Sched</div>`;
@@ -587,6 +598,8 @@ function drawGenChart(data) {
 
   const fc         = genData.fuel_colors || {};
   const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Rooftop Solar','Battery','Liquid','Other'];
+  // Filter rooftop solar unless toggled on
+  const fuelOrderFiltered = FUEL_ORDER.filter(f => f !== 'Rooftop Solar' || genShowRooftop);
   const fuelHist   = genData.fuel_history || {};
   const fuelMix    = genData.fuel_mix || {};
   const activeRegions = genRegion === 'NEM' ? REGIONS : [genRegion];
@@ -605,7 +618,7 @@ function drawGenChart(data) {
         totals[fuel] = (totals[fuel] || 0) + mw;
       }
     }
-    const activeFuels = FUEL_ORDER.filter(f => (totals[f] || 0) > 10);
+    const activeFuels = fuelOrderFiltered.filter(f => (totals[f] || 0) > 10);
     const totalMW = activeFuels.reduce((s, f) => s + totals[f], 0);
 
     if (card) card.querySelector('.chart-title').textContent =
@@ -647,7 +660,7 @@ function drawGenChart(data) {
         }
       }
     });
-    renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER);
+    renderFuelSnapshot(activeRegions, fuelMix, fc, fuelOrderFiltered);
     return;
   }
 
@@ -686,7 +699,7 @@ function drawGenChart(data) {
   ) || '';
   const lastActualIdx = allSlots.indexOf(lastActualSlot);
 
-  const activeFuels = FUEL_ORDER.filter(fuel =>
+  const activeFuels = fuelOrderFiltered.filter(fuel =>
     activeRegions.some(r => (fuelHist[r]||[]).some(pt => (pt[fuel]||0) > 0))
   );
 
@@ -795,7 +808,7 @@ function drawGenChart(data) {
     plugins: [nowLinePlugin(nowIdx)]
   });
 
-  renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER);
+  renderFuelSnapshot(activeRegions, fuelMix, fc, fuelOrderFiltered);
 }
 
 function renderFuelSnapshot(activeRegions, fuelMix, fc, FUEL_ORDER) {
@@ -1667,6 +1680,11 @@ function setGenRegion(r) {
   if (latestData) renderPanel('generation', latestData);
 }
 
+function toggleGenRooftop() {
+  genShowRooftop = !genShowRooftop;
+  if (latestData) renderPanel('generation', latestData);
+}
+
 function toggleAllStationRegions() {
   const allSelected = REGIONS.every(r => stationsRegionFilter.has(r));
   if (allSelected) {
@@ -2118,75 +2136,30 @@ function renderWeekAhead(fastData) {
   }
   html += '</div>';
 
-  // Today's fuel mix (from fast data)
-  const fm = (fastData || {}).fuel_mix_history || {};
-  const fc = (fastData || {}).fuel_colors || {};
-  const fuels = (fastData || {}).all_fuels || [];
-  html += `<div class="week-chart-card"><div class="chart-title">Today's Generation by Fuel (NEM-wide)</div><div style="position:relative;height:200px"><canvas id="weekFuelChart"></canvas></div></div>`;
-
-  // ST PASA demand forecast
   const hasSlowPasa = slowData && slowData.stpasa_demand && Object.keys(slowData.stpasa_demand).length > 0;
+
+  // 7-day Demand + Non-Sched Gen forecast
   if (!hasSlowPasa) {
-    html += `<div class="week-chart-card"><div class="chart-title">7-Day Demand Forecast (ST PASA)</div><div class="spinner"><div class="spinner-icon">📡</div><br>Loading forecast data…</div></div>`;
+    html += `<div class="week-chart-card"><div class="chart-title">7-Day Demand + Non-Sched Gen Forecast (ST PASA)</div><div class="spinner"><div class="spinner-icon">📡</div><br>Loading forecast data…</div></div>`;
   } else {
-    html += `<div class="week-chart-card"><div class="chart-title">7-Day Demand Forecast — ST PASA (50% probability)</div><div style="position:relative;height:220px"><canvas id="weekPasaChart"></canvas></div></div>`;
+    html += `<div class="week-chart-card"><div class="chart-title">7-Day Demand + Non-Sched Gen — ST PASA 50% probability</div><div style="position:relative;height:220px"><canvas id="weekPasaChart"></canvas></div></div>`;
   }
+
+  // 7-day Wind + Solar UIGF forecast
+  if (!hasSlowPasa) {
+    html += `<div class="week-chart-card"><div class="chart-title">7-Day Wind + Solar Forecast (ST PASA)</div><div class="spinner"><div class="spinner-icon">📡</div><br>Loading forecast data…</div></div>`;
+  } else {
+    html += `<div class="week-chart-card" style="margin-top:12px"><div class="chart-title">7-Day Semi-Scheduled Wind + Solar UIGF Forecast (ST PASA)</div><div style="position:relative;height:220px"><canvas id="weekRenewChart"></canvas></div></div>`;
+  }
+
   return html;
 }
 
 function drawWeekCharts(fastData) {
-  // Today's fuel mix
-  const fm = (fastData || {}).fuel_mix_history || {};
-  const fc = (fastData || {}).fuel_colors || {};
-  const fuels = (fastData || {}).all_fuels || [];
-
-  // Build NEM-wide totals
-  const nemMap = {};
-  for (const r of REGIONS) {
-    for (const pt of (fm[r] || [])) {
-      const slot = nemMap[pt.interval] = nemMap[pt.interval] || {};
-      for (const fuel of fuels) {
-        if (pt[fuel]) slot[fuel] = (slot[fuel] || 0) + pt[fuel];
-      }
-    }
-  }
-  const fuelLabels = Object.keys(nemMap).sort();
-  const activeFuels = fuels.filter(f => fuelLabels.some(l => nemMap[l] && nemMap[l][f] > 0));
-
-  destroyChart('weekFuel');
-  const ctx1 = document.getElementById('weekFuelChart');
-  if (ctx1 && fuelLabels.length > 0) {
-    charts.weekFuel = new Chart(ctx1, {
-      type: 'line',
-      data: {
-        labels: fuelLabels,
-        datasets: activeFuels.map(fuel => ({
-          label: fuel,
-          data: fuelLabels.map(l => Math.max(0, (nemMap[l] && nemMap[l][fuel]) || 0)),
-          backgroundColor: (fc[fuel] || '#95a5a6') + 'cc',
-          borderColor: fc[fuel] || '#95a5a6',
-          borderWidth: 1, fill: true, pointRadius: 0, tension: 0.2, stack: 'nem'
-        }))
-      },
-      options: { ...CHART_DEFAULTS,
-        plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false },
-          tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw > 0,
-            callbacks: { label: c => c.raw > 0 ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null }
-          }
-        },
-        scales: {
-          x: { stacked: true, ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxTicksLimit:8, maxRotation:0 }, grid:{color:'#1e2d4544'} },
-          y: { stacked: true, ticks: { color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => (v/1000).toFixed(0)+'GW' }, grid:{color:'#1e2d45'} }
-        }
-      }
-    });
-  } else if (ctx1) {
-    ctx1.closest('.week-chart-card').querySelector('.chart-title').textContent = 'Today\'s fuel mix — loading…';
-  }
-
-  // ST PASA demand forecast
   if (!slowData || !slowData.stpasa_demand) return;
   const pasa = slowData.stpasa_demand;
+
+  // Build sorted label list from selected regions
   const pasaLabelSet = new Set();
   for (const r of REGIONS) {
     if (!weekRegionFilter.has(r)) continue;
@@ -2195,13 +2168,24 @@ function drawWeekCharts(fastData) {
   const pasaLabels = Array.from(pasaLabelSet).sort();
   if (!pasaLabels.length) return;
 
-  const pasaDatasets = [];
+  const xTickCb = function(v, i) {
+    const l = this.getLabelForValue(v);
+    try {
+      const d = new Date(l.replace(' ', 'T'));
+      const h = d.getHours(), m = d.getMinutes();
+      if (h === 0 && m === 0) return d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', timeZone:'Australia/Brisbane'});
+    } catch(e) {}
+    return null;
+  };
+
+  // ── Demand + Non-Sched Gen chart ─────────────────────────────────────────
+  const demDatasets = [];
   for (const r of REGIONS) {
     if (!weekRegionFilter.has(r)) continue;
     const color = REGION_COLORS[r];
     const pm = {};
     (pasa[r] || []).forEach(p => { if (p.demand_50 !== null) pm[p.interval] = p.demand_50; });
-    pasaDatasets.push({
+    demDatasets.push({
       label: REGION_SHORT[r],
       data: pasaLabels.map(l => pm[l] !== undefined ? pm[l] : null),
       borderColor: color, backgroundColor: 'transparent',
@@ -2210,30 +2194,90 @@ function drawWeekCharts(fastData) {
   }
 
   destroyChart('weekPasa');
-  const ctx2 = document.getElementById('weekPasaChart');
-  if (ctx2 && pasaDatasets.length) {
-    charts.weekPasa = new Chart(ctx2, {
+  const ctx1 = document.getElementById('weekPasaChart');
+  if (ctx1 && demDatasets.length) {
+    charts.weekPasa = new Chart(ctx1, {
       type: 'line',
-      data: { labels: pasaLabels, datasets: pasaDatasets },
+      data: { labels: pasaLabels, datasets: demDatasets },
       options: { ...CHART_DEFAULTS,
         plugins: { ...CHART_DEFAULTS.plugins,
           legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:12, padding:8 } },
           tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
-            callbacks: { label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null,
+            callbacks: {
+              label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null,
               title: ts => { try { const d = new Date(ts[0].label.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'}); } catch { return ts[0].label; } }
             }
           }
         },
         scales: {
-          x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:8}, maxTicksLimit:8, maxRotation:0,
-            callback: function(v,i) { const l = this.getLabelForValue(v); try { const d = new Date(l.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',timeZone:'Australia/Brisbane'}); } catch { return l; } }
-          }, grid:{color:'#1e2d4544'} },
-          y: { ticks: { color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => v.toLocaleString()+' MW' }, grid:{color:'#1e2d45'} }
+          x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:8}, maxTicksLimit:10, maxRotation:0, callback: xTickCb }, grid:{color:'#1e2d4544'} },
+          y: { min: 0, ticks: { color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => fmt(v)+' MW' }, grid:{color:'#1e2d45'} }
         }
       }
     });
   }
+
+  // ── Wind + Solar UIGF chart ───────────────────────────────────────────────
+  // Stacked area: solar (yellow) + wind (teal) per selected region
+  const renewDatasets = [];
+  for (const r of [...REGIONS].reverse()) {  // reverse so QLD renders on top visually
+    if (!weekRegionFilter.has(r)) continue;
+    const rColor = REGION_COLORS[r];
+    const solarMap = {}, windMap = {};
+    (pasa[r] || []).forEach(p => {
+      if (p.solar_uigf !== null && p.solar_uigf !== undefined) solarMap[p.interval] = p.solar_uigf;
+      if (p.wind_uigf  !== null && p.wind_uigf  !== undefined) windMap[p.interval]  = p.wind_uigf;
+    });
+    const hasSolar = Object.keys(solarMap).length > 0;
+    const hasWind  = Object.keys(windMap).length > 0;
+    if (hasSolar) {
+      renewDatasets.push({
+        label: REGION_SHORT[r] + ' Solar',
+        data: pasaLabels.map(l => solarMap[l] ?? null),
+        backgroundColor: '#ffd70099', borderColor: '#ffd700',
+        borderWidth: 0.5, fill: true, pointRadius: 0, tension: 0.2,
+        spanGaps: true, stack: 'renew',
+      });
+    }
+    if (hasWind) {
+      renewDatasets.push({
+        label: REGION_SHORT[r] + ' Wind',
+        data: pasaLabels.map(l => windMap[l] ?? null),
+        backgroundColor: '#4bc0c099', borderColor: '#4bc0c0',
+        borderWidth: 0.5, fill: true, pointRadius: 0, tension: 0.2,
+        spanGaps: true, stack: 'renew',
+      });
+    }
+  }
+
+  destroyChart('weekRenew');
+  const ctx2 = document.getElementById('weekRenewChart');
+  if (ctx2 && renewDatasets.length) {
+    charts.weekRenew = new Chart(ctx2, {
+      type: 'line',
+      data: { labels: pasaLabels, datasets: renewDatasets },
+      options: { ...CHART_DEFAULTS,
+        plugins: { ...CHART_DEFAULTS.plugins,
+          legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:12, padding:8 } },
+          tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: {
+              label: c => c.raw !== null ? ` ${c.dataset.label}: ${fmt(c.raw)} MW` : null,
+              title: ts => { try { const d = new Date(ts[0].label.replace(' ','T')); return d.toLocaleDateString('en-AU',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'}); } catch { return ts[0].label; } }
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, ticks: { color:'#64748b', font:{family:'Space Mono',size:8}, maxTicksLimit:10, maxRotation:0, callback: xTickCb }, grid:{color:'#1e2d4544'} },
+          y: { stacked: true, min: 0, ticks: { color:'#94a3b8', font:{family:'Space Mono',size:10}, callback: v => fmt(v)+' MW' }, grid:{color:'#1e2d45'} }
+        }
+      }
+    });
+  } else if (ctx2) {
+    ctx2.closest('.week-chart-card').querySelector('.chart-title').textContent =
+      'Wind + Solar forecast — not available in this ST PASA file';
+  }
 }
+
 
 // ── Panel router ──────────────────────────────────────────────────────────────
 
