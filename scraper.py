@@ -323,6 +323,7 @@ FUEL_COLORS = {
     "Hydro":      "#36a2eb",
     "Wind":       "#4bc0c0",
     "Solar":      "#ffd700",
+    "Rooftop Solar": "#ffe066",
     "Battery":    "#9b59b6",
     "Liquid":     "#e74c3c",
     "Other":      "#95a5a6",
@@ -1738,11 +1739,10 @@ def _fetch_full_scada() -> dict:
 def scrape_stpasa_demand() -> dict:
     """
     Fetch latest ST PASA file and extract STPASA_REGIONSOLUTION.
-    Returns { region: [{interval, demand_50, demand_10}] } for next ~7 days.
+    Returns { region: [{interval, demand_50, demand_10, solar_uigf, wind_uigf}] }
     """
     try:
         urls = _list_hrefs(ST_PASA_URL)
-        # Find latest STPASA file
         pasa_urls = sorted([u for u in urls if "STPASA" in u.upper()])
         if not pasa_urls:
             logger.warning("No ST PASA files found")
@@ -1764,6 +1764,8 @@ def scrape_stpasa_demand() -> dict:
                 dt_str = row.get("INTERVAL_DATETIME", row.get("SETTLEMENTDATE", ""))
                 d50 = row.get("DEMAND50", row.get("TOTALDEMAND", ""))
                 d10 = row.get("DEMAND10", "")
+                solar = row.get("SS_SOLAR_UIGF", "")
+                wind  = row.get("SS_WIND_UIGF", "")
                 if not dt_str:
                     continue
                 try:
@@ -1772,8 +1774,10 @@ def scrape_stpasa_demand() -> dict:
                         continue
                     label = dt.strftime("%Y-%m-%d %H:%M")
                     region_series[region][label] = {
-                        "demand_50": round(float(d50), 1) if d50 else None,
-                        "demand_10": round(float(d10), 1) if d10 else None,
+                        "demand_50":  round(float(d50), 1) if d50 else None,
+                        "demand_10":  round(float(d10), 1) if d10 else None,
+                        "solar_uigf": round(float(solar), 1) if solar else None,
+                        "wind_uigf":  round(float(wind), 1) if wind else None,
                     }
                 except (ValueError, TypeError):
                     pass
