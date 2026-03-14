@@ -730,7 +730,7 @@ function drawGenChart(data) {
     data: allSlots.map((l, i) => i <= lastDemSlotIdx ? (demValMap[l] ?? null) : null),
     borderColor: '#ffffff', backgroundColor: 'transparent',
     borderWidth: 2.5, pointRadius: 0, tension: 0.2,
-    spanGaps: false, fill: false, yAxisID: 'y', order: -1,
+    spanGaps: false, fill: false, yAxisID: 'yDem', order: -1,
     borderDash: [],
   };
 
@@ -744,7 +744,7 @@ function drawGenChart(data) {
     }),
     borderColor: '#ffffffaa', backgroundColor: 'transparent',
     borderWidth: 1.5, pointRadius: 0, tension: 0.2,
-    spanGaps: true, fill: false, yAxisID: 'y', order: -1,
+    spanGaps: true, fill: false, yAxisID: 'yDem', order: -1,
     borderDash: [6, 4],
   };
 
@@ -785,7 +785,11 @@ function drawGenChart(data) {
         y: { stacked: true, min: 0,
              ticks:{ color:'#94a3b8', font:{family:'Space Mono',size:10},
                      callback: v => (v/1000).toFixed(1)+'GW' },
-             grid:{color:'#1e2d45'} }
+             grid:{color:'#1e2d45'} },
+        yDem: { type: 'linear', position: 'right', min: 0,
+                ticks: { color:'#94a3b8', font:{family:'Space Mono',size:10},
+                         callback: v => (v/1000).toFixed(1)+'GW' },
+                grid: { drawOnChartArea: false } }
       }
     },
     plugins: [nowLinePlugin(nowIdx)]
