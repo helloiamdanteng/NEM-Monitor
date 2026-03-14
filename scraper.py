@@ -2059,6 +2059,22 @@ def scrape_gen() -> dict:
         logger.info(f"scrape_gen: {len(unmatched_log)} SCADA DUIDs region-inferred (no registry entry): "
                     + ", ".join(f"{d}={mw:.0f}MW" for d, mw in top if mw and mw > 1))
 
+    # Add Rooftop Solar from TOTALINTERMITTENTGENERATION in DISPATCH_REGIONSUM
+    for row in _parse_aemo(dispatch_text, "DISPATCH_REGIONSUM"):
+        region = row.get("REGIONID", "").strip()
+        if region not in NEM_REGIONS:
+            continue
+        if row.get("INTERVENTION", "0") not in ("0", ""):
+            continue
+        rooftop_str = row.get("TOTALINTERMITTENTGENERATION", "")
+        if rooftop_str:
+            try:
+                rooftop = round(float(rooftop_str), 1)
+                if rooftop > 0:
+                    fuel_mix[region]["Rooftop Solar"] = rooftop
+            except (ValueError, TypeError):
+                pass
+
     # Accumulate into in-memory history
     _update_fuel_history(fuel_mix, scada)
 
