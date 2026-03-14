@@ -39,6 +39,7 @@ _FAST_EMPTY = {
     "dispatch_history": {}, "fuel_mix": {}, "predispatch_units": {},
     "dispatch_prices_5min": {}, "demand_history": {}, "op_demand_history": {},
     "interconnectors": {}, "generation": {}, "fuel_colors": {}, "all_fuels": [],
+    "bdu_history": {},
 }
 
 async def _run_fast():
@@ -479,26 +480,37 @@ async def gen_debug():
 
 @app.get("/api/station/{duid}")
 async def station_detail(duid: str):
-    """Return today's SCADA history for a single DUID.
-    Note: AEMO predispatch files do not contain unit-level forecasts —
-    only regional aggregates are published. History is from DISPATCH_UNIT_SCADA.
-    """
     from scraper import _duid_history, NEM_UNITS
     duid = duid.strip().upper()
     info = NEM_UNITS.get(duid, {})
-
     history = _duid_history.get(duid, {})
     history_series = [{"interval": k, "mw": v} for k, v in sorted(history.items())]
-
     return JSONResponse(content={
-        "duid":        duid,
-        "station":     info.get("station", duid),
-        "fuel":        info.get("fuel", "Other"),
-        "region":      info.get("region", ""),
-        "capacity":    info.get("capacity"),
-        "history":     history_series,
-        "predispatch": [],   # not available at unit level from AEMO
+        "duid": duid, "station": info.get("station", duid),
+        "fuel": info.get("fuel", "Other"), "region": info.get("region", ""),
+        "capacity": info.get("capacity"), "history": history_series, "predispatch": [],
     })
+
+
+@app.get("/api/stations/batch")
+async def station_batch(duids: str):
+    """Return history for multiple DUIDs in one request. duids=DUID1,DUID2,..."""
+    from scraper import _duid_history, NEM_UNITS
+    result = []
+    for duid in duids.upper().split(","):
+        duid = duid.strip()
+        if not duid:
+            continue
+        info = NEM_UNITS.get(duid, {})
+        history = _duid_history.get(duid, {})
+        result.append({
+            "duid": duid, "station": info.get("station", duid),
+            "fuel": info.get("fuel", "Other"), "region": info.get("region", ""),
+            "capacity": info.get("capacity"),
+            "history": [{"interval": k, "mw": v} for k, v in sorted(history.items())],
+            "predispatch": [],
+        })
+    return JSONResponse(content=result)
 
 
 @app.get("/api/pd-debug")
