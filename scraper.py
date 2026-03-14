@@ -515,7 +515,9 @@ def scrape_region_summary(text: str) -> dict:
         e = summary.setdefault(region, {})
         for f in ["TOTALDEMAND","DEMANDFORECAST","INITIALSUPPLY",
                   "DISPATCHABLEGENERATION","SEMISCHEDULE_CLEAREDMW","NETINTERCHANGE",
-                  "DEMAND_AND_NONSCHEDGEN","TOTALINTERMITTENTGENERATION"]:
+                  "DEMAND_AND_NONSCHEDGEN","TOTALINTERMITTENTGENERATION",
+                  "BDU_ENERGY_STORAGE","BDU_MAX_AVAIL","BDU_MIN_AVAIL",
+                  "BDU_CLEAREDMW_GEN","BDU_CLEAREDMW_LOAD","BDU_INITIAL_ENERGY_STORAGE"]:
             v = row.get(f, "")
             if v:
                 try: e[f] = round(float(v), 1)
@@ -749,6 +751,20 @@ def scrape_dispatch_history() -> dict:
                                 pts.append(("rooftop", region, label, rooftop))
                         except (ValueError, TypeError):
                             pass
+                    # BDU (battery) fields
+                    bdu_gen  = row.get("BDU_CLEAREDMW_GEN", "")
+                    bdu_load = row.get("BDU_CLEAREDMW_LOAD", "")
+                    bdu_soc  = row.get("BDU_ENERGY_STORAGE", "")
+                    bdu_cap  = row.get("BDU_MAX_AVAIL", "")
+                    if bdu_gen or bdu_load:
+                        try:
+                            g = round(float(bdu_gen or 0), 1)
+                            l = round(float(bdu_load or 0), 1)
+                            s = round(float(bdu_soc), 1) if bdu_soc else None
+                            c = round(float(bdu_cap), 1) if bdu_cap else None
+                            pts.append(("bdu", region, label, {"net_mw": round(g-l,1), "gen": g, "load": l, "storage": s, "max_avail": c}))
+                        except (ValueError, TypeError):
+                            pass
                 except (ValueError, TypeError):
                     pass
             # Extract price from DISPATCH_PRICE
@@ -818,6 +834,9 @@ def scrape_dispatch_history() -> dict:
                 elif kind == "rooftop":
                     _, region, label, val = item
                     rooftop[region][label] = val
+                elif kind == "bdu":
+                    _, region, label, val = item
+                    _bdu_history[region][label] = val
                 else:
                     _, region, label, val = item
                     prices[region][label] = val
@@ -835,11 +854,12 @@ def scrape_dispatch_history() -> dict:
             _ic_history[ic_id] = {}
         _ic_history[ic_id].update(series)
 
-    # Backfill Rooftop Solar into _fuel_history so toggle works immediately
+    # Store rooftop data globally so scrape_scada_history can merge it in after backfill
+    global _rooftop_history
     for region in NEM_REGIONS:
-        for label, val in rooftop[region].items():
-            if region in _fuel_history and label in _fuel_history[region]:
-                _fuel_history[region][label]["Rooftop Solar"] = val
+        if region not in _rooftop_history:
+            _rooftop_history[region] = {}
+        _rooftop_history[region].update(rooftop[region])
 
     logger.info(f"DispatchIS history: demand={sum(len(v) for v in demand_result.values())} pts, "
                 f"prices={sum(len(v) for v in price_result.values())} pts, "
@@ -1279,6 +1299,7 @@ _demand_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 # ---------------------------------------------------------------------------
 _fuel_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 _duid_history: dict[str, dict] = {}  # { duid: { "HH:MM": mw } } — per-unit today history
+_rooftop_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}  # TOTALINTERMITTENTGENERATION
 
 def _update_fuel_history(fuel_mix: dict, scada: dict | None = None) -> None:
     """Store a fuel mix snapshot and per-DUID snapshot. Prune to today only."""
@@ -1290,7 +1311,6 @@ def _update_fuel_history(fuel_mix: dict, scada: dict | None = None) -> None:
         if region not in fuel_mix:
             continue
         _fuel_history[region][label] = dict(fuel_mix[region])
-        # Prune old entries — keep last 290 slots (24hrs @ 5min)
         if len(_fuel_history[region]) > 290:
             oldest = sorted(_fuel_history[region].keys())[0]
             del _fuel_history[region][oldest]
@@ -1335,6 +1355,7 @@ def _get_demand_history() -> dict:
 # ---------------------------------------------------------------------------
 
 _ic_history: dict[str, dict] = {}
+_bdu_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}  # { region: { HH:MM: {gen,load,storage,max_avail} } }
 
 
 def _update_ic_history(ic_snapshot: dict) -> None:
@@ -1350,6 +1371,32 @@ def _get_ic_history() -> dict:
     for ic_id, series in _ic_history.items():
         if series:
             result[ic_id] = [{"interval": k, "flow": v} for k, v in sorted(series.items())]
+    return result
+
+
+def _update_bdu_history(region_summary: dict) -> None:
+    label = datetime.now(AEST).strftime("%H:%M")
+    for region, d in region_summary.items():
+        if region not in NEM_REGIONS:
+            continue
+        gen  = d.get("BDU_CLEAREDMW_GEN", 0) or 0
+        load = d.get("BDU_CLEAREDMW_LOAD", 0) or 0
+        soc  = d.get("BDU_ENERGY_STORAGE")
+        cap  = d.get("BDU_MAX_AVAIL") or d.get("BDU_MIN_AVAIL")
+        _bdu_history[region][label] = {
+            "net_mw":  round(gen - load, 1),   # positive=discharging, negative=charging
+            "gen":     round(gen, 1),
+            "load":    round(load, 1),
+            "storage": round(soc, 1) if soc is not None else None,
+            "max_avail": round(cap, 1) if cap is not None else None,
+        }
+
+
+def _get_bdu_history() -> dict:
+    result = {}
+    for region, series in _bdu_history.items():
+        if series:
+            result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
     return result
 
 
@@ -1433,6 +1480,7 @@ def scrape_all() -> dict:
     # In-memory accumulators — IC builds up over process lifetime
     _update_demand_history(region_summary)
     _update_ic_history(interconnectors)
+    _update_bdu_history(region_summary)
     # Use DispatchIS history for demand (full day), fall back to in-memory if empty
     demand_history     = dispatch_demand if dispatch_demand else _get_demand_history()
     ic_history         = _get_ic_history()
@@ -1500,6 +1548,7 @@ def scrape_all() -> dict:
         "predispatch_units":     pd_units,
         "ic_history":            ic_history,
         "predispatch_ic":        pd_interconnectors,
+        "bdu_history":           _get_bdu_history(),
         "origin_assets":         origin_assets_out,
         "fuel_colors":           FUEL_COLORS,
         "all_fuels":             ALL_FUELS,
@@ -1995,6 +2044,13 @@ def scrape_scada_history() -> None:
         loaded += 1
 
     logger.info(f"scrape_scada_history: loaded {loaded} time slots into fuel history")
+
+    # Merge rooftop solar data (from dispatch history backfill) into fuel_history
+    for region in NEM_REGIONS:
+        for label, val in _rooftop_history.get(region, {}).items():
+            if label in _fuel_history.get(region, {}):
+                _fuel_history[region][label]["Rooftop Solar"] = val
+    logger.info("scrape_scada_history: merged rooftop solar into fuel history")
 
 
 # scrape_gen — medium speed: fuel mix from SCADA + NEM_UNITS static registry
