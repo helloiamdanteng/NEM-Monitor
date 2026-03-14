@@ -705,6 +705,7 @@ def scrape_dispatch_history() -> dict:
     demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     op_demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     prices: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    ic_flows: dict[str, dict] = {}   # { ic_id: { label: flow } }
     fetch_ok = fetch_fail = fetch_empty = 0
     now_aest   = datetime.now(AEST)
     today_date = now_aest.date()
@@ -758,6 +759,24 @@ def scrape_dispatch_history() -> dict:
                     pts.append(("price", region, dt.strftime("%H:%M"), round(float(rrp_str), 2)))
                 except (ValueError, TypeError):
                     pass
+            # Extract IC flows from DISPATCH_INTERCONNECTORRES
+            for row in _parse_aemo(text, "DISPATCH_INTERCONNECTORRES"):
+                ic_id = row.get("INTERCONNECTORID", "").strip()
+                if not ic_id:
+                    continue
+                if row.get("INTERVENTION", "0") not in ("0", ""):
+                    continue
+                dt_str = row.get("SETTLEMENTDATE", "")
+                flow_str = row.get("MWFLOW", "")
+                if not dt_str or not flow_str:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=5)
+                    if dt.date() != today_date or dt.strftime("%H:%M") > now_label:
+                        continue
+                    pts.append(("ic", ic_id, dt.strftime("%H:%M"), round(float(flow_str), 1)))
+                except (ValueError, TypeError):
+                    pass
             return pts, "ok" if pts else "empty"
         except Exception as e:
             logger.warning(f"dispatch_history fetch_one failed {url}: {e}")
@@ -773,12 +792,21 @@ def scrape_dispatch_history() -> dict:
                 fetch_fail += 1
             else:
                 fetch_empty += 1
-            for kind, region, label, val in pts:
+            for item in pts:
+                kind = item[0]
                 if kind == "demand":
+                    _, region, label, val = item
                     demand[region][label] = val
                 elif kind == "op_demand":
+                    _, region, label, val = item
                     op_demand[region][label] = val
+                elif kind == "ic":
+                    _, ic_id, label, val = item
+                    if ic_id not in ic_flows:
+                        ic_flows[ic_id] = {}
+                    ic_flows[ic_id][label] = val
                 else:
+                    _, region, label, val = item
                     prices[region][label] = val
 
     demand_result = {r: [{"interval": k, "demand": v} for k, v in sorted(s.items())]
@@ -788,8 +816,15 @@ def scrape_dispatch_history() -> dict:
     price_result  = {r: [{"interval": k, "rrp": v}    for k, v in sorted(s.items())]
                      for r, s in prices.items() if s}
 
+    # Backfill _ic_history so IC chart shows full day on startup
+    for ic_id, series in ic_flows.items():
+        if ic_id not in _ic_history:
+            _ic_history[ic_id] = {}
+        _ic_history[ic_id].update(series)
+
     logger.info(f"DispatchIS history: demand={sum(len(v) for v in demand_result.values())} pts, "
-                f"prices={sum(len(v) for v in price_result.values())} pts "
+                f"prices={sum(len(v) for v in price_result.values())} pts, "
+                f"ic_flows={sum(len(v) for v in ic_flows.values())} pts "
                 f"from {len(today_zips)} files (ok={fetch_ok} empty={fetch_empty} fail={fetch_fail})")
     return {"demand": demand_result, "op_demand": op_demand_result, "prices": price_result}
 
@@ -866,7 +901,7 @@ def scrape_predispatch_demand(text: str) -> dict:
                 demand = round(float(demand_str), 1)
                 # DATETIME is end-of-interval; shift back 30min for display
                 dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
-                if dt.date() == today and dt >= now_aest:
+                if dt.date() == today and dt >= now_aest - timedelta(minutes=30):
                     region_series[region][dt.strftime("%H:%M")] = demand
             except (ValueError, TypeError):
                 pass
