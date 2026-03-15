@@ -1262,8 +1262,8 @@ function drawRenewablesChart(data) {
       regionId: r, fuelType: 'wind', spanGaps: false,
     });
 
-    // Predispatch total (faded line)
-    if (Object.keys(pdLookup).length > 0) {
+    // Predispatch total (faded line) — only shown if at least one fuel type is on
+    if (Object.keys(pdLookup).length > 0 && (showSolar || showWind)) {
       datasets.push({
         label: REGION_SHORT[r] + ' (PD)',
         data: allSlots.map((l, i) => {
@@ -2329,7 +2329,6 @@ async function openStationModal(regIdx, registry) {
 
     let statsHtml = [
     `<span>Now: <b style="color:${baseColor}">${fmt(totalNow,0)} MW</b></span>`,
-    maxMw !== null ? `<span>Today max: <b>${fmt(maxMw,0)} MW</b></span>` : '',
     capacity ? `<span>Capacity: <b>${fmt(capacity,0)} MW</b></span>` : '',
     ].filter(Boolean).join('');
 
