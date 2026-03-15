@@ -2268,8 +2268,9 @@ function setBatteryRegion(r) {
     if (latestData) renderPanel('batteries', latestData);
   } catch(e) {
     console.error('Battery region switch error:', e);
+    const msg = e.message + '\n' + (e.stack||'').split('\n').slice(1,4).join('\n');
     document.getElementById('mainContent').innerHTML =
-      `<div class="state-msg"><div class="icon">⚠️</div><div>Battery error: ${e.message}</div></div>`;
+      `<div class="state-msg"><div class="icon">⚠️</div><div>Battery error: <pre style="font-size:9px;text-align:left;white-space:pre-wrap">${msg}</pre></div></div>`;
   }
 }
 function toggleBattHideOffline() {
