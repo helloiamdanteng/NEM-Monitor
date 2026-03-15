@@ -2056,7 +2056,6 @@ async function openStationModal(regIdx, registry) {
           grid: { color:'#1e293b' },
         },
         y: {
-          stacked: true,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
           grid: { color:'#1e293b' },
           title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} }
@@ -2594,9 +2593,9 @@ function drawBatteryCharts(data) {
     });
   }
   } catch(e) {
-    console.error('drawBatteryCharts error:', e);
+    console.error('drawBatteryCharts error:', e.message, e.stack);
     const mc = document.getElementById('mainContent');
-    if (mc) mc.innerHTML += `<div style="color:#e74c3c;font-size:11px;padding:8px">Battery chart error: ${e.message}</div>`;
+    if (mc) mc.innerHTML += `<div style="color:#e74c3c;font-size:11px;padding:8px">Battery chart error: ${e.message}<br><pre style="font-size:8px">${(e.stack||'').split('\n').slice(0,5).join('\n')}</pre></div>`;
   }
 }
 
