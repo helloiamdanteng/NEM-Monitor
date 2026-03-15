@@ -1900,5 +1900,47 @@
     "fuel": "Gas",
     "region": "SA1",
     "capacity": 180
+  },
+  "SHPUMP": {
+    "station": "Shoalhaven",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 240
+  },
+  "WIVENPUMP1": {
+    "station": "Wivenhoe",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 500
+  },
+  "WIVENPUMP2": {
+    "station": "Wivenhoe",
+    "fuel": "Hydro",
+    "region": "QLD1",
+    "capacity": 500
+  },
+  "MURRAY_PUMP": {
+    "station": "Murray",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 150
+  },
+  "BENDEELA_P": {
+    "station": "Bendeela",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 80
+  },
+  "KANGVALLEY": {
+    "station": "Kangaroo Valley",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 160
+  },
+  "TALBINGO": {
+    "station": "Tumut 3",
+    "fuel": "Hydro",
+    "region": "NSW1",
+    "capacity": 250
   }
 }
