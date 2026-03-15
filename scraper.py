@@ -714,6 +714,8 @@ def scrape_dispatch_history() -> dict:
     demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     op_demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     prices: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    ss_solar: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    ss_wind: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     ic_flows: dict[str, dict] = {}   # { ic_id: { label: flow } }
     rooftop: dict[str, dict] = {r: {} for r in NEM_REGIONS}  # TOTALINTERMITTENTGENERATION
     fetch_ok = fetch_fail = fetch_empty = 0
@@ -871,7 +873,12 @@ def scrape_dispatch_history() -> dict:
                 f"prices={sum(len(v) for v in price_result.values())} pts, "
                 f"ic_flows={sum(len(v) for v in ic_flows.values())} pts "
                 f"from {len(today_zips)} files (ok={fetch_ok} empty={fetch_empty} fail={fetch_fail})")
-    return {"demand": demand_result, "op_demand": op_demand_result, "prices": price_result}
+    solar_result    = {r: [{"interval": k, "mw": v} for k, v in sorted(s.items())]
+                        for r, s in ss_solar.items() if s}
+    wind_result     = {r: [{"interval": k, "mw": v} for k, v in sorted(s.items())]
+                        for r, s in ss_wind.items() if s}
+    return {"demand": demand_result, "op_demand": op_demand_result,
+            "prices": price_result, "solar": solar_result, "wind": wind_result}
 
 
 # Keep old name as alias for compatibility
@@ -1464,6 +1471,8 @@ def scrape_all() -> dict:
     dispatch_demand       = dispatch_hist.get("demand", {})
     dispatch_op_demand    = dispatch_hist.get("op_demand", {})
     dispatch_price_5min   = dispatch_hist.get("prices", {})
+    dispatch_solar        = dispatch_hist.get("solar", {})
+    dispatch_wind         = dispatch_hist.get("wind", {})
 
     # Parse live dispatch snapshot (prices, demand, generation, ICs)
     region_summary  = scrape_region_summary(dispatch_text)
@@ -1489,6 +1498,21 @@ def scrape_all() -> dict:
     _update_demand_history(region_summary)
     _update_ic_history(interconnectors)
     _update_bdu_history(region_summary)
+    # Inject live solar/wind into dispatch history for current interval
+    now_label = datetime.now(AEST).strftime("%H:%M")
+    for region, rdata in region_summary.items():
+        if region not in NEM_REGIONS:
+            continue
+        sol = rdata.get("SS_SOLAR_CLEAREDMW")
+        win = rdata.get("SS_WIND_CLEAREDMW")
+        if sol is not None:
+            dispatch_solar.setdefault(region, [])
+            dispatch_solar[region] = [p for p in dispatch_solar[region] if p["interval"] != now_label]
+            dispatch_solar[region].append({"interval": now_label, "mw": round(float(sol), 1)})
+        if win is not None:
+            dispatch_wind.setdefault(region, [])
+            dispatch_wind[region] = [p for p in dispatch_wind[region] if p["interval"] != now_label]
+            dispatch_wind[region].append({"interval": now_label, "mw": round(float(win), 1)})
     # Use DispatchIS history for demand (full day), fall back to in-memory if empty
     demand_history     = dispatch_demand if dispatch_demand else _get_demand_history()
     ic_history         = _get_ic_history()
@@ -1559,6 +1583,8 @@ def scrape_all() -> dict:
         "demand_history":        demand_history,
         "op_demand_history":     dispatch_op_demand,
         "dispatch_history":      dispatch_demand,
+        "solar_history":         dispatch_solar,
+        "wind_history":          dispatch_wind,
         "predispatch_demand":    pd_demand,
         "predispatch_gen":       pd_gen,
         "predispatch_units":     pd_units,
