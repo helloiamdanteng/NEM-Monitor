@@ -1719,6 +1719,7 @@ async function openOriginStationModal(stnName) {
       tension: 0.2,
       spanGaps: false,
       fill: 'origin',
+      stack: 'units',
       yAxisID: 'y',
       order: 2,
     });
@@ -2084,6 +2085,7 @@ async function openStationModal(regIdx, registry) {
           grid: { color:'#1e293b' },
         },
         y: {
+          stacked: true,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
           grid: { color:'#1e293b' },
           title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} }
@@ -2331,7 +2333,7 @@ function renderBatteries(data) {
   // MW chart
   html += '<div class="chart-card">';
   html += `<div class="chart-title">Battery Output — ${isNEM ? 'NEM stacked by region' : REGION_SHORT[batteryRegionFilter]+' stacked by station'} (positive=discharge, negative=charge)</div>`;
-  html += '<div class="chart-container" style="height:338px"><canvas id="battMwChart"></canvas></div>';
+  html += '<div class="chart-container" style="height:260px"><canvas id="battMwChart"></canvas></div>';
   html += '</div>';
 
   // SOC chart
