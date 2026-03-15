@@ -1446,7 +1446,7 @@ def scrape_all() -> dict:
         f_predispatch   = ex.submit(_fetch_predispatch)
         f_trading       = ex.submit(scrape_trading_history)
         f_dispatch_hist = ex.submit(scrape_dispatch_history)
-        f_scada         = ex.submit(scrape_scada_duids, ORIGIN_DUIDS)
+        f_scada         = ex.submit(_fetch_full_scada)
 
     def _safe_result(fut, default, name):
         try:
