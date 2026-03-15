@@ -226,7 +226,7 @@ tr:last-child td { border-bottom:none; }
     <span class="icon">📆</span><span class="label">D-1</span>
   </button>
   <button class="nav-btn" onclick="showPanel('dayahead')" id="nav-dayahead">
-    <span class="icon">📅</span><span class="label">D-ahead</span>
+    <span class="icon">📅</span><span class="label">D+</span>
   </button>
 </nav>
 
@@ -1328,9 +1328,9 @@ function renderOrigin(data) {
   // NEM button
   html += `<button onclick="toggleOriginState('NEM')" style="
     flex:1;padding:5px 2px;border-radius:7px;
-    border:1px solid #a855f7;
-    background:${isNEM ? '#a855f733' : 'transparent'};
-    color:${isNEM ? '#a855f7' : '#475569'};
+    border:1px solid #94a3b8;
+    background:${isNEM ? '#94a3b822' : 'transparent'};
+    color:${isNEM ? '#94a3b8' : '#475569'};
     font-family:var(--font-mono);font-size:11px;font-weight:700;cursor:pointer;transition:all 0.15s">
     NEM
   </button>`;
@@ -2264,6 +2264,7 @@ let battSortDescending   = true;
 
 function setBatteryRegion(r) {
   batteryRegionFilter = r;
+  window._battRenderGen = (window._battRenderGen || 0) + 1;
   try {
     if (latestData) renderPanel('batteries', latestData);
   } catch(e) {
@@ -2289,11 +2290,13 @@ function renderBatteries(data) {
 
   // Region selector
   html += '<div class="region-pills">';
-  for (const r of ['NEM', ...REGIONS]) {
-    const label = r === 'NEM' ? 'NEM' : REGION_SHORT[r];
-    const color = r === 'NEM' ? '#9b59b6' : REGION_COLORS[r];
+  // NEM button (grey) + state buttons (radio style)
+  const battIsNEM = batteryRegionFilter === 'NEM';
+  html += `<button class="region-pill ${battIsNEM ? 'active' : ''}" style="color:#94a3b8;border-color:#94a3b8" onclick="setBatteryRegion('NEM')">NEM</button>`;
+  for (const r of REGIONS) {
     const active = batteryRegionFilter === r ? 'active' : '';
-    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setBatteryRegion('${r}')">${label}</button>`;
+    const color = REGION_COLORS[r];
+    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setBatteryRegion('${r}')">${REGION_SHORT[r]}</button>`;
   }
   html += '</div>';
 
@@ -2602,6 +2605,7 @@ async function _loadBattDuidHistory(region, data) {
   if (!genData || !genData.grouped) return;
   if (!window._battDuidInfo)    window._battDuidInfo    = {};
   if (!window._battDuidHistory) window._battDuidHistory = {};
+  const myGen = window._battRenderGen || 0;  // snapshot generation at call time
 
   const battUnits = [];
   for (const [r, fuels] of Object.entries(genData.grouped)) {
@@ -2614,7 +2618,8 @@ async function _loadBattDuidHistory(region, data) {
 
   const needFetch = battUnits.filter(d => !window._battDuidHistory[d]);
   if (!needFetch.length) {
-    if (batteryRegionFilter === region && latestData) drawBatteryCharts(latestData);
+    if (batteryRegionFilter === region && latestData && myGen === (window._battRenderGen||0))
+      drawBatteryCharts(latestData);
     return;
   }
   try {
@@ -2623,7 +2628,8 @@ async function _loadBattDuidHistory(region, data) {
       window._battDuidHistory[item.duid] = {};
       for (const pt of item.history) window._battDuidHistory[item.duid][pt.interval] = pt.mw;
     }
-    if (batteryRegionFilter === region && latestData) drawBatteryCharts(latestData);
+    if (batteryRegionFilter === region && latestData && myGen === (window._battRenderGen||0))
+      drawBatteryCharts(latestData);
   } catch(e) { console.error('Battery DUID fetch:', e); }
 }
 
@@ -3114,7 +3120,7 @@ function renderDayAhead(data) {
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   const dayStr = tomorrowDate.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
 
-  let html = `<div class="section-title">Day Ahead — ${dayStr}</div>`;
+  let html = `<div class="section-title">D+ — ${dayStr}</div>`;
   html += '<div style="font-size:10px;color:#475569;padding:0 16px 8px;font-family:var(--font-mono)">All data is predispatch forecast · dashed lines</div>';
 
   // Region filter pills
