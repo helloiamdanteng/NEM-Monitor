@@ -342,6 +342,7 @@ function renderPrices(data) {
   html += '<div class="chart-card"><div class="chart-title">30-min Trading — Actual (solid) · Predispatch (dashed)</div>';
   html += '<div class="chart-container" style="height:250px"><canvas id="priceHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  html += '<button onclick="toggleAllPriceRegions()" id="pr-NEM" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
   for (const r of REGIONS) {
     html += `<button onclick="togglePriceRegion('${r}')" id="pr-${r}" data-on="1"
       style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
@@ -362,6 +363,7 @@ function renderPrices(data) {
   html += '<div class="chart-card"><div class="chart-title">Demand + Non-Sched Gen — Actual (bright) · Predispatch (faded)</div>';
   html += '<div class="chart-container" style="height:220px"><canvas id="demandHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  html += '<button onclick="toggleAllDemandRegions()" id="dr-NEM" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
   for (const r of REGIONS) {
     html += `<button onclick="toggleDemandRegion('${r}')" id="dr-${r}" data-on="1"
       style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
@@ -372,6 +374,9 @@ function renderPrices(data) {
   html += '<div class="chart-card"><div class="chart-title">Wind + Solar — Actuals · Predispatch forecast (faded)</div>';
   html += '<div class="chart-container" style="height:220px"><canvas id="renewHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  html += '<button onclick="toggleAllRenewRegions()" id="rr-NEM" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
+  html += '<button onclick="toggleRenewFuel(\'solar\')" id="rr-solar" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer">☀ Solar</button>';
+  html += '<button onclick="toggleRenewFuel(\'wind\')" id="rr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
   for (const r of REGIONS) {
     html += `<button onclick="toggleRenewRegion('${r}')" id="rr-${r}" data-on="1"
       style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
@@ -946,6 +951,7 @@ function renderDemand(data) {
   html += '<div class="chart-card"><div class="chart-title">Demand + Non-Scheduled Gen — Actual (solid) · Predispatch (dashed)</div>';
   html += '<div class="chart-container" style="height:250px"><canvas id="demandHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  html += '<button onclick="toggleAllDemandRegions()" id="dr-NEM2" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
   for (const r of REGIONS) {
     html += `<button onclick="toggleDemandRegion('${r}')" id="dr-${r}" data-on="1"
       style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
@@ -1195,6 +1201,8 @@ function drawRenewablesChart(data) {
     const btn = document.getElementById('rr-' + r);
     return !btn || btn.dataset.on !== '0';
   });
+  const showSolar = document.getElementById('rr-solar')?.dataset.on !== '0';
+  const showWind  = document.getElementById('rr-wind')?.dataset.on !== '0';
 
   const datasets = [];
 
@@ -1235,22 +1243,23 @@ function drawRenewablesChart(data) {
     ) || '';
     const lastActualIdx = lastActualSlot ? allSlots.indexOf(lastActualSlot) : -1;
 
-    // Actual: solar + wind stacked area
-    datasets.push({
+    // Actual: solar area (fills from origin)
+    if (showSolar) datasets.push({
       label: REGION_SHORT[r] + ' Solar',
       data: allSlots.map((l, i) => i <= lastActualIdx ? (solarLookup[l] ?? null) : null),
       borderColor: col, backgroundColor: col + '44',
       borderWidth: 1, pointRadius: 0, tension: 0.2,
-      fill: 'origin', stack: r, yAxisID: 'y', order: 2,
-      regionId: r, spanGaps: false,
+      fill: 'origin', stack: 'renew', yAxisID: 'y', order: 2,
+      regionId: r, fuelType: 'solar', spanGaps: false,
     });
-    datasets.push({
+    // Wind stacked on top of solar
+    if (showWind) datasets.push({
       label: REGION_SHORT[r] + ' Wind',
       data: allSlots.map((l, i) => i <= lastActualIdx ? (windLookup[l] ?? null) : null),
       borderColor: col, backgroundColor: col + '88',
       borderWidth: 1.5, pointRadius: 0, tension: 0.2,
-      fill: '-1', stack: r, yAxisID: 'y', order: 2,
-      regionId: r, spanGaps: false,
+      fill: 'stack', stack: 'renew', yAxisID: 'y', order: 2,
+      regionId: r, fuelType: 'wind', spanGaps: false,
     });
 
     // Predispatch total (faded line)
@@ -1304,6 +1313,58 @@ function toggleRenewRegion(r) {
   btn.dataset.on = on ? '0' : '1';
   btn.style.opacity = on ? '0.35' : '1';
   if (latestData) drawRenewablesChart(latestData);
+}
+
+function toggleAllRenewRegions() {
+  const allOn = REGIONS.every(r => document.getElementById('rr-'+r)?.dataset.on === '1');
+  REGIONS.forEach(r => {
+    const btn = document.getElementById('rr-' + r);
+    if (btn) { btn.dataset.on = allOn ? '0' : '1'; btn.style.opacity = allOn ? '0.35' : '1'; }
+  });
+  const nemBtn = document.getElementById('rr-NEM');
+  if (nemBtn) { nemBtn.dataset.on = allOn ? '0' : '1'; nemBtn.style.opacity = allOn ? '0.35' : '1'; }
+  if (latestData) drawRenewablesChart(latestData);
+}
+
+function toggleRenewFuel(fuel) {
+  const btn = document.getElementById('rr-' + fuel);
+  if (!btn) return;
+  const on = btn.dataset.on === '1';
+  btn.dataset.on = on ? '0' : '1';
+  btn.style.opacity = on ? '0.35' : '1';
+  if (latestData) drawRenewablesChart(latestData);
+}
+
+function toggleAllPriceRegions() {
+  if (!charts.priceHist) return;
+  const allOn = REGIONS.every(r => document.getElementById('pr-'+r)?.dataset.on === '1');
+  REGIONS.forEach(r => {
+    const btn = document.getElementById('pr-' + r);
+    if (btn) { btn.dataset.on = allOn ? '0' : '1'; btn.style.opacity = allOn ? '0.35' : '1'; }
+  });
+  const nemBtn = document.getElementById('pr-NEM');
+  if (nemBtn) { nemBtn.dataset.on = allOn ? '0' : '1'; nemBtn.style.opacity = allOn ? '0.35' : '1'; }
+  charts.priceHist.data.datasets.forEach((ds, i) => {
+    if (ds.regionId) charts.priceHist.getDatasetMeta(i).hidden = allOn;
+  });
+  charts.priceHist.update();
+}
+
+function toggleAllDemandRegions() {
+  if (!charts.demandHist) return;
+  const allOn = REGIONS.every(r => document.getElementById('dr-'+r)?.dataset.on === '1');
+  REGIONS.forEach(r => {
+    const btn = document.getElementById('dr-' + r);
+    if (btn) { btn.dataset.on = allOn ? '0' : '1'; btn.style.opacity = allOn ? '0.35' : '1'; }
+  });
+  ['dr-NEM','dr-NEM2'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.dataset.on = allOn ? '0' : '1'; b.style.opacity = allOn ? '0.35' : '1'; }
+  });
+  charts.demandHist.data.datasets.forEach((ds, i) => {
+    if (ds.regionId) charts.demandHist.getDatasetMeta(i).hidden = allOn;
+  });
+  charts.demandHist.update();
 }
 
 function drawIcChart(data) {
