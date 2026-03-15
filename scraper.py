@@ -752,11 +752,18 @@ def scrape_dispatch_history() -> dict:
                     if op_demand_str:
                         pts.append(("op_demand", region, label, round(float(op_demand_str), 1)))
                     rooftop_str = row.get("SS_SOLAR_CLEAREDMW", "")
+                    wind_str    = row.get("SS_WIND_CLEAREDMW", "")
                     if rooftop_str:
                         try:
                             rooftop = round(float(rooftop_str), 1)
                             if rooftop > 0:
                                 pts.append(("rooftop", region, label, rooftop))
+                            pts.append(("solar", region, label, rooftop))
+                        except (ValueError, TypeError):
+                            pass
+                    if wind_str:
+                        try:
+                            pts.append(("wind", region, label, round(float(wind_str), 1)))
                         except (ValueError, TypeError):
                             pass
                     # BDU (battery) fields
@@ -834,6 +841,12 @@ def scrape_dispatch_history() -> dict:
                 elif kind == "op_demand":
                     _, region, label, val = item
                     op_demand[region][label] = val
+                elif kind == "solar":
+                    _, region, label, val = item
+                    ss_solar[region][label] = val
+                elif kind == "wind":
+                    _, region, label, val = item
+                    ss_wind[region][label] = val
                 elif kind == "ic":
                     _, ic_id, label, val = item
                     if ic_id not in ic_flows:
@@ -1163,39 +1176,6 @@ def scrape_tomorrow_demand(text: str, stpasa: dict) -> dict:
     return result
 
 
-
-    now_aest = datetime.now(AEST).replace(tzinfo=None)
-    region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
-    for tk in ["PREDISPATCH_REGION_SOLUTION", "PREDISPATCH_REGIONSOLUTION"]:
-        rows = _parse_aemo(text, tk)
-        if not rows:
-            continue
-        for row in rows:
-            region = row.get("REGIONID", "")
-            if region not in NEM_REGIONS:
-                continue
-            dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
-            ss  = row.get("SEMISCHEDULEDGENERATION", "")
-            sch = row.get("DISPATCHABLEGENERATION", "")
-            if not dt_str:
-                continue
-            try:
-                dt = datetime.fromisoformat(dt_str.replace("/", "-"))
-                if dt.replace(tzinfo=None) >= now_aest:
-                    region_series[region][dt.strftime("%H:%M")] = {
-                        "SemiScheduled": round(float(ss), 1) if ss else 0,
-                        "Scheduled":     round(float(sch), 1) if sch else 0,
-                    }
-            except (ValueError, TypeError):
-                pass
-        break
-    result = {}
-    for region, series in region_series.items():
-        if series:
-            result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
-    return result
-
-
 # ---------------------------------------------------------------------------
 # Fuel mix — OpenNEM (single NEM-wide call, not 5 calls)
 # ---------------------------------------------------------------------------
@@ -1314,7 +1294,7 @@ _fuel_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 _duid_history: dict[str, dict] = {}  # { duid: { "HH:MM": mw } } — per-unit today history
 _rooftop_history: dict[str, dict] = {r: {} for r in NEM_REGIONS}  # TOTALINTERMITTENTGENERATION
 
-def _update_fuel_history(fuel_mix: dict, scada: dict | None = None) -> None:
+def _update_fuel_history(fuel_mix: dict, scada: dict | None = None, pump_load: dict | None = None) -> None:
     """Store a fuel mix snapshot and per-DUID snapshot. Prune to today only."""
     now = datetime.now(AEST)
     # Snap to nearest 5-min boundary so labels align with the 5-min time spine in the frontend
@@ -1323,7 +1303,11 @@ def _update_fuel_history(fuel_mix: dict, scada: dict | None = None) -> None:
     for region in NEM_REGIONS:
         if region not in fuel_mix:
             continue
-        _fuel_history[region][label] = dict(fuel_mix[region])
+        snap = dict(fuel_mix[region])
+        # Store pump hydro load as negative value under 'Pump Hydro' key
+        if pump_load and pump_load.get(region, 0) < -1:
+            snap["Pump Hydro"] = round(pump_load[region], 1)
+        _fuel_history[region][label] = snap
         if len(_fuel_history[region]) > 290:
             oldest = sorted(_fuel_history[region].keys())[0]
             del _fuel_history[region][oldest]
@@ -2134,6 +2118,7 @@ def scrape_gen() -> dict:
     fuel_mix:   dict = {r: {} for r in NEM_REGIONS}
     nem_totals: dict = {}
     grouped:    dict = {}
+    pump_load:  dict = {}  # { region: negative_mw } for pump hydro display
     unmatched_log: list = []
 
     for duid, mw_raw in scada.items():
@@ -2162,6 +2147,9 @@ def scrape_gen() -> dict:
 
         fuel_mix[region][fuel] = round(fuel_mix[region].get(fuel, 0) + mw_for_chart, 1)
         nem_totals[fuel]       = round(nem_totals.get(fuel, 0) + mw_for_chart, 1)
+        # Track pump hydro load (negative mw on Hydro DUIDs) for gen chart
+        if fuel == "Hydro" and mw_val < -1:
+            pump_load[region] = round(pump_load.get(region, 0) + mw_val, 1)
 
         pct = round(mw_val / capacity * 100, 1) if (mw_val and capacity and capacity > 0) else None
         grouped.setdefault(region, {}).setdefault(fuel, []).append({
@@ -2205,7 +2193,7 @@ def scrape_gen() -> dict:
                 pass
 
     # Accumulate into in-memory history
-    _update_fuel_history(fuel_mix, scada)
+    _update_fuel_history(fuel_mix, scada, pump_load)
 
     logger.info(f"scrape_gen done — {len(scada)} SCADA DUIDs, "
                 f"reg={len(reg)}, buckets={sum(len(v) for v in fuel_mix.values())}")
