@@ -1910,7 +1910,6 @@ async function openStationModal(regIdx, registry) {
   let lastIdx = allSlots.findIndex(s => s > lastSlot) - 1;
   if (lastIdx < 0) lastIdx = allSlots.length - 1;
   const labels = allSlots.slice(0, lastIdx + 1);
-  console.log('lastSlot:', lastSlot, 'lastIdx:', lastIdx, 'labels.length:', labels.length);
 
   // Generate distinct shades of the fuel colour
   function unitColor(idx, total) {
@@ -2258,7 +2257,10 @@ function renderStations(fastData) {
   return html;
 }
 
-
+// ── Batteries state variables ─────────────────────────────────────────────────
+let batteryRegionFilter  = 'NEM';
+let battHideOffline      = true;
+let battSortDescending   = true;
 
 function setBatteryRegion(r) {
   batteryRegionFilter = r;
