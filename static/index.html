@@ -638,7 +638,7 @@ function drawGenChart(data) {
   const fuelHist   = genData.fuel_history || {};
   const fuelMix    = genData.fuel_mix || {};
   const activeRegions = REGIONS.filter(r => genRegion.has(r));
-  const regionLabel = genRegion === 'NEM' ? 'NEM' : genRegion.replace('1','');
+  const regionLabel = activeRegions.length === REGIONS.length ? 'NEM' : activeRegions.map(r => REGION_SHORT[r]).join('+');
   const card = ctx.closest('.chart-card');
 
   // Count actual history points
