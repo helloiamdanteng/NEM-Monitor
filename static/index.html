@@ -1140,13 +1140,9 @@ function drawDemandChart(data) {
           grid: { color: '#1e2d4544' }
         },
         y: { min: 0,
-          ticks: {
-            color: '#64748b',
-            font: { family: 'Space Mono', size: 9 },
-            callback: v => (v/1000).toFixed(1) + ' GW'
-          },
-          title: { display: true, text: 'GW', color: '#64748b', font: { family: 'Space Mono', size: 9 } },
-          grid: { color: '#1e2d45' }
+          ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
+          title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} },
+          grid: { color: '#1e293b' }
         }
       }
     },
