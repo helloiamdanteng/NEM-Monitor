@@ -3296,6 +3296,103 @@ function toggleWeekRenewFuel(fuel) {
   if (latestData) { requestAnimationFrame(() => drawWeekCharts(latestData)); }
 }
 
+// ── Weather forecast table ────────────────────────────────────────────────────
+
+function tempColour(t, type) {
+  // type: 'max' or 'min' — returns a background colour string
+  if (t === null || t === undefined) return 'transparent';
+  if (type === 'max') {
+    if (t >= 40) return '#7f1d1d';
+    if (t >= 37) return '#991b1b';
+    if (t >= 34) return '#b91c1c';
+    if (t >= 31) return '#dc2626';
+    if (t >= 28) return '#f97316';
+    if (t >= 25) return '#fb923c';
+    if (t >= 22) return '#fbbf24';
+    if (t >= 18) return '#a3e635';
+    if (t >= 14) return '#4ade80';
+    return '#34d399';
+  } else {
+    if (t >= 25) return '#dc2626';
+    if (t >= 20) return '#f97316';
+    if (t >= 16) return '#fbbf24';
+    if (t >= 12) return '#a3e635';
+    if (t >= 8)  return '#4ade80';
+    if (t >= 4)  return '#34d399';
+    return '#67e8f9';
+  }
+}
+
+function renderWeatherTable(weather) {
+  const regions = ['QLD1','NSW1','VIC1','SA1','TAS1'];
+  const REGION_LABEL = {QLD1:'QLD',NSW1:'NSW',VIC1:'VIC',SA1:'SA',TAS1:'TAS'};
+
+  // Get days from first available region
+  let days = [];
+  for (const r of regions) {
+    if (weather[r] && weather[r].days && weather[r].days.length) {
+      days = weather[r].days;
+      break;
+    }
+  }
+
+  if (!days.length) {
+    return '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px 0 4px">Weather loading… (refreshes every 30 min)</div>';
+  }
+
+  const cellStyle = 'padding:3px 5px;text-align:center;font-size:11px;font-family:var(--font-mono);min-width:36px;';
+  const headerCellStyle = 'padding:3px 5px;text-align:center;font-size:9px;font-family:var(--font-mono);color:#64748b;white-space:nowrap;';
+  const labelCellStyle = 'padding:3px 8px;text-align:left;font-size:10px;font-family:var(--font-mono);color:#94a3b8;white-space:nowrap;';
+  const regionCellStyle = 'padding:3px 8px;text-align:left;font-size:10px;font-family:var(--font-mono);font-weight:700;color:#94a3b8;';
+  const tableStyle = 'width:100%;border-collapse:collapse;margin-bottom:4px;';
+
+  const buildTable = (type) => {
+    const label = type === 'max' ? 'Maximum Temperatures' : 'Minimum Temperatures';
+    let t = `<div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:#94a3b8;
+      letter-spacing:0.05em;padding:8px 0 4px;text-transform:uppercase">${label}</div>`;
+    t += `<table style="${tableStyle}">`;
+
+    // Header row — day + date
+    t += '<tr>';
+    t += `<td style="${regionCellStyle}"></td>`;
+    t += `<td style="${labelCellStyle}"></td>`;
+    for (const d of days) {
+      t += `<td style="${headerCellStyle}">${d.day_of_week}<br><span style="color:#475569">${d.date_label}</span></td>`;
+    }
+    t += '</tr>';
+
+    // One row per region
+    for (const r of regions) {
+      const rData = weather[r];
+      if (!rData) continue;
+      t += '<tr>';
+      t += `<td style="${regionCellStyle}">${REGION_LABEL[r]}</td>`;
+      t += `<td style="${labelCellStyle}">${rData.name}</td>`;
+      for (const d of days) {
+        const val = type === 'max' ? d.temp_max : d.temp_min;
+        const bg  = tempColour(val, type);
+        // Determine text colour based on background brightness
+        const darkBg = ['#7f1d1d','#991b1b','#b91c1c','#dc2626'].includes(bg);
+        const textCol = darkBg ? '#fca5a5' : '#1e293b';
+        t += `<td style="${cellStyle}background:${bg};color:${textCol};border-radius:3px;">
+          ${val !== null && val !== undefined ? val : '—'}
+        </td>`;
+      }
+      t += '</tr>';
+    }
+
+    t += '</table>';
+    return t;
+  };
+
+  let out = '<div class="chart-card" style="margin-bottom:12px;padding:12px 14px;overflow-x:auto">';
+  out += buildTable('max');
+  out += buildTable('min');
+  out += '<div style="font-size:9px;color:#475569;font-family:var(--font-mono);margin-top:4px">Source: Bureau of Meteorology · refreshes every 30 min</div>';
+  out += '</div>';
+  return out;
+}
+
 function renderDayAhead(data) {
   const tomorrowDate = new Date();
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -3303,6 +3400,10 @@ function renderDayAhead(data) {
 
   let html = `<div class="section-title">D+ — ${dayStr}</div>`;
   html += '<div style="font-size:10px;color:#475569;padding:0 16px 8px;font-family:var(--font-mono)">All data is predispatch forecast · dashed lines</div>';
+
+  // ── Weather forecast ─────────────────────────────────────────────────────────
+  const weather = (slowData && slowData.weather) || {};
+  html += renderWeatherTable(weather);
 
   // Region filter pills — single set controlling all charts
   html += '<div class="region-pills">';
