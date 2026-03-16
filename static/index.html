@@ -375,7 +375,7 @@ function renderPrices(data) {
   html += '<div class="chart-container" style="height:220px"><canvas id="renewHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
   html += '<button onclick="toggleAllRenewRegions()" id="rr-NEM" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
-  html += '<button onclick="toggleRenewFuel(\'solar\')" id="rr-solar" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer">☀ Solar</button>';
+  html += '<button onclick="toggleRenewFuel(\'solar\')" id="rr-solar" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:0.35">☀ Solar</button>';
   html += '<button onclick="toggleRenewFuel(\'wind\')" id="rr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
   for (const r of REGIONS) {
     html += `<button onclick="toggleRenewRegion('${r}')" id="rr-${r}" data-on="1"
@@ -712,8 +712,8 @@ function drawGenChart(data) {
     for (const pt of (fuelHist[r] || [])) histLookup[r][pt.interval] = pt;
   }
 
-  // Demand line = TOTALDEMAND + SEMISCHEDULE_CLEAREDMW (sits at top of full supply stack)
-  const demHist = data.gen_demand_history || data.op_demand_history || data.demand_history || {};
+  // Demand line — uses op_demand_history (DEMAND_AND_NONSCHEDGEN) same source as P&D demand chart
+  const demHist = data.op_demand_history || data.demand_history || {};
   const demHistLookup = {};
   for (const r of activeRegions) {
     demHistLookup[r] = {};
