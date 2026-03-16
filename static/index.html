@@ -208,7 +208,7 @@ tr:last-child td { border-bottom:none; }
 
 <nav class="bottom-nav">
   <button class="nav-btn" onclick="showPanel('origin')" id="nav-origin">
-    <span class="icon">🟠</span><span class="label">Origin</span>
+    <span class="icon"><svg width="18" height="18" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle"><circle cx="50" cy="50" r="48" fill="#f97316"/><path d="M50 18 C32 18 18 32 18 50 C18 68 32 82 50 82 C68 82 82 68 82 50 C82 32 68 18 50 18 Z M50 34 C59.9 34 68 41.7 68 51.3 C68 59.2 62.6 65.7 55.2 67.6 L50 72 L44.8 67.6 C37.4 65.7 32 59.2 32 51.3 C32 41.7 40.1 34 50 34 Z" fill="white"/></svg></span><span class="label">Origin</span>
   </button>
   <button class="nav-btn active" onclick="showPanel('prices')" id="nav-prices">
     <span class="icon">💲</span><span class="label">P&amp;D</span>
@@ -371,7 +371,7 @@ function renderPrices(data) {
       >${REGION_SHORT[r]}</button>`;
   }
   html += '</div></div>';
-  html += '<div class="chart-card"><div class="chart-title">Wind + Solar — Actuals · Predispatch forecast (faded)</div>';
+  html += '<div class="chart-card"><div class="chart-title">Wind + Solar — Actuals by state</div>';
   html += '<div class="chart-container" style="height:220px"><canvas id="renewHistChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
   html += '<button onclick="toggleAllRenewRegions()" id="rr-NEM" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
@@ -1186,7 +1186,7 @@ function drawRenewablesChart(data) {
 
   const solarHist = data.solar_history || {};
   const windHist  = data.wind_history  || {};
-  const pdGen     = data.predispatch_gen || {};  // { region: [{interval, solar, wind}] }
+
   const nowStr    = nowAEST();
 
   const allSlots = [];
@@ -1230,11 +1230,12 @@ function drawRenewablesChart(data) {
     const windLookup  = {};
     for (const pt of (windHist[r]  || [])) windLookup[pt.interval]  = pt.mw;
 
-    // Predispatch solar + wind for this region
-    const pdLookup = {};
+    // Predispatch — separate solar and wind
+    const pdSolarLookup = {}, pdWindLookup = {};
     for (const pt of (pdGen[r] || [])) {
       if (pt.interval > nowStr) {
-        pdLookup[pt.interval] = pt.SemiScheduled || 0;
+        pdSolarLookup[pt.interval] = pt.solar ?? pt.SemiScheduled ?? 0;
+        pdWindLookup[pt.interval]  = pt.wind  ?? 0;
       }
     }
 
@@ -1262,19 +1263,28 @@ function drawRenewablesChart(data) {
       regionId: r, fuelType: 'wind', spanGaps: false,
     });
 
-    // Predispatch total (faded line) — only shown if at least one fuel type is on
-    if (Object.keys(pdLookup).length > 0 && (showSolar || showWind)) {
-      datasets.push({
-        label: REGION_SHORT[r] + ' (PD)',
-        data: allSlots.map((l, i) => {
-          if (i === lastActualIdx) return (solarLookup[l] ?? 0) + (windLookup[l] ?? 0);
-          return i > lastActualIdx ? (pdLookup[l] ?? null) : null;
-        }),
-        borderColor: col + '66', backgroundColor: 'transparent',
-        borderWidth: 1, borderDash: [4, 3], pointRadius: 0, tension: 0.2,
-        fill: false, yAxisID: 'y', order: 1, regionId: r, spanGaps: true,
-      });
-    }
+    // Predispatch solar (faded dashed)
+    if (showSolar && Object.keys(pdSolarLookup).length > 0) datasets.push({
+      label: REGION_SHORT[r] + ' Solar (PD)',
+      data: allSlots.map((l, i) => {
+        if (i === lastActualIdx) return solarLookup[l] ?? null;
+        return i > lastActualIdx ? (pdSolarLookup[l] ?? null) : null;
+      }),
+      borderColor: col + '77', backgroundColor: 'transparent',
+      borderWidth: 1, borderDash: [4,3], pointRadius: 0, tension: 0.2,
+      fill: false, yAxisID: 'y', order: 1, regionId: r, spanGaps: true,
+    });
+    // Predispatch wind (faded dashed)
+    if (showWind && Object.keys(pdWindLookup).length > 0) datasets.push({
+      label: REGION_SHORT[r] + ' Wind (PD)',
+      data: allSlots.map((l, i) => {
+        if (i === lastActualIdx) return windLookup[l] ?? null;
+        return i > lastActualIdx ? (pdWindLookup[l] ?? null) : null;
+      }),
+      borderColor: col + 'aa', backgroundColor: 'transparent',
+      borderWidth: 1, borderDash: [4,3], pointRadius: 0, tension: 0.2,
+      fill: false, yAxisID: 'y', order: 1, regionId: r, spanGaps: true,
+    });
   }
 
   charts.renewHist = new Chart(ctx, {
@@ -1453,28 +1463,43 @@ function drawIcChart(data) {
 function toggleIcHighlight(id) {
   const chart = charts.icTime;
   if (!chart) return;
+
+  const allIds = [...new Set(chart.data.datasets.filter(d => d.icId).map(d => d.icId))];
   const safeId = id.replace(/[^a-z0-9]/gi, '_');
   const btn = document.getElementById('ic-btn-' + safeId);
-  const isHighlighted = btn && btn.dataset.active === '1';
+  const alreadySelected = btn && btn.dataset.active === '1';
 
-  chart.data.datasets.forEach(ds => {
-    if (ds.icId !== id) return;
-    if (isHighlighted) {
-      // Restore defaults
+  if (alreadySelected) {
+    // Clicking selected IC again → show all at normal weight
+    chart.data.datasets.forEach((ds, i) => {
+      if (!ds.icId) return;
       ds.borderWidth = ds.isActual ? 1.5 : 1;
-      if (!ds.isActual) ds.borderColor = ds.borderColor.replace(/cc$/, '66');
-    } else {
-      // Highlight
-      ds.borderWidth = ds.isActual ? 3.5 : 2;
-      if (!ds.isActual) ds.borderColor = ds.borderColor.replace(/66$/, 'cc');
-    }
-  });
-
-  if (btn) {
-    btn.dataset.active = isHighlighted ? '0' : '1';
-    btn.style.fontWeight = isHighlighted ? '400' : '700';
-    btn.style.background = isHighlighted ? 'transparent' : btn.style.borderColor.replace('33','22');
-    btn.style.borderColor = isHighlighted ? btn.style.borderColor.replace(/[^,]+\)$/, '0.2)') : btn.style.borderColor.replace(/[^,]+\)$/, '0.6)');
+      chart.getDatasetMeta(i).hidden = false;
+    });
+    allIds.forEach(icId => {
+      const b = document.getElementById('ic-btn-' + icId.replace(/[^a-z0-9]/gi,'_'));
+      if (b) { b.dataset.active = '0'; b.style.opacity = '1'; b.style.fontWeight = '400'; b.style.borderWidth = '1px'; }
+    });
+  } else {
+    // Select this IC: show bold, hide all others
+    chart.data.datasets.forEach((ds, i) => {
+      if (!ds.icId) return;
+      if (ds.icId === id) {
+        ds.borderWidth = ds.isActual ? 3.5 : 2;
+        chart.getDatasetMeta(i).hidden = false;
+      } else {
+        chart.getDatasetMeta(i).hidden = true;
+      }
+    });
+    allIds.forEach(icId => {
+      const b = document.getElementById('ic-btn-' + icId.replace(/[^a-z0-9]/gi,'_'));
+      if (!b) return;
+      if (icId === id) {
+        b.dataset.active = '1'; b.style.opacity = '1'; b.style.fontWeight = '700'; b.style.borderWidth = '2px';
+      } else {
+        b.dataset.active = '0'; b.style.opacity = '0.3'; b.style.fontWeight = '400'; b.style.borderWidth = '1px';
+      }
+    });
   }
   chart.update('none');
 }
