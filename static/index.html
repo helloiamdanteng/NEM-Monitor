@@ -276,6 +276,14 @@ function nowAEST() {
 }
 function destroyChart(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
 
+// Shared tooltip label formatter used across modal and weekly charts
+function tooltipLabel(c) {
+  if (c.raw === null) return null;
+  const lbl = c.dataset.label || '';
+  if (lbl.includes('Price') || lbl.includes('$')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
+  return ` ${lbl}: ${fmt(c.raw,0)} MW`;
+}
+
 const CHART_DEFAULTS = {
   responsive:true, maintainAspectRatio:false,
   interaction:{mode:'index',intersect:false},
@@ -3388,7 +3396,7 @@ function renderDayAhead(data) {
   const dayStr = tomorrowDate.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
 
   let html = `<div class="section-title">D+ — ${dayStr}</div>`;
-  html += '<div style="font-size:10px;color:#475569;padding:0 16px 8px;font-family:var(--font-mono)">All data is predispatch forecast · dashed lines</div>';
+
 
   // ── Weather forecast ─────────────────────────────────────────────────────────
   try {
@@ -3477,13 +3485,6 @@ function drawDayAheadCharts(data) {
   for (let h = 0; h < 24; h++)
     for (let m = 0; m < 60; m += 30)
       allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
-
-  const tooltipLabel = c => {
-    if (c.raw === null) return null;
-    const lbl = c.dataset.label || '';
-    if (lbl.includes('Price') || lbl.includes('$')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
-    return ` ${lbl}: ${fmt(c.raw,0)} MW`;
-  };
 
   // ── Price chart ──────────────────────────────────────────────────────────────
   destroyChart('dayAheadPrice');
