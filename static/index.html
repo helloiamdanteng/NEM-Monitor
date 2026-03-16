@@ -2828,10 +2828,10 @@ function drawBatteryCharts(data) {
            ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
              callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null },
            grid:{color:'#1e2d4544'} },
-      y: { stacked: true,
-           ticks: { color:'#94a3b8', font:{family:'Space Mono',size:9},
-             callback: v => (v>0?'+':'')+fmt(v,0)+' MW' },
-           grid:{color:'#1e2d45'} },
+      y: { stacked: true, min: 0,
+           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
+           grid: { color:'#1e293b' },
+           title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} } },
     };
     if (!isNEM) scales.yPrice = {
       type:'linear', position:'right', stacked: false,
@@ -2897,9 +2897,10 @@ function drawBatteryCharts(data) {
                ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
                  callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null },
                grid:{color:'#1e2d4544'} },
-          y: { stacked: true, min:0,
-               ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>fmt(v,0)+' MWh'},
-               grid:{color:'#1e2d45'} }
+          y: { stacked: true, min: 0,
+               ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
+               grid: { color:'#1e293b' },
+               title: { display:true, text:'MWh', color:'#64748b', font:{family:'Space Mono',size:9} } }
         }
       },
       plugins: [nowLinePlugin(nowIdx)]
