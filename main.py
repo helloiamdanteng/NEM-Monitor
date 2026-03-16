@@ -585,24 +585,40 @@ async def station_debug():
 
 @app.post("/api/views")
 async def record_view(request: Request):
-    import json, hashlib
+    import json, hashlib, os
     from datetime import datetime, timezone, timedelta
-    AEST = timezone(timedelta(hours=10))
-    now_aest = datetime.now(AEST)
-    today   = now_aest.strftime("%Y-%m-%d")
-    month   = now_aest.strftime("%Y-%m")
-    # Persist in static/data/ — survives Render dyno restarts (unlike /tmp)
-    data_dir = Path(__file__).parent / "static" / "data"
-    data_dir.mkdir(exist_ok=True)
-    path = data_dir / "views.json"
+    import httpx
+
+    AEST      = timezone(timedelta(hours=10))
+    now_aest  = datetime.now(AEST)
+    today     = now_aest.strftime("%Y-%m-%d")
+    month     = now_aest.strftime("%Y-%m")
+
     forwarded = request.headers.get("x-forwarded-for")
-    raw_ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
-    ip_hash = hashlib.sha256(raw_ip.encode()).hexdigest()[:16]
-    try:
-        data = json.loads(path.read_text()) if path.exists() else {}
-    except Exception:
-        data = {}
-    # Schema: { total, by_day, by_month, unique_ips, unique_by_day, unique_by_month }
+    raw_ip    = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    ip_hash   = hashlib.sha256(raw_ip.encode()).hexdigest()[:16]
+
+    GIST_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+    GIST_ID    = os.environ.get("VIEWS_GIST_ID", "")
+
+    # ── Load current data ────────────────────────────────────────────────────
+    data: dict = {}
+    if GIST_TOKEN and GIST_ID:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                r = await client.get(
+                    f"https://api.github.com/gists/{GIST_ID}",
+                    headers={"Authorization": f"token {GIST_TOKEN}",
+                             "Accept": "application/vnd.github.v3+json"}
+                )
+                if r.status_code == 200:
+                    files = r.json().get("files", {})
+                    raw   = next(iter(files.values()), {}).get("content", "{}")
+                    data  = json.loads(raw)
+        except Exception:
+            pass
+
+    # ── Update counts ────────────────────────────────────────────────────────
     data.setdefault("total", 0)
     data.setdefault("by_day", {})
     data.setdefault("by_month", {})
@@ -614,35 +630,39 @@ async def record_view(request: Request):
     data["by_day"][today]   = data["by_day"].get(today, 0) + 1
     data["by_month"][month] = data["by_month"].get(month, 0) + 1
 
-    is_new_global = ip_hash not in data["unique_ips"]
-    if is_new_global:
+    if ip_hash not in data["unique_ips"]:
         data["unique_ips"].append(ip_hash)
+    if ip_hash not in data["unique_by_day"].setdefault(today, []):
+        data["unique_by_day"][today].append(ip_hash)
+    if ip_hash not in data["unique_by_month"].setdefault(month, []):
+        data["unique_by_month"][month].append(ip_hash)
 
-    today_ips = data["unique_by_day"].setdefault(today, [])
-    if ip_hash not in today_ips:
-        today_ips.append(ip_hash)
-
-    month_ips = data["unique_by_month"].setdefault(month, [])
-    if ip_hash not in month_ips:
-        month_ips.append(ip_hash)
-
-    # Prune daily buckets older than 60 days (keep monthly forever)
+    # Prune daily buckets older than 60 days
     if len(data["by_day"]) > 60:
         for old in sorted(data["by_day"].keys())[:-60]:
             data["by_day"].pop(old, None)
             data["unique_by_day"].pop(old, None)
 
-    try:
-        path.write_text(json.dumps(data))
-    except Exception:
-        pass
+    # ── Persist to Gist ──────────────────────────────────────────────────────
+    if GIST_TOKEN and GIST_ID:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                await client.patch(
+                    f"https://api.github.com/gists/{GIST_ID}",
+                    headers={"Authorization": f"token {GIST_TOKEN}",
+                             "Accept": "application/vnd.github.v3+json"},
+                    json={"files": {"views.json": {"content": json.dumps(data)}}}
+                )
+        except Exception:
+            pass
+
     return {
-        "total":          data["total"],
-        "today":          data["by_day"].get(today, 0),
-        "this_month":     data["by_month"].get(month, 0),
-        "unique_total":   len(data["unique_ips"]),
-        "unique_today":   len(data["unique_by_day"].get(today, [])),
-        "unique_month":   len(data["unique_by_month"].get(month, [])),
+        "total":        data["total"],
+        "today":        data["by_day"].get(today, 0),
+        "this_month":   data["by_month"].get(month, 0),
+        "unique_total": len(data["unique_ips"]),
+        "unique_today": len(data["unique_by_day"].get(today, [])),
+        "unique_month": len(data["unique_by_month"].get(month, [])),
     }
 
 
