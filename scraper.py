@@ -713,6 +713,7 @@ def scrape_dispatch_history() -> dict:
 
     demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     op_demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    gen_demand: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     prices: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     ss_solar: dict[str, dict] = {r: {} for r in NEM_REGIONS}
     ss_wind: dict[str, dict] = {r: {} for r in NEM_REGIONS}
@@ -741,6 +742,7 @@ def scrape_dispatch_history() -> dict:
                 dt_str = row.get("SETTLEMENTDATE", "")
                 demand_str = row.get("TOTALDEMAND", "")
                 op_demand_str = row.get("DEMAND_AND_NONSCHEDGEN", "")
+                semisched_str = row.get("SEMISCHEDULE_CLEAREDMW", "")
                 if not dt_str or not demand_str:
                     continue
                 try:
@@ -751,6 +753,13 @@ def scrape_dispatch_history() -> dict:
                     pts.append(("demand", region, label, round(float(demand_str), 1)))
                     if op_demand_str:
                         pts.append(("op_demand", region, label, round(float(op_demand_str), 1)))
+                    # gen_demand = TOTALDEMAND + SEMISCHEDULE_CLEAREDMW (sits at top of full supply stack)
+                    if semisched_str:
+                        try:
+                            gen_dem = round(float(demand_str), 1) + round(float(semisched_str), 1)
+                            pts.append(("gen_demand", region, label, gen_dem))
+                        except (ValueError, TypeError):
+                            pass
                     rooftop_str = row.get("SS_SOLAR_CLEAREDMW", "")
                     wind_str    = row.get("SS_WIND_CLEAREDMW", "")
                     if rooftop_str:
@@ -841,6 +850,9 @@ def scrape_dispatch_history() -> dict:
                 elif kind == "op_demand":
                     _, region, label, val = item
                     op_demand[region][label] = val
+                elif kind == "gen_demand":
+                    _, region, label, val = item
+                    gen_demand[region][label] = val
                 elif kind == "solar":
                     _, region, label, val = item
                     ss_solar[region][label] = val
@@ -890,8 +902,11 @@ def scrape_dispatch_history() -> dict:
                         for r, s in ss_solar.items() if s}
     wind_result     = {r: [{"interval": k, "mw": v} for k, v in sorted(s.items())]
                         for r, s in ss_wind.items() if s}
+    gen_demand_result = {r: [{"interval": k, "demand": v} for k, v in sorted(s.items())]
+                         for r, s in gen_demand.items() if s}
     return {"demand": demand_result, "op_demand": op_demand_result,
-            "prices": price_result, "solar": solar_result, "wind": wind_result}
+            "prices": price_result, "solar": solar_result, "wind": wind_result,
+            "gen_demand": gen_demand_result}
 
 
 # Keep old name as alias for compatibility
@@ -1576,6 +1591,7 @@ def scrape_all() -> dict:
         "dispatch_history":      dispatch_demand,
         "solar_history":         dispatch_solar,
         "wind_history":          dispatch_wind,
+        "gen_demand_history":    dispatch_hist.get("gen_demand", {}),
         "predispatch_demand":    pd_demand,
         "predispatch_gen":       pd_gen,
         "predispatch_units":     pd_units,
@@ -2057,24 +2073,24 @@ def scrape_scada_history() -> None:
         duids = all_snapshots[label]
         fuel_mix: dict = {r: {} for r in NEM_REGIONS}
         pump_load_hist: dict = {}  # track pump hydro load per region
-        for duid, mw in duids.items():
+        for duid, mw_raw in duids.items():
             info   = reg.get(duid, {})
             region = info.get("region", "") or cpid_map.get(duid, "")
             raw_fuel = info.get("fuel", "")
             fuel   = raw_fuel if (raw_fuel and raw_fuel != "Other") else _infer_fuel_from_duid(duid)
+            # Negate pump-load DUIDs (positive SCADA = consuming) for all fuel logic
+            mw = -mw_raw if (duid in PUMP_LOAD_DUIDS and mw_raw is not None) else mw_raw
             # Always store per-DUID history regardless of region match
             if mw is not None:
                 if duid not in _duid_history:
                     _duid_history[duid] = {}
-                # Pump-load DUIDs report positive MW when consuming — negate for display
-                stored_mw = -round(mw, 1) if duid in PUMP_LOAD_DUIDS else round(mw, 1)
-                _duid_history[duid][label] = stored_mw
+                _duid_history[duid][label] = round(mw, 1)
             if region not in NEM_REGIONS:
                 continue
             mw_val_signed = mw if mw is not None else 0
             mw_pos = max(mw_val_signed, 0)
             fuel_mix[region][fuel] = round(fuel_mix[region].get(fuel, 0) + mw_pos, 1)
-            # Track pump hydro load (negative mw on Hydro DUIDs) same as scrape_gen
+            # Track pump hydro load (negative mw on Hydro DUIDs)
             if fuel == "Hydro" and mw_val_signed < -1:
                 pump_load_hist[region] = round(pump_load_hist.get(region, 0) + mw_val_signed, 1)
         # Store into _fuel_history with pump hydro
