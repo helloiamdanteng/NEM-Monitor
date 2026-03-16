@@ -668,7 +668,7 @@ function drawGenChart(data) {
         datasets: activeFuels.map(fuel => ({
           label: fuel,
           data: [Math.round(totals[fuel] || 0)],
-          backgroundColor: (fc[fuel] || '#95a5a6') + 'dd',
+          backgroundColor: (fc[fuel] || '#95a5a6') + 'cc',
           borderColor:     (fc[fuel] || '#95a5a6'),
           borderWidth: 1,
         }))
@@ -782,7 +782,7 @@ function drawGenChart(data) {
         for (const r of activeRegions) total += histLookup[r]?.[l]?.[fuel] || 0;
         return Math.round(total);
       }),
-      backgroundColor: color + '44', borderColor: color,
+      backgroundColor: color + 'cc', borderColor: color,
       borderWidth: 0.5, fill: true, pointRadius: 0,
       tension: 0.2, stack: 'actual', spanGaps: false, yAxisID: 'y', order: 1,
     };
@@ -1139,12 +1139,13 @@ function drawDemandChart(data) {
           },
           grid: { color: '#1e2d4544' }
         },
-        y: {
+        y: { min: 0,
           ticks: {
-            color: '#94a3b8',
-            font: { family: 'Space Mono', size: 10 },
-            callback: v => v.toLocaleString() + ' MW'
+            color: '#64748b',
+            font: { family: 'Space Mono', size: 9 },
+            callback: v => (v/1000).toFixed(1) + ' GW'
           },
+          title: { display: true, text: 'GW', color: '#64748b', font: { family: 'Space Mono', size: 9 } },
           grid: { color: '#1e2d45' }
         }
       }
@@ -1798,10 +1799,11 @@ function _drawOriginPortfolioChart(stationMap, fc) {
       backgroundColor: col + 'bb',
       borderColor: col,
       borderWidth: 1,
-      fill: 'origin',
+      fill: true,
+      stack: 'stations',
       pointRadius: 0,
       tension: 0.2,
-      spanGaps: true,
+      spanGaps: false,
       yAxisID: 'y',
       order: 2,
     };
@@ -1869,7 +1871,7 @@ function _drawOriginPortfolioChart(stationMap, fc) {
           },
           grid:{color:'#1e2d4522'}
         },
-        y:{stacked:false,ticks:{color:'#94a3b8',font:{family:'Space Mono',size:10},callback:v=>fmt(v)},grid:{color:'#1e2d45'}},
+        y:{stacked:true,min:0,ticks:{color:'#94a3b8',font:{family:'Space Mono',size:10},callback:v=>fmt(v)},grid:{color:'#1e2d45'}},
         yPrice: hasPrices ? {
           type:'linear', position:'right',
           ticks:{color:'#f39c12', font:{family:'Space Mono',size:9}, callback:v=>'$'+v.toFixed(0)},
@@ -3307,10 +3309,10 @@ function tempColour(t, type) {
     if (t < 15)  return ['#3b82f6', '#bfdbfe'];  // blue
     return ['transparent', '#94a3b8'];            // no colour 15–30
   } else {
-    if (t >= 20) return ['#dc2626', '#fecaca'];  // red
-    if (t >= 17) return ['#f97316', '#1e293b'];  // orange
-    if (t < 10)  return ['#3b82f6', '#bfdbfe'];  // blue
-    return ['transparent', '#94a3b8'];            // no colour 10–17
+    if (t >= 23) return ['#dc2626', '#fecaca'];  // red  >23
+    if (t >= 20) return ['#f97316', '#1e293b'];  // orange 20-23
+    if (t < 10)  return ['#3b82f6', '#bfdbfe'];  // blue  <10
+    return ['transparent', '#94a3b8'];            // no colour 10-20
   }
 }
 
@@ -3331,16 +3333,16 @@ function renderWeatherTable(weather) {
     return '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px 0 4px">Weather loading… (refreshes every 30 min)</div>';
   }
 
-  const cellStyle = 'padding:3px 5px;text-align:center;font-size:11px;font-family:var(--font-mono);min-width:36px;';
-  const headerCellStyle = 'padding:3px 5px;text-align:center;font-size:9px;font-family:var(--font-mono);color:#64748b;white-space:nowrap;';
-  const labelCellStyle = 'padding:3px 8px;text-align:left;font-size:10px;font-family:var(--font-mono);color:#94a3b8;white-space:nowrap;';
-  const regionCellStyle = 'padding:3px 8px;text-align:left;font-size:10px;font-family:var(--font-mono);font-weight:700;color:#94a3b8;';
+  const cellStyle = 'padding:2px 4px;text-align:center;font-size:10px;font-family:var(--font-mono);min-width:30px;';
+  const headerCellStyle = 'padding:2px 4px;text-align:center;font-size:8px;font-family:var(--font-mono);color:#64748b;white-space:nowrap;';
+  const labelCellStyle = 'padding:2px 6px;text-align:left;font-size:9px;font-family:var(--font-mono);color:#94a3b8;white-space:nowrap;';
+  const regionCellStyle = 'padding:2px 6px;text-align:left;font-size:9px;font-family:var(--font-mono);font-weight:700;color:#94a3b8;';
   const tableStyle = 'width:100%;border-collapse:collapse;margin-bottom:4px;';
 
   const buildTable = (type) => {
     const label = type === 'max' ? 'Maximum Temperatures' : 'Minimum Temperatures';
-    let t = `<div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:#94a3b8;
-      letter-spacing:0.05em;padding:8px 0 4px;text-transform:uppercase">${label}</div>`;
+    let t = `<div style="font-family:var(--font-mono);font-size:9px;font-weight:700;color:#94a3b8;
+      letter-spacing:0.05em;padding:4px 0 2px;text-transform:uppercase">${label}</div>`;
     t += `<table style="${tableStyle}">`;
 
     // Header row — day + date
