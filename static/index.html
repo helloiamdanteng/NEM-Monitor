@@ -782,7 +782,7 @@ function drawGenChart(data) {
         for (const r of activeRegions) total += histLookup[r]?.[l]?.[fuel] || 0;
         return Math.round(total);
       }),
-      backgroundColor: color + 'cc', borderColor: color,
+      backgroundColor: color + '44', borderColor: color,
       borderWidth: 0.5, fill: true, pointRadius: 0,
       tension: 0.2, stack: 'actual', spanGaps: false, yAxisID: 'y', order: 1,
     };
@@ -1825,14 +1825,14 @@ function _drawOriginPortfolioChart(stationMap, fc) {
         return null;
       }),
       borderColor: '#f39c12', backgroundColor: 'transparent',
-      borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+      borderWidth: 1, pointRadius: 0, tension: 0.2,
       spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
     });
     priceDatasets.push({
       label: 'Price (forecast)',
       data: allSlots.map(t => pdMap[t] !== undefined ? pdMap[t] : null),
       borderColor: '#f39c12', backgroundColor: 'transparent',
-      borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, tension: 0.2,
+      borderWidth: 1, borderDash: [5,4], pointRadius: 0, tension: 0.2,
       spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
     });
   }
@@ -1977,8 +1977,8 @@ async function openOriginStationModal(stnName) {
       pointRadius: 0,
       tension: 0.2,
       spanGaps: false,
-      fill: 'origin',
-      stack: 'units',
+      fill: true,
+      stack: 'stations',
       yAxisID: 'y',
       order: 2,
     });
@@ -1994,14 +1994,14 @@ async function openOriginStationModal(stnName) {
       return null;
     }),
     borderColor: '#f39c12', backgroundColor: 'transparent',
-    borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+    borderWidth: 1, pointRadius: 0, tension: 0.2,
     spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
   });
   datasets.push({
     label: 'Price (forecast)',
     data: allLabels.map(t => t > lastSlot ? (pdPriceMap[t] ?? null) : null),
     borderColor: '#f39c12', backgroundColor: 'transparent',
-    borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, tension: 0.2,
+    borderWidth: 1, borderDash: [5,4], pointRadius: 0, tension: 0.2,
     spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
   });
 
@@ -2279,7 +2279,7 @@ async function openStationModal(regIdx, registry) {
     }),
     borderColor: '#f39c12',
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 1,
     pointRadius: 0,
     tension: 0.2,
     spanGaps: true,
@@ -2292,7 +2292,7 @@ async function openStationModal(regIdx, registry) {
     data: allLabels.map(t => t > lastSlot ? (pdPriceMap[t] ?? null) : null),
     borderColor: '#f39c12',
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderDash: [5,4],
     pointRadius: 0,
     tension: 0.2,
@@ -2741,8 +2741,8 @@ function drawBatteryCharts(data) {
         datasets.push({
           label: REGION_SHORT[r], regionId: r,
           data: allSlots.map((l,i) => i <= lastIdx ? (hm[l] ?? null) : null),
-          borderColor: color, backgroundColor: color + '55',
-          borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+          borderColor: color, backgroundColor: color + '44',
+          borderWidth: 1, pointRadius: 0, tension: 0.2,
           fill: 'origin', spanGaps: false, stack: 'batt', yAxisID: 'y', order: 2,
         });
       }
@@ -2793,8 +2793,8 @@ function drawBatteryCharts(data) {
         datasets.push({
           label: REGION_SHORT[r],
           data: allSlots.map((l,i) => i <= lastIdx ? (hm[l] ?? null) : null),
-          borderColor: color, backgroundColor: color+'55',
-          borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+          borderColor: color, backgroundColor: color+'44',
+          borderWidth: 1, pointRadius: 0, tension: 0.2,
           fill: 'origin', spanGaps: false, stack: 'batt', yAxisID: 'y', order: 2,
         });
       }
@@ -3359,7 +3359,7 @@ function renderWeatherTable(weather) {
       t += '<tr>';
       t += `<td style="${regionCellStyle}">${REGION_LABEL[r]}</td>`;
       t += `<td style="${labelCellStyle}">${rData.name}</td>`;
-      for (const d of days) {
+      for (const d of (rData.days || [])) {
         const val = type === 'max' ? d.temp_max : d.temp_min;
         const [bg, textCol] = tempColour(val, type);
         const hasBg = bg !== 'transparent';
@@ -3716,12 +3716,7 @@ function drawDMinus1Charts(data) {
   const xTick5  = (v,i) => slots5[i]?.endsWith(':00')  ? slots5[i]  : null;
   const xTick30 = (v,i) => slots30[i]?.endsWith(':00') ? slots30[i] : null;
 
-  const tooltipLabel = c => {
-    if (c.raw === null) return null;
-    const lbl = c.dataset.label || '';
-    if (lbl.includes('Price') || lbl.includes('$')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
-    return ` ${lbl}: ${fmt(c.raw,0)} MW`;
-  };
+  
 
   // ── Price chart ─────────────────────────────────────────────────────────────
   destroyChart('dm1Price');
