@@ -632,7 +632,7 @@ function drawGenChart(data) {
   ctx.style.display = '';
 
   const fc         = genData.fuel_colors || {};
-  const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Rooftop Solar','Battery','Liquid','Other'];
+  const FUEL_ORDER = ['Wind','Solar','Brown Coal','Black Coal','Gas','Hydro','Battery','Rooftop Solar','Liquid','Other'];
   // Filter rooftop solar unless toggled on
   const fuelOrderFiltered = FUEL_ORDER.filter(f => f !== 'Rooftop Solar' || genShowRooftop);
   const fuelHist   = genData.fuel_history || {};
@@ -712,9 +712,8 @@ function drawGenChart(data) {
     for (const pt of (fuelHist[r] || [])) histLookup[r][pt.interval] = pt;
   }
 
-  // Demand line uses DEMAND_AND_NONSCHEDGEN — includes semi-scheduled generation
-  // so it sits at the top of the full supply stack (scheduled + semi-scheduled)
-  const demHist = data.op_demand_history || data.demand_history || {};
+  // Demand line = TOTALDEMAND + SEMISCHEDULE_CLEAREDMW (sits at top of full supply stack)
+  const demHist = data.gen_demand_history || data.op_demand_history || data.demand_history || {};
   const demHistLookup = {};
   for (const r of activeRegions) {
     demHistLookup[r] = {};
@@ -804,7 +803,7 @@ function drawGenChart(data) {
     }),
     backgroundColor: '#38bdf855', borderColor: '#38bdf8',
     borderWidth: 0.5, fill: 'origin', pointRadius: 0,
-    tension: 0.2, stack: 'actual', spanGaps: false, yAxisID: 'y', order: 1,
+    tension: 0.2, stack: 'negative', spanGaps: false, yAxisID: 'y', order: 1,
   };
 
   // Pump hydro load (negative — stored as 'Pump Hydro' key in fuel history)
@@ -819,7 +818,7 @@ function drawGenChart(data) {
     }),
     backgroundColor: '#22d3ee44', borderColor: '#22d3ee',
     borderWidth: 0.5, fill: 'origin', pointRadius: 0,
-    tension: 0.2, stack: 'actual', spanGaps: false, yAxisID: 'y', order: 1,
+    tension: 0.2, stack: 'negative', spanGaps: false, yAxisID: 'y', order: 1,
   };
 
   // ── Scheduled demand lines ──────────────────────────────────────────────────
