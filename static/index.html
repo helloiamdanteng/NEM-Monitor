@@ -220,7 +220,7 @@ tr:last-child td { border-bottom:none; }
     <span class="icon">🏭</span><span class="label">DUIDs</span>
   </button>
   <button class="nav-btn" onclick="showPanel('batteries')" id="nav-batteries">
-    <span class="icon">🔋</span><span class="label">Batteries</span>
+    <span class="icon">🔋</span><span class="label">Batt</span>
   </button>
   <button class="nav-btn" onclick="showPanel('dminus1')" id="nav-dminus1">
     <span class="icon">📆</span><span class="label">D-1</span>
@@ -542,6 +542,18 @@ function renderGeneration(data) {
   const icIds = Object.keys(data.ic_history || {}).sort();
   const IC_COLORS = ['#00d4ff','#ff6b35','#2ed573','#ffd32a','#9b59b6','#e74c3c'];
   let html = '<div class="section-title">NEM Generation — 24hr Fuel Mix</div>';
+  // ── Spot prices at top ───────────────────────────────────────────────────────
+  html += '<div class="price-grid" style="margin-bottom:8px">';
+  for (const r of REGIONS) {
+    const p = (data.prices || {})[r];
+    const cls = p !== undefined ? priceClass(p) : 'low';
+    html += `<div class="price-card ${REGION_CLASS[r]}">
+      <div class="region">${REGION_SHORT[r]}</div>
+      <div class="price ${cls}">${p !== undefined ? fmtPrice(p) : '—'}</div>
+      <div class="unit">$/MWh</div></div>`;
+  }
+  html += '</div>';
+
 
   // Region selector + rooftop toggle
   html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
@@ -700,9 +712,9 @@ function drawGenChart(data) {
     for (const pt of (fuelHist[r] || [])) histLookup[r][pt.interval] = pt;
   }
 
-  // Demand (DEMAND_AND_NONSCHEDGEN) actual history — from fast cache
-  // Use scheduled demand only (demand_history = TOTALDEMAND) — gen chart shows scheduled supply
-  const demHist = data.demand_history || {};
+  // Demand line uses DEMAND_AND_NONSCHEDGEN — includes semi-scheduled generation
+  // so it sits at the top of the full supply stack (scheduled + semi-scheduled)
+  const demHist = data.op_demand_history || data.demand_history || {};
   const demHistLookup = {};
   for (const r of activeRegions) {
     demHistLookup[r] = {};
@@ -829,7 +841,7 @@ function drawGenChart(data) {
   const lastDemSlotIdx = lastDemSlot ? allSlots.indexOf(lastDemSlot) : -1;
 
   const demActualDataset = {
-    label: 'Demand (scheduled)',
+    label: 'Demand + NonSched',
     data: allSlots.map((l, i) => i <= lastDemSlotIdx ? (demValMap[l] ?? null) : null),
     borderColor: '#ffffff', backgroundColor: 'transparent',
     borderWidth: 2.5, pointRadius: 0, tension: 0.2,
@@ -2559,6 +2571,17 @@ function renderBatteries(data) {
   const isNEM     = batteryRegionFilter === 'NEM';
 
   let html = '<div class="section-title">NEM Batteries</div>';
+  // ── Spot prices at top ───────────────────────────────────────────────────────
+  html += '<div class="price-grid" style="margin-bottom:8px">';
+  for (const r of REGIONS) {
+    const p = (data.prices || {})[r];
+    const cls = p !== undefined ? priceClass(p) : 'low';
+    html += `<div class="price-card ${REGION_CLASS[r]}">
+      <div class="region">${REGION_SHORT[r]}</div>
+      <div class="price ${cls}">${p !== undefined ? fmtPrice(p) : '—'}</div>
+      <div class="unit">$/MWh</div></div>`;
+  }
+  html += '</div>';
 
   // Region selector
   html += '<div class="region-pills">';
