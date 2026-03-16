@@ -911,7 +911,7 @@ function drawGenChart(data) {
              ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
                callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null },
              grid:{color:'#1e2d4544'} },
-        y: { stacked: true, min: 0,
+        y: { stacked: true,
              ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
              grid: { color:'#1e293b' },
              title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} } },
@@ -1147,7 +1147,7 @@ function drawDemandChart(data) {
           },
           grid: { color: '#1e2d4544' }
         },
-        y: { min: 0,
+        y: {
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
           title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} },
           grid: { color: '#1e293b' }
@@ -3175,7 +3175,7 @@ function drawWeekCharts(fastData) {
         label: isNEM ? REGION_SHORT[r] : 'Demand + Non-Sched',
         data: slots5.map(l => dm[l] ?? null),
         borderColor: color, backgroundColor: color + (isNEM ? '22' : '33'),
-        borderWidth: isNEM ? 1.5 : 2, pointRadius: 0, tension: 0.2,
+        borderWidth: isNEM ? 1 : 1.5, pointRadius: 0, tension: 0.2,
         spanGaps: false, fill: !isNEM,
       });
     }
@@ -3395,16 +3395,17 @@ function renderDayAhead(data) {
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
   const dayStr = tomorrowDate.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'short' });
 
-  let html = `<div class="section-title">D+ — ${dayStr}</div>`;
+  let html = '';
 
-
-  // ── Weather forecast ─────────────────────────────────────────────────────────
+  // ── Weather forecast (above heading) ────────────────────────────────────────
   try {
     const weather = (slowData && slowData.weather) || {};
     html += renderWeatherTable(weather);
   } catch(e) {
     console.warn('Weather render error:', e);
   }
+
+  html += `<div class="section-title" style="margin-top:8px">${dayStr}</div>`;
 
   // Region filter pills — single set controlling all charts
   html += '<div class="region-pills">';
@@ -3508,7 +3509,7 @@ function drawDayAheadCharts(data) {
           data: allSlots.map(s => pm[s] !== undefined ? pm[s] : null),
           borderColor: color + 'cc',
           backgroundColor: 'transparent',
-          borderWidth: 1.8,
+          borderWidth: 1,
           pointRadius: 0,
           tension: 0.2,
           spanGaps: true,
@@ -3586,7 +3587,7 @@ function drawDayAheadCharts(data) {
           data: allSlots.map(s => dm[s] !== undefined ? dm[s] : null),
           borderColor: color + 'cc',
           backgroundColor: color + '12',
-          borderWidth: 1.8,
+          borderWidth: 1,
           pointRadius: 0,
           tension: 0.2,
           spanGaps: true,
@@ -3732,7 +3733,7 @@ function drawDMinus1Charts(data) {
         label: isNEM ? REGION_SHORT[r] : 'Price',
         data: slots30.map(l => pm[l] ?? null),
         borderColor: color, backgroundColor: 'transparent',
-        borderWidth: isNEM ? 1.5 : 2, pointRadius: 0, tension: 0.2, spanGaps: false,
+        borderWidth: isNEM ? 1 : 1.5, pointRadius: 0, tension: 0.2, spanGaps: false,
       });
     }
     charts.dm1Price = new Chart(pCtx, {
