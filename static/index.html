@@ -240,7 +240,7 @@ const FUEL_ICONS = {"Black Coal":"⬛","Brown Coal":"🟫","Gas":"🔥","Hydro":
 let currentPanel = 'prices';
 let charts = {};
 let latestData = null;
-let genRegion = 'NEM';
+let genRegion = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']); // multi-select Set
 let genShowRooftop = false;  // default: rooftop solar excluded
 let genData = null;
 let slowData = null;
@@ -558,12 +558,12 @@ function renderGeneration(data) {
   // Region selector + rooftop toggle
   html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
   html += '<div class="region-pills" style="margin-bottom:0;flex:1">';
-  const selRegions = ['NEM', ...REGIONS];
-  for (const r of selRegions) {
-    const label = r === 'NEM' ? 'NEM' : REGION_SHORT[r];
-    const color = r === 'NEM' ? '#94a3b8' : REGION_COLORS[r];
-    const active = genRegion === r ? 'active' : '';
-    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setGenRegion('${r}')">${label}</button>`;
+  const isGenNEM = REGIONS.every(r => genRegion.has(r));
+  html += `<button class="region-pill ${isGenNEM ? 'active' : ''}" style="color:#94a3b8;border-color:#94a3b8" onclick="toggleAllGenRegions()">NEM</button>`;
+  for (const r of REGIONS) {
+    const color = REGION_COLORS[r];
+    const active = genRegion.has(r) ? 'active' : '';
+    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="toggleGenRegion('${r}')">${REGION_SHORT[r]}</button>`;
   }
   html += '</div>';
   html += `<button onclick="toggleGenRooftop()" style="
@@ -637,7 +637,7 @@ function drawGenChart(data) {
   const fuelOrderFiltered = FUEL_ORDER.filter(f => f !== 'Rooftop Solar' || genShowRooftop);
   const fuelHist   = genData.fuel_history || {};
   const fuelMix    = genData.fuel_mix || {};
-  const activeRegions = genRegion === 'NEM' ? REGIONS : [genRegion];
+  const activeRegions = REGIONS.filter(r => genRegion.has(r));
   const regionLabel = genRegion === 'NEM' ? 'NEM' : genRegion.replace('1','');
   const card = ctx.closest('.chart-card');
 
@@ -2080,8 +2080,23 @@ async function openOriginStationModal(stnName) {
 
 // ── Stations (all NEM generators) ────────────────────────────────────────────
 
-function setGenRegion(r) {
-  genRegion = r;
+function toggleGenRegion(r) {
+  if (genRegion.has(r)) {
+    if (genRegion.size > 1) genRegion.delete(r);
+  } else {
+    genRegion.add(r);
+  }
+  if (latestData) renderPanel('generation', latestData);
+}
+
+function toggleAllGenRegions() {
+  const allOn = REGIONS.every(r => genRegion.has(r));
+  if (allOn) {
+    // If all on, turn all off except keep at least one — just reset to all
+    genRegion = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+  } else {
+    genRegion = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+  }
   if (latestData) renderPanel('generation', latestData);
 }
 
