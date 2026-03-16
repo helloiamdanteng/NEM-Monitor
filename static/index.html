@@ -2086,7 +2086,7 @@ async function openOriginStationModal(stnName) {
 
 function toggleGenRegion(r) {
   if (genRegion.has(r)) {
-    if (genRegion.size > 1) genRegion.delete(r);
+    genRegion.delete(r);  // always allow turning off
   } else {
     genRegion.add(r);
   }
@@ -3085,6 +3085,8 @@ function drawWeekCharts(fastData) {
 
   // ── Wind + Solar UIGF + Demand line chart ────────────────────────────────
   const renewDatasets = [];
+  const weekShowSolar = document.getElementById('wr-solar')?.dataset.on !== '0';
+  const weekShowWind  = document.getElementById('wr-wind')?.dataset.on !== '0';
 
   // Stacked solar + wind areas per filtered region
   for (const r of [...REGIONS].reverse()) {
@@ -3094,7 +3096,7 @@ function drawWeekCharts(fastData) {
       if (p.solar_uigf != null) solarMap[p.interval] = p.solar_uigf;
       if (p.wind_uigf  != null) windMap[p.interval]  = p.wind_uigf;
     });
-    if (Object.keys(solarMap).length > 0) {
+    if (Object.keys(solarMap).length > 0 && weekShowSolar) {
       renewDatasets.push({
         label: REGION_SHORT[r] + ' Solar', regionId: r, seriesType: 'solar',
         data: pasaLabels.map(l => solarMap[l] ?? null),
@@ -3103,7 +3105,7 @@ function drawWeekCharts(fastData) {
         spanGaps: true, stack: 'renew', yAxisID: 'y',
       });
     }
-    if (Object.keys(windMap).length > 0) {
+    if (Object.keys(windMap).length > 0 && weekShowWind) {
       renewDatasets.push({
         label: REGION_SHORT[r] + ' Wind', regionId: r, seriesType: 'wind',
         data: pasaLabels.map(l => windMap[l] ?? null),
@@ -3415,15 +3417,29 @@ function drawDMinus1Charts(data) {
 let dayAheadRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
 
 function toggleDayAheadRegion(r) {
-  if (dayAheadRegionFilter.has(r)) {
-    if (dayAheadRegionFilter.size > 1) dayAheadRegionFilter.delete(r);
+  if (r === 'NEM') {
+    const allOn = REGIONS.every(x => dayAheadRegionFilter.has(x));
+    dayAheadRegionFilter = allOn ? new Set() : new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
   } else {
-    dayAheadRegionFilter.add(r);
+    if (dayAheadRegionFilter.has(r)) {
+      dayAheadRegionFilter.delete(r);
+    } else {
+      dayAheadRegionFilter.add(r);
+    }
   }
   // Keep week filters in sync with top pills
   weekRegionFilter = new Set(dayAheadRegionFilter);
   weekRenewFilter  = new Set(dayAheadRegionFilter);
   if (latestData) renderPanel('dayahead', latestData);
+}
+
+function toggleWeekRenewFuel(fuel) {
+  const btn = document.getElementById('wr-' + fuel);
+  if (!btn) return;
+  const on = btn.dataset.on === '1';
+  btn.dataset.on = on ? '0' : '1';
+  btn.style.opacity = on ? '0.35' : '1';
+  if (latestData) { requestAnimationFrame(() => drawWeekCharts(latestData)); }
 }
 
 function renderDayAhead(data) {
@@ -3434,8 +3450,10 @@ function renderDayAhead(data) {
   let html = `<div class="section-title">D+ — ${dayStr}</div>`;
   html += '<div style="font-size:10px;color:#475569;padding:0 16px 8px;font-family:var(--font-mono)">All data is predispatch forecast · dashed lines</div>';
 
-  // Region filter pills
+  // Region filter pills — single set controlling all charts
   html += '<div class="region-pills">';
+  const daNEM = REGIONS.every(r => dayAheadRegionFilter.has(r));
+  html += `<button class="region-pill ${daNEM ? 'active' : ''}" style="color:#94a3b8;border-color:#94a3b8" onclick="toggleDayAheadRegion('NEM')">NEM</button>`;
   for (const r of REGIONS) {
     const active = dayAheadRegionFilter.has(r) ? 'active' : '';
     const color = REGION_COLORS[r];
@@ -3448,12 +3466,6 @@ function renderDayAhead(data) {
   html += '<div class="chart-title">Price Forecast ($/MWh) — Predispatch</div>';
   html += '<div class="chart-container" style="height:250px"><canvas id="dayAheadPriceChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
-  for (const r of REGIONS) {
-    html += `<button onclick="toggleDayAheadPriceRegion('${r}')" id="dap-${r}" data-on="1"
-      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
-      border:1px solid ${REGION_COLORS[r]};background:${REGION_COLORS[r]}33;color:${REGION_COLORS[r]};cursor:pointer"
-      >${REGION_SHORT[r]}</button>`;
-  }
   html += '</div></div>';
 
   // Demand chart
@@ -3461,12 +3473,6 @@ function renderDayAhead(data) {
   html += '<div class="chart-title">Demand Forecast (MW) — ST PASA 50% probability</div>';
   html += '<div class="chart-container" style="height:220px"><canvas id="dayAheadDemandChart"></canvas></div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
-  for (const r of REGIONS) {
-    html += `<button onclick="toggleDayAheadDemandRegion('${r}')" id="dad-${r}" data-on="1"
-      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
-      border:1px solid ${REGION_COLORS[r]};background:${REGION_COLORS[r]}33;color:${REGION_COLORS[r]};cursor:pointer"
-      >${REGION_SHORT[r]}</button>`;
-  }
   html += '</div></div>';
 
   // ── Week-ahead section (merged from Week page) ────────────────────────────
@@ -3483,17 +3489,11 @@ function renderDayAhead(data) {
 
     // Renewables chart with region toggles
     html += `<div class="week-chart-card" style="margin-top:8px"><div class="chart-title">7-Day Wind + Solar + Demand (ST PASA)</div>`;
-    html += '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">';
-    const allOn = REGIONS.every(r => weekRenewFilter.has(r));
-    const nemCol = allOn ? '#94a3b8' : '#475569';
-    html += `<button onclick="toggleWeekRenew('NEM')" style="font-family:var(--font-mono);font-size:10px;padding:4px 8px;border-radius:20px;cursor:pointer;border:1px solid ${nemCol};background:${allOn?'#94a3b822':'transparent'};color:${nemCol}">NEM</button>`;
-    for (const r of REGIONS) {
-      const on = weekRenewFilter.has(r);
-      const color = REGION_COLORS[r];
-      html += `<button onclick="toggleWeekRenew('${r}')" style="font-family:var(--font-mono);font-size:10px;padding:4px 8px;border-radius:20px;cursor:pointer;border:1px solid ${on?color:color+'55'};background:${on?color+'22':'transparent'};color:${on?color:color+'88'}">${REGION_SHORT[r]}</button>`;
-    }
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">';
+    html += '<button onclick="toggleWeekRenewFuel(\'solar\')" id="wr-solar" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:0.35">☀ Solar</button>';
+    html += '<button onclick="toggleWeekRenewFuel(\'wind\')" id="wr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
     html += '</div>';
-    html += `<div style="position:relative;height:200px"><canvas id="weekRenewChart"></canvas></div></div>`;
+    html += `<div style="position:relative;height:220px"><canvas id="weekRenewChart"></canvas></div></div>`;
   }
 
   return html;
