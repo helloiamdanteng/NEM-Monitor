@@ -1005,7 +1005,14 @@ def scrape_predispatch_generation(text: str) -> dict:
                     label = dt.strftime("%H:%M")
                     sched = float(row.get("DISPATCHABLEGENERATION", 0) or 0)
                     semi  = float(row.get("SEMISCHEDULE_CLEAREDMW", 0) or 0)
-                    region_series[region][label] = {"Scheduled": round(sched, 1), "SemiScheduled": round(semi, 1)}
+                    sol   = float(row.get("SS_SOLAR_UIGF", row.get("SS_SOLAR_CLEAREDMW", 0)) or 0)
+                    win   = float(row.get("SS_WIND_UIGF",  row.get("SS_WIND_CLEAREDMW",  0)) or 0)
+                    region_series[region][label] = {
+                        "Scheduled":     round(sched, 1),
+                        "SemiScheduled": round(semi, 1),
+                        "solar":         round(sol, 1),
+                        "wind":          round(win, 1),
+                    }
             except (ValueError, TypeError):
                 pass
         break
