@@ -330,16 +330,18 @@ PUMP_LOAD_DUIDS: set = {
 }
 
 FUEL_COLORS = {
-    "Black Coal": "#4a4a6a",
-    "Brown Coal": "#8B4513",
-    "Gas":        "#ff9f40",
-    "Hydro":      "#36a2eb",
-    "Wind":       "#4bc0c0",
-    "Solar":      "#ffd700",
-    "Rooftop Solar": "#ffe066",
-    "Battery":    "#9b59b6",
-    "Liquid":     "#e74c3c",
-    "Other":      "#95a5a6",
+    "Black Coal":        "#4a4a6a",
+    "Brown Coal":        "#8B4513",
+    "Gas":               "#ff9f40",
+    "Hydro":             "#36a2eb",
+    "Wind":              "#4bc0c0",
+    "Solar":             "#ffd700",
+    "Rooftop Solar":     "#ffe066",
+    "Battery":           "#9b59b6",
+    "Battery (charging)":"#a855f7",
+    "Pump Hydro":        "#06b6d4",
+    "Liquid":            "#e74c3c",
+    "Other":             "#95a5a6",
 }
 ALL_FUELS = list(FUEL_COLORS.keys())
 
@@ -520,7 +522,7 @@ def scrape_region_summary(text: str) -> dict:
             continue  # skip intervention runs
         e = summary.setdefault(region, {})
         for f in ["TOTALDEMAND","DEMANDFORECAST","INITIALSUPPLY",
-                  "DISPATCHABLEGENERATION","SEMISCHEDULE_CLEAREDMW","NETINTERCHANGE",
+                  "DISPATCHABLEGENERATION","DISPATCHABLELOAD","SEMISCHEDULE_CLEAREDMW","NETINTERCHANGE",
                   "DEMAND_AND_NONSCHEDGEN","TOTALINTERMITTENTGENERATION",
                   "BDU_ENERGY_STORAGE","BDU_MAX_AVAIL","BDU_MIN_AVAIL",
                   "BDU_CLEAREDMW_GEN","BDU_CLEAREDMW_LOAD","BDU_INITIAL_ENERGY_STORAGE"]:
@@ -780,13 +782,16 @@ def scrape_dispatch_history() -> dict:
                     bdu_load = row.get("BDU_CLEAREDMW_LOAD", "")
                     bdu_soc  = row.get("BDU_ENERGY_STORAGE", "")
                     bdu_cap  = row.get("BDU_MAX_AVAIL", "")
+                    disp_load_str = row.get("DISPATCHABLELOAD", "")
                     if bdu_gen or bdu_load:
                         try:
                             g = round(float(bdu_gen or 0), 1)
                             l = round(float(bdu_load or 0), 1)
                             s = round(float(bdu_soc), 1) if bdu_soc else None
                             c = round(float(bdu_cap), 1) if bdu_cap else None
-                            pts.append(("bdu", region, label, {"net_mw": round(g-l,1), "gen": g, "load": l, "storage": s, "max_avail": c}))
+                            dl = round(float(disp_load_str), 1) if disp_load_str else l
+                            pump = max(round(dl - l, 1), 0)
+                            pts.append(("bdu", region, label, {"net_mw": round(g-l,1), "gen": g, "load": l, "pump_load": pump, "storage": s, "max_avail": c}))
                         except (ValueError, TypeError):
                             pass
                 except (ValueError, TypeError):
@@ -1404,11 +1409,15 @@ def _update_bdu_history(region_summary: dict) -> None:
         load = d.get("BDU_CLEAREDMW_LOAD", 0) or 0
         soc  = d.get("BDU_ENERGY_STORAGE")
         cap  = d.get("BDU_MAX_AVAIL") or d.get("BDU_MIN_AVAIL")
+        # Pump hydro load = total scheduled load - battery load
+        disp_load = d.get("DISPATCHABLELOAD", 0) or 0
+        pump_load = max(round(disp_load - load, 1), 0)  # never negative
         _bdu_history[region][label] = {
-            "net_mw":  round(gen - load, 1),   # positive=discharging, negative=charging
-            "gen":     round(gen, 1),
-            "load":    round(load, 1),
-            "storage": round(soc, 1) if soc is not None else None,
+            "net_mw":    round(gen - load, 1),   # positive=discharging, negative=charging
+            "gen":       round(gen, 1),
+            "load":      round(load, 1),
+            "pump_load": pump_load,               # pump hydro MW consuming
+            "storage":   round(soc, 1) if soc is not None else None,
             "max_avail": round(cap, 1) if cap is not None else None,
         }
 
