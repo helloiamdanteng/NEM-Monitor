@@ -384,9 +384,10 @@ function renderPrices(data) {
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
   html += '<button onclick="toggleAllRenewRegions()" id="rr-NEM" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;border:1px solid #94a3b8;background:#94a3b833;color:#94a3b8;cursor:pointer">NEM</button>';
   for (const r of REGIONS) {
-    html += `<button onclick="toggleRenewRegion('${r}')" id="rr-${r}" data-on="1"
+    html += `<button onclick="toggleRenewRegion('${r}')" id="rr-${r}" data-on="${r === 'TAS1' ? '0' : '1'}"
       style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;
-      border:1px solid ${REGION_COLORS[r]};background:${REGION_COLORS[r]}33;color:${REGION_COLORS[r]};cursor:pointer"
+      border:1px solid ${REGION_COLORS[r]};background:${REGION_COLORS[r]}33;color:${REGION_COLORS[r]};cursor:pointer;
+      opacity:${r === 'TAS1' ? '0.35' : '1'}"
       >${REGION_SHORT[r]}</button>`;
   }
   html += '</div>';
@@ -1219,7 +1220,7 @@ function drawRenewablesChart(data) {
   const nowIdx = allSlots.findIndex(l => l >= nowStr);
 
   // Which regions to show
-  const activeRegs = REGIONS.filter(r => {
+  const activeRegs = [...REGIONS].reverse().filter(r => {
     const btn = document.getElementById('rr-' + r);
     return !btn || btn.dataset.on !== '0';
   });
@@ -3036,7 +3037,7 @@ const DA_DEFAULT = new Set(['QLD1','NSW1','VIC1','SA1']);
 let daPriceFilter  = new Set(DA_DEFAULT);
 let daDemandFilter = new Set(DA_DEFAULT);
 let daPasaFilter   = new Set(DA_DEFAULT);
-let daRenewFilter  = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+let daRenewFilter  = new Set(['QLD1','NSW1','VIC1','SA1']);  // TAS wind off by default
 
 // weekRenewFilter/weekRegionFilter kept in sync with daRenewFilter/daPasaFilter
 // for drawWeekCharts compatibility
