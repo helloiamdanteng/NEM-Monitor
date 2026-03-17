@@ -647,6 +647,11 @@ function toggleAllGenRegions() {
   if (latestData) renderPanel('generation', latestData);
 }
 
+function toggleGenRooftop() {
+  genShowRooftop = !genShowRooftop;
+  if (latestData) renderPanel('generation', latestData);
+}
+
 function drawGenChart(data) {
   destroyChart('gen');
   const ctx = document.getElementById('fuelChart');
@@ -1834,8 +1839,8 @@ function _drawOriginPortfolioChart(stationMap, fc) {
     const col = '#' + [r,g,b].map(v => Math.min(255,Math.max(0,v)).toString(16).padStart(2,'0')).join('');
     return {
       label: s.name,
-      data: allSlots.map(t => s.histMap[t] ?? null),
-      backgroundColor: col + '99',
+      data: allSlots.map(t => { const v = s.histMap[t]; return v !== undefined && v !== null ? Math.max(0, v) : null; }),
+      backgroundColor: col + 'bb',
       borderColor: col,
       borderWidth: 0.5,
       fill: true,
