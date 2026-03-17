@@ -366,7 +366,7 @@ ORIGIN_DUIDS: set = {
     "SHGEN", "SHPUMP",
     "MOREESF1", "GUNNING1",
     "ERGT1",
-    "EB01",
+    "ERB01",
     # VIC
     "MORTLK1", "MORTLK2",
     "STOCKYD1",
@@ -389,7 +389,7 @@ ORIGIN_DISPLAY_NAMES: dict = {
     "BUNGWF1":  "Bungala Solar",
     "BUNGWF2":  "Bungala Solar",
     "GUNNING1": "Gunning Wind Farm",
-    "EB01":     "Eraring Battery",
+    "ERB01":     "Eraring Battery",
     "SHPUMP":   "Shoalhaven Pump",
     "ERGT1":    "Eraring",
 }
