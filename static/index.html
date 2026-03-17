@@ -1802,9 +1802,9 @@ function _drawOriginPortfolioChart(stationMap, fc) {
     return {
       label: s.name,
       data: allSlots.map(t => s.histMap[t] ?? null),
-      backgroundColor: col + 'bb',
+      backgroundColor: col + 'cc',
       borderColor: col,
-      borderWidth: 1,
+      borderWidth: 0.5,
       fill: true,
       stack: 'stations',
       pointRadius: 0,
@@ -1970,7 +1970,8 @@ async function openOriginStationModal(stnName) {
       pointRadius: 0,
       tension: 0.2,
       spanGaps: false,
-      fill: 'origin',
+      fill: true,
+      stack: 'duids',
       yAxisID: 'y',
       order: 2,
     });
@@ -2041,7 +2042,7 @@ async function openOriginStationModal(stnName) {
             grid: { color:'#1e293b' },
           },
           y: {
-            stacked: false,
+            stacked: true,
             ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
             grid: { color:'#1e293b' },
             title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} }
@@ -2086,6 +2087,36 @@ async function openOriginStationModal(stnName) {
   }
 
   document.getElementById('stationModalStats').innerHTML = statsHtml;
+}
+
+
+// ── Stations page state ───────────────────────────────────────────────────────
+let stationsHideOffline  = true;
+let stationsHideSmall    = false;
+
+function toggleAllStationRegions() {
+  stationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+  if (genData) renderPanel('stations', latestData);
+}
+
+function toggleStationRegion(region) {
+  const onlyThis = stationsRegionFilter.size === 1 && stationsRegionFilter.has(region);
+  if (onlyThis) {
+    stationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+  } else {
+    stationsRegionFilter = new Set([region]);
+  }
+  if (genData) renderPanel('stations', latestData);
+}
+
+function toggleStationsHideOffline() {
+  stationsHideOffline = !stationsHideOffline;
+  if (genData) renderPanel('stations', latestData);
+}
+
+function toggleStationsHideSmall() {
+  stationsHideSmall = !stationsHideSmall;
+  if (genData) renderPanel('stations', latestData);
 }
 
 
