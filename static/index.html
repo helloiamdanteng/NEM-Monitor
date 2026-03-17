@@ -1935,7 +1935,9 @@ async function openOriginStationModal(stnName) {
     const slots = d.history.map(p => p.interval).filter(Boolean).sort();
     if (slots.length && slots[slots.length-1] > lastSlot) lastSlot = slots[slots.length-1];
   }
-  const allLabels = allSlots.filter(s => s <= lastSlot);
+  const labels    = allSlots.slice(0, allSlots.findIndex(s => s > lastSlot));
+  const futurePriceSlots = allSlots.filter(t => t > lastSlot);
+  const allLabels = [...labels, ...futurePriceSlots];
 
   // Price maps — same pattern as DUIDs modal
   const pdPricesArr   = (latestData?.predispatch_prices || {})[region] || [];
