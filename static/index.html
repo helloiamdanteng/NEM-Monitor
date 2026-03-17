@@ -3023,8 +3023,6 @@ function renderWeekAhead(fastData) {
       html += `<button onclick="toggleWeekRenew('${r}')" style="font-family:var(--font-mono);font-size:10px;padding:4px 8px;border-radius:20px;cursor:pointer;border:1px solid ${on?color:color+'55'};background:${on?color+'22':'transparent'};color:${on?color:color+'88'}">${REGION_SHORT[r]}</button>`;
     }
     html += '</div>';
-    html += `<div style="position:relative;height:220px"><canvas id="weekRenewChart"></canvas></div>`;
-    html += chartPills('renew', daRenewFilter);
     html += '</div>';
   }
 
@@ -3229,9 +3227,12 @@ function renderDayAhead(data) {
     html += '</div>';
 
     html += `<div class="week-chart-card" style="margin-top:8px"><div class="chart-title">7-Day Wind + Solar Forecast (ST PASA)</div>`;
-    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">';
+    html += `<div style="position:relative;height:220px"><canvas id="weekRenewChart"></canvas></div>`;
+    html += chartPills('renew', daRenewFilter);
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
     html += '<button onclick="toggleWeekRenewFuel(\'solar\')" id="wr-solar" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:0.35">☀ Solar</button>';
     html += '<button onclick="toggleWeekRenewFuel(\'wind\')" id="wr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
+    html += '</div>';
     html += '</div>';
     html += `<div style="position:relative;height:220px"><canvas id="weekRenewChart"></canvas></div></div>`;
   }
