@@ -358,40 +358,38 @@ ORIGIN_DUIDS: set = {
     # QLD
     "DDPS1", "MSTUART1", "MSTUART2", "MSTUART3", "ROMA_7",
     "CLARESF1", "DDSF1", "DAYDSF1",
-    "SNBESS1", "SNBESS2",
+    "SNB01",
     # NSW
     "ER01", "ER02", "ER03", "ER04",
     "URANQ1", "URANQ2", "URANQ3", "URANQ4",
     "URANQ11", "URANQ12", "URANQ13", "URANQ14",  # aliases used in some AEMO files
     "SHGEN", "SHPUMP",
     "MOREESF1", "GUNNING1",
-    "ERGT1",
+    "ERGT01",
     "ERB01",
     # VIC
-    "MORTLK1", "MORTLK2",
+    "MORTLK11", "MORTLK12",
     "STOCKYD1",
     # SA
     "OSBORNE1", "OSBORNPS",
     "QPSCL1", "QPSCL2", "QPSCL3", "QPSCL4",
     "LBBG1",
-    "SNOWSF1", "SNOWTWN1",
-    "BUNGWF1", "BUNGWF2",
+    "BNGSF1", "BNGSF2",
 }
 
 # Display name overrides — maps DUID → display station name shown on Origin page.
 # Only needed where AEMO's registered name differs from what Origin calls it.
 ORIGIN_DISPLAY_NAMES: dict = {
-    "SNBESS1":  "Supernode Battery",
-    "SNBESS2":  "Supernode Battery",
+    "SNB01":    "Supernode Battery",
     "OSBORNE1": "Osborne Cogen",
     "OSBORNPS": "Osborne Cogen",
     "ROMA_7":   "Roma Gas",
-    "BUNGWF1":  "Bungala Solar",
-    "BUNGWF2":  "Bungala Solar",
+    "BNGSF1":   "Bungala Solar 1",
+    "BNGSF2":   "Bungala Solar 2",
     "GUNNING1": "Gunning Wind Farm",
     "ERB01":     "Eraring Battery",
     "SHPUMP":   "Shoalhaven Pump",
-    "ERGT1":    "Eraring",
+    "ERGT01":   "Eraring",
 }
 
 
