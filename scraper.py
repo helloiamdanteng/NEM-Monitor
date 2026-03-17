@@ -1425,6 +1425,24 @@ def _update_bdu_history(region_summary: dict) -> None:
         }
 
 
+def _update_live_duid_history(scada: dict) -> None:
+    """Write current SCADA snapshot into _duid_history so modal charts stay live.
+    Called every 5 min from scrape_all. Only writes DUIDs we care about."""
+    label = datetime.now(AEST).strftime("%H:%M")
+    for duid, mw in scada.items():
+        if mw is None:
+            continue
+        # Negate pump-load DUIDs so they show as negative
+        stored_mw = -round(mw, 1) if duid in PUMP_LOAD_DUIDS else round(mw, 1)
+        if duid not in _duid_history:
+            _duid_history[duid] = {}
+        _duid_history[duid][label] = stored_mw
+        # Trim to 290 points (~24h of 5-min data)
+        if len(_duid_history[duid]) > 290:
+            oldest = sorted(_duid_history[duid].keys())[0]
+            del _duid_history[duid][oldest]
+
+
 def _get_bdu_history() -> dict:
     result = {}
     for region, series in _bdu_history.items():
@@ -1516,6 +1534,7 @@ def scrape_all() -> dict:
     _update_demand_history(region_summary)
     _update_ic_history(interconnectors)
     _update_bdu_history(region_summary)
+    _update_live_duid_history(scada_vals)   # keep _duid_history current for modal charts
     # Inject live solar/wind into dispatch history for current interval
     now_label = datetime.now(AEST).strftime("%H:%M")
     for region, rdata in region_summary.items():
