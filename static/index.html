@@ -1533,7 +1533,7 @@ const ORIGIN_STATION_ORDER = {
   QLD1: ['Darling Downs','Supernode Battery','Mt Stuart','Roma Gas','Clare Solar Farm','Darling Downs Solar','Daydream Solar'],
   NSW1: ['Eraring','Eraring Battery','Uranquinty','Shoalhaven','Shoalhaven Pump','Moree Solar Farm','Gunning Wind Farm','Eraring Liquid'],
   VIC1: ['Mortlake','Stockyard Hill'],
-  SA1:  ['Osborne Cogen','Quarantine','Ladbroke Grove','Snowtown North','Snowtown South','Bungala Solar'],
+  SA1:  ['Osborne Cogen','Quarantine','Ladbroke Grove','Bungala Solar 1','Bungala Solar 2'],
 };
 const ORIGIN_STATE_LABELS = {QLD1:'QLD',NSW1:'NSW',VIC1:'VIC',SA1:'SA'};
 const ORIGIN_STATE_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#2ed573',SA1:'#e74c3c'};
@@ -1680,7 +1680,7 @@ function renderOrigin(data) {
           white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.duids.join(', ')}</div>
         <div style="font-family:var(--font-mono);font-size:13px;font-weight:700;
           color:${displayCol}">
-          ${isUnknown ? '?' : (isOn || isCharging) ? fmt(mw) : '—'}<span style="font-size:8px;color:var(--text-muted)"> MW</span>
+          ${isUnknown ? '?' : mwKnown ? fmt(mw) : '—'}<span style="font-size:8px;color:var(--text-muted)"> MW</span>
           ${isCharging ? '<span style="font-size:8px;color:#38bdf8"> ↓chg</span>' : ''}
         </div>
         <div style="height:2px;background:var(--bg);border-radius:1px;overflow:hidden;margin-top:5px">
