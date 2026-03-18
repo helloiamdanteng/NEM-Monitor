@@ -223,7 +223,7 @@ tr:last-child td { border-bottom:none; }
     <span class="icon">🔋</span><span class="label">Batt</span>
   </button>
   <button class="nav-btn" onclick="showPanel('dminus1')" id="nav-dminus1">
-    <span class="icon">📆</span><span class="label">D-1</span>
+    <span class="icon">📆</span><span class="label">D−</span>
   </button>
   <button class="nav-btn" onclick="showPanel('dayahead')" id="nav-dayahead">
     <span class="icon">📅</span><span class="label">D+</span>
@@ -246,6 +246,8 @@ let latestData = null;
 let genRegion = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']); // multi-select Set
 let genPriceFilter   = new Set(); // price lines off by default (gen page)
 let originPriceFilter = new Set(); // price lines off by default (origin page)
+let originPriceWhite  = false;     // WHITE toggle for origin price lines
+let genPriceWhite     = false;     // WHITE toggle for gen price lines
 let genShowRooftop = false;  // default: rooftop solar excluded
 let genData = null;
 let slowData = null;
@@ -611,6 +613,10 @@ function renderGeneration(data) {
       border:1px solid ${on ? color : '#475569'};background:${on ? color+'33' : 'transparent'};
       color:${on ? color : '#475569'}">${REGION_SHORT[r]}$</button>`;
   }
+  html += `<button onclick="toggleGenPriceWhite()"
+    style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;margin-left:auto;
+    border:1px solid ${genPriceWhite ? '#ffffff' : '#475569'};background:${genPriceWhite ? '#ffffff22' : 'transparent'};
+    color:${genPriceWhite ? '#ffffff' : '#475569'}">WHITE</button>`;
   html += '</div>';
 
   // Legend
@@ -695,6 +701,16 @@ function toggleOriginPrice(r) {
 function toggleOriginPriceOff() {
   originPriceFilter.clear();
   if (latestData) renderPanel('origin', latestData);
+}
+
+function toggleOriginPriceWhite() {
+  originPriceWhite = !originPriceWhite;
+  if (latestData) renderPanel('origin', latestData);
+}
+
+function toggleGenPriceWhite() {
+  genPriceWhite = !genPriceWhite;
+  if (latestData) renderPanel('generation', latestData);
 }
 
 function drawGenChart(data) {
@@ -957,7 +973,7 @@ function drawGenChart(data) {
     const livePrices    = data.prices             || {};
     for (const r of REGIONS) {
       if (!genPriceFilter.has(r)) continue;
-      const color = REGION_COLORS[r];
+      const color = genPriceWhite ? '#ffffff' : REGION_COLORS[r];
       const hm = {};
       (histPricesMap[r] || []).forEach(p => { hm[p.interval] = p.rrp; });
       const pdm = {};
@@ -972,7 +988,7 @@ function drawGenChart(data) {
       priceDatasets.push({
         label: `${REGION_SHORT[r]} Price (fcast)`,
         data: allSlots.map(t => pdm[t] ?? null),
-        borderColor: color + '99', backgroundColor: 'transparent',
+        borderColor: genPriceWhite ? '#ffffff66' : color + '99', backgroundColor: 'transparent',
         borderWidth: 1, borderDash: [4,3], pointRadius: 0, tension: 0.2,
         spanGaps: true, fill: false, yAxisID: 'yPrice', order: 0,
       });
@@ -1744,6 +1760,10 @@ function renderOrigin(data) {
       border:1px solid ${on ? color : '#475569'};background:${on ? color+'33' : 'transparent'};
       color:${on ? color : '#475569'}">${REGION_SHORT[r]}$</button>`;
   }
+  html += `<button onclick="toggleOriginPriceWhite()"
+    style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;margin-left:auto;
+    border:1px solid ${originPriceWhite ? '#ffffff' : '#475569'};background:${originPriceWhite ? '#ffffff22' : 'transparent'};
+    color:${originPriceWhite ? '#ffffff' : '#475569'}">WHITE</button>`;
   html += '</div>';
 
   // ── Station tiles grouped by state ──────────────────────────────────────
@@ -1973,7 +1993,7 @@ function _drawOriginPortfolioChart(stationMap, fc) {
     const livePricesAll = latestData?.prices             || {};
     for (const reg of REGIONS) {
       if (!originPriceFilter.has(reg)) continue;
-      const color   = REGION_COLORS[reg];
+      const color   = originPriceWhite ? '#ffffff' : REGION_COLORS[reg];
       const pdArr   = pdPricesAll[reg]   || [];
       const histArr = histPricesAll[reg] || [];
       const live    = livePricesAll[reg];
@@ -1994,7 +2014,7 @@ function _drawOriginPortfolioChart(stationMap, fc) {
       priceDatasets.push({
         label: `${REGION_SHORT[reg]} Price (fcast)`,
         data: allSlots.map(t => pdMap[t] !== undefined ? pdMap[t] : null),
-        borderColor: color + '99', backgroundColor: 'transparent',
+        borderColor: originPriceWhite ? '#ffffff66' : color + '99', backgroundColor: 'transparent',
         borderWidth: 1, borderDash: [5,4], pointRadius: 0, tension: 0.2,
         spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
       });
@@ -3609,7 +3629,7 @@ function drawWeekCharts(fastData) {
 
 }
 
-// ── D-1 (Yesterday) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── D− (Yesterday) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 let dMinus1RegionFilter = 'NEM';
 
@@ -3633,7 +3653,7 @@ function renderDMinus1(data) {
   const selStr  = selDate.toISOString().slice(0,10).replace(/-/g,''); // YYYYMMDD
   const selLabel = fmtDate(selDate);
 
-  let html = `<div class="section-title">Historical Prices</div>`;
+  let html = `<div class="section-title">D− Historical Prices</div>`;
 
   // ── Date picker ───────────────────────────────────────────────────────────
   html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
