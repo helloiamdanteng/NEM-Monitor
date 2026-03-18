@@ -2801,6 +2801,7 @@ function renderBatteries(data) {
     const color = REGION_COLORS[r];
     html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setBatteryRegion('${r}')">${REGION_SHORT[r]}</button>`;
   }
+  html += '<div style="margin-left:auto;display:flex;gap:6px">';
   html += `<button onclick="toggleBattWhite()" style="
     font-family:var(--font-mono);font-size:10px;padding:5px 10px;border-radius:20px;cursor:pointer;
     border:1px solid ${battWhitePrices ? '#ffffff' : '#475569'};
@@ -2811,6 +2812,7 @@ function renderBatteries(data) {
     border:1px solid ${battShowPrices ? '#94a3b8' : '#475569'};
     background:${battShowPrices ? '#94a3b833' : 'transparent'};
     color:${battShowPrices ? '#94a3b8' : '#475569'}">PRICES</button>`;
+  html += '</div>';
   html += '</div>';
 
   // MW chart
@@ -3981,7 +3983,7 @@ function renderPanel(panel, data) {
 // ── About ─────────────────────────────────────────────────────────────────────
 
 function renderOutages(data) {
-  const outages = (data.slow && data.slow.mtpasa_outages) || [];
+  const outages = (slowData && slowData.mtpasa_outages) || [];
 
   const FUEL_STYLES = {
     'Black Coal': { bg:'#6b728022', color:'#9ca3af', border:'#6b728066' },
@@ -4012,7 +4014,7 @@ function renderOutages(data) {
   let html = '<div class="section-title">MT PASA — Unit Availability</div>';
 
   // Summary cards
-  if (outages.length === 0 && (!data.slow || data.slow.loading)) {
+  if (outages.length === 0 && (!!slowData || slowData.loading)) {
     html += '<div class="state-msg"><div class="icon">⏳</div><div>Loading outage data… (arrives with slow cache ~3 min)</div></div>';
     return html;
   }
@@ -4118,8 +4120,8 @@ function renderOutages(data) {
 
   html += `</tbody></table></div>`;
 
-  const ts = data.slow && data.slow.timestamp
-    ? new Date(data.slow.timestamp).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'})
+  const ts = slowData && slowData.timestamp
+    ? new Date(slowData.timestamp).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'})
     : '—';
   html += `<div style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-top:8px">Source: AEMO MTPASA_DUIDAvailability · as at ${ts} AEST</div>`;
 
@@ -4247,7 +4249,7 @@ async function fetchSlowData() {
         if (Date.now() - started > MAX_WAIT_MS) {
           console.warn('Slow data unavailable after 3 min, giving up');
           slowData = { _unavailable: true };
-          if (currentPanel === 'stations' || currentPanel === 'weekahead' || currentPanel === 'dayahead' || currentPanel === 'dminus1') {
+          if (currentPanel === 'stations' || currentPanel === 'weekahead' || currentPanel === 'dayahead' || currentPanel === 'dminus1' || currentPanel === 'outages') {
             renderPanel(currentPanel, latestData);
           }
           break;
