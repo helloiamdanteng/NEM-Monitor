@@ -426,8 +426,15 @@ def _list_hrefs(url: str) -> list[str]:
     for m in re.finditer(r'href="([^"]+\.zip)"', r.text, re.IGNORECASE):
         href = m.group(1)
         if href.startswith("http"):
+            # Normalise any absolute URL to use www. and uppercase /REPORTS/
+            href = re.sub(r'https?://(?:www\.)?nemweb\.com\.au', NEMWEB_BASE, href, flags=re.I)
+            href = re.sub(r'/[Rr]eports/[Cc]urrent/', '/REPORTS/CURRENT/', href)
+            href = re.sub(r'/[Rr]eports/[Aa]rchive/', '/REPORTS/ARCHIVE/', href)
             found.append(href)
         elif href.startswith("/"):
+            # Normalise path casing
+            href = re.sub(r'/[Rr]eports/[Cc]urrent/', '/REPORTS/CURRENT/', href)
+            href = re.sub(r'/[Rr]eports/[Aa]rchive/', '/REPORTS/ARCHIVE/', href)
             found.append(f"{NEMWEB_BASE}{href}")
         else:
             found.append(url.rstrip("/") + "/" + href)
