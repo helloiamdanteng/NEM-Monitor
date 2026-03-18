@@ -17,12 +17,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from scraper import scrape_all, scrape_gen, scrape_slow, scrape_scada_history
+from scraper import scrape_all, scrape_gen, scrape_slow, scrape_scada_history, scrape_mtpasa_outages
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-fast_cache = {"data": None, "last_updated": None, "error": None}
+fast_cache   = {"data": None, "last_updated": None, "error": None}
+mtpasa_cache = {"data": [],   "last_updated": None, "error": None}
 gen_cache  = {"data": None, "last_updated": None, "error": None}
 slow_cache = {"data": None, "last_updated": None, "error": None}
 
@@ -73,7 +74,7 @@ async def _run_slow():
         loop = asyncio.get_running_loop()
         data = await asyncio.wait_for(
             loop.run_in_executor(None, scrape_slow),
-            timeout=120  # hard ceiling — if AEMO XLS hangs, don't block forever
+            timeout=180  # MTPASA(45s) + BOM(15s) + STPASA + margin
         )
         slow_cache["data"] = data
         slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
@@ -147,6 +148,28 @@ async def gen_loop():
         await asyncio.sleep(GEN_INTERVAL)
 
 
+async def mtpasa_loop():
+    await asyncio.sleep(10)  # let fast/gen start first
+    while True:
+        try:
+            loop = asyncio.get_running_loop()
+            data = await asyncio.wait_for(
+                loop.run_in_executor(None, scrape_mtpasa_outages),
+                timeout=120
+            )
+            mtpasa_cache["data"] = data
+            mtpasa_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
+            mtpasa_cache["error"] = None
+            logger.info(f"MTPASA scrape done: {len(data)} units")
+        except asyncio.TimeoutError:
+            logger.warning("MTPASA scrape timed out")
+            mtpasa_cache["error"] = "timeout"
+        except Exception as e:
+            logger.warning(f"MTPASA scrape error: {e}")
+            mtpasa_cache["error"] = str(e)
+        await asyncio.sleep(1800)  # refresh every 30 min
+
+
 async def slow_loop():
     while True:
         try:
@@ -169,9 +192,10 @@ async def lifespan(app: FastAPI):
     # Gen and slow kick off in background
     asyncio.create_task(_run_slow())
 
-    fast_task = asyncio.create_task(fast_loop())
-    gen_task  = asyncio.create_task(gen_loop())
-    slow_task = asyncio.create_task(slow_loop())
+    fast_task   = asyncio.create_task(fast_loop())
+    gen_task    = asyncio.create_task(gen_loop())
+    slow_task   = asyncio.create_task(slow_loop())
+    mtpasa_task = asyncio.create_task(mtpasa_loop())
     yield
     fast_task.cancel()
     gen_task.cancel()
@@ -223,6 +247,7 @@ async def get_slow():
         )
     return JSONResponse(content={
         **slow_cache["data"],
+        "mtpasa_outages": mtpasa_cache["data"],
         "last_updated": slow_cache["last_updated"],
         "cache_error":  slow_cache.get("error"),
     })
