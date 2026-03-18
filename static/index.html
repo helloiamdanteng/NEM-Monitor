@@ -686,12 +686,12 @@ function toggleGenPriceOff() {
 function toggleOriginPrice(r) {
   if (originPriceFilter.has(r)) { originPriceFilter.delete(r); }
   else { originPriceFilter.add(r); }
-  if (window._originStationMap) _drawOriginPortfolioChart(window._originStationMap, window._originFc || {});
+  if (latestData) renderPanel('origin', latestData);
 }
 
 function toggleOriginPriceOff() {
   originPriceFilter.clear();
-  if (window._originStationMap) _drawOriginPortfolioChart(window._originStationMap, window._originFc || {});
+  if (latestData) renderPanel('origin', latestData);
 }
 
 function drawGenChart(data) {
@@ -1778,7 +1778,7 @@ function renderOrigin(data) {
       html += `<div onclick="openOriginStationModal('${safeName}')" style="
         background:var(--surface);
         border:1px solid var(--border);
-        border-top:2px solid ${isCharging ? '#38bdf8' : fuelCol+'88'};
+        border-top:2px solid ${isCharging ? '#38bdf8' : fuelCol};
         border-radius:8px;padding:8px 7px 6px;cursor:pointer;
         opacity:${isUnknown ? '0.6' : '1'};
         transition:border-color 0.15s;active:border-color:${fuelCol}">
