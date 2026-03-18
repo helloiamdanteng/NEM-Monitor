@@ -599,7 +599,7 @@ function renderGeneration(data) {
   html += `<button onclick="toggleGenPriceOff()"
     style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
     border:1px solid #475569;background:${allPricesOff ? '#47556933' : 'transparent'};
-    color:${allPricesOff ? '#94a3b8' : '#475569'}">off</button>`;
+    color:${allPricesOff ? '#94a3b8' : '#475569'}">OFF</button>`;
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
     const on = genPriceFilter.has(r);
@@ -609,9 +609,6 @@ function renderGeneration(data) {
       color:${on ? color : '#475569'}">${REGION_SHORT[r]}$</button>`;
   }
   html += '</div>';
-
-  // Current snapshot breakdown
-  html += '<div id="fuelBreakdown" style="margin-top:8px"></div>';
 
   // Legend
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
@@ -638,6 +635,10 @@ function renderGeneration(data) {
     </button>`;
   });
   html += '</div></div>';
+
+
+  // Current snapshot breakdown
+  html += '<div id="fuelBreakdown" style="margin-top:8px"></div>';
 
   return html;
 }
@@ -1636,12 +1637,13 @@ const ORIGIN_STATE_LABELS = {QLD1:'QLD',NSW1:'NSW',VIC1:'VIC',SA1:'SA'};
 const ORIGIN_STATE_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#2ed573',SA1:'#e74c3c'};
 
 // 'NEM' = all on; single reg = only that one
-let originStateFilter = 'NEM';
+let originStateFilter = new Set(['QLD1','NSW1','VIC1','SA1']); // multi-select, all on by default
 let originPortfolioChart = null;
 
 function _originVisibleRegs() {
-  if (originStateFilter === 'NEM') return Object.keys(ORIGIN_STATE_LABELS);
-  return [originStateFilter];
+  const all = Object.keys(ORIGIN_STATE_LABELS);
+  if (all.every(r => originStateFilter.has(r))) return all;
+  return all.filter(r => originStateFilter.has(r));
 }
 
 function renderOrigin(data) {
@@ -1685,7 +1687,7 @@ function renderOrigin(data) {
   html += `</div>`;
 
   // ── State toggle buttons + NEM ──────────────────────────────────────────
-  const isNEM = originStateFilter === 'NEM';
+  const isNEM = Object.keys(ORIGIN_STATE_LABELS).every(r => originStateFilter.has(r));
   html += `<div style="display:flex;gap:5px;margin-bottom:8px">`;
 
   // NEM button
@@ -1699,7 +1701,7 @@ function renderOrigin(data) {
   </button>`;
 
   for (const [reg, label] of Object.entries(ORIGIN_STATE_LABELS)) {
-    const active = originStateFilter === reg;
+    const active = originStateFilter.has(reg);
     const col = ORIGIN_STATE_COLORS[reg];
     html += `<button onclick="toggleOriginState('${reg}')" style="
       flex:1;padding:5px 2px;border-radius:7px;
@@ -1734,8 +1736,8 @@ function renderOrigin(data) {
   html += `<button onclick="toggleOriginPriceOff()"
     style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
     border:1px solid #475569;background:${_origAllOff ? '#47556933' : 'transparent'};
-    color:${_origAllOff ? '#94a3b8' : '#475569'}">off</button>`;
-  for (const r of visibleRegs) {
+    color:${_origAllOff ? '#94a3b8' : '#475569'}">OFF</button>`;
+  for (const r of Object.keys(ORIGIN_STATE_LABELS)) {
     const color = ORIGIN_STATE_COLORS[r] || REGION_COLORS[r];
     const on = originPriceFilter.has(r);
     html += `<button onclick="toggleOriginPrice('${r}')"
@@ -1777,7 +1779,7 @@ function renderOrigin(data) {
       const safeName = stnName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
       // In NEM mode, hide only stations confirmed near-zero (not unknown/null)
-      if (originStateFilter === 'NEM' && !isOn && !isCharging && mwKnown && mw <= 1) continue;
+      if (Object.keys(ORIGIN_STATE_LABELS).every(r => originStateFilter.has(r)) && !isOn && !isCharging && mwKnown && mw <= 1) continue;
 
       html += `<div onclick="openOriginStationModal('${safeName}')" style="
         background:var(--surface);
@@ -1860,8 +1862,15 @@ async function _fetchOriginHistory(data) {
   }
 }
 
-function toggleOriginState(val) {
-  originStateFilter = val;
+function toggleOriginState(r) {
+  if (r === 'NEM') {
+    const all = Object.keys(ORIGIN_STATE_LABELS);
+    const allOn = all.every(x => originStateFilter.has(x));
+    originStateFilter = allOn ? new Set() : new Set(all);
+  } else {
+    if (originStateFilter.has(r)) { originStateFilter.delete(r); }
+    else { originStateFilter.add(r); }
+  }
   if (latestData) showPanel('origin');
 }
 
