@@ -2742,6 +2742,7 @@ function renderStations(fastData) {
 let batteryRegionFilter  = 'NEM';
 let battHideOffline      = true;
 let battSortDescending   = true;
+let battShowPrices       = true;
 
 function setBatteryRegion(r) {
   batteryRegionFilter = r;
@@ -2791,6 +2792,11 @@ function renderBatteries(data) {
     const color = REGION_COLORS[r];
     html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}" onclick="setBatteryRegion('${r}')">${REGION_SHORT[r]}</button>`;
   }
+  html += `<button onclick="toggleBattPrices()" style="
+    font-family:var(--font-mono);font-size:10px;padding:5px 10px;border-radius:20px;cursor:pointer;
+    border:1px solid ${battShowPrices ? '#ffffff' : '#475569'};
+    background:${battShowPrices ? '#ffffff22' : 'transparent'};
+    color:${battShowPrices ? '#ffffff' : '#475569'}">PRICES</button>`;
   html += '</div>';
 
   // MW chart
@@ -2912,6 +2918,7 @@ function drawBatteryCharts(data) {
     const datasets = [];
 
     if (isNEM) {
+      // Battery MW datasets — one line per region
       for (const r of REGIONS) {
         const color = REGION_COLORS[r];
         const hm = {};
@@ -2925,6 +2932,34 @@ function drawBatteryCharts(data) {
           borderWidth: 1, pointRadius: 0, tension: 0.2,
           fill: 'origin', spanGaps: false, stack: 'batt', yAxisID: 'y', order: 2,
         });
+      }
+      // NEM price lines per region (gated by battShowPrices)
+      if (battShowPrices) {
+        for (const r of REGIONS) {
+          const color = REGION_COLORS[r];
+          const hpm = {}, pdpm = {};
+          (histPrices[r] || []).forEach(p => { hpm[p.interval] = p.rrp; });
+          (pdPrices[r]  || []).forEach(p => { pdpm[p.interval] = p.rrp; });
+          const lastHistSlot = allSlots.slice().reverse().find(l => hpm[l] !== undefined) || '';
+          const lastHistIdx  = lastHistSlot ? allSlots.indexOf(lastHistSlot) : -1;
+          const lastHistVal  = lastHistIdx >= 0 ? (hpm[lastHistSlot] ?? livePrices[r] ?? null) : null;
+          datasets.push({
+            label: REGION_SHORT[r] + ' Price', yAxisID: 'yPrice',
+            data: allSlots.map((l,i) => i <= lastHistIdx ? (hpm[l] ?? null) : null),
+            borderColor: color, backgroundColor: 'transparent',
+            borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
+          });
+          datasets.push({
+            label: REGION_SHORT[r] + ' Price (fcast)', yAxisID: 'yPrice',
+            data: allSlots.map((l,i) => {
+              if (i === lastHistIdx) return lastHistVal;
+              if (i > lastHistIdx) return pdpm[l] ?? null;
+              return null;
+            }),
+            borderColor: color + '77', backgroundColor: 'transparent',
+            borderWidth: 1, borderDash: [4,3], pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
+          });
+        }
       }
     } else {
       const r = batteryRegionFilter;
@@ -2980,7 +3015,8 @@ function drawBatteryCharts(data) {
       }
 
       // Price overlay
-      const hpm = {}, pdpm = {};
+      if (!battShowPrices) { /* skip */ } else
+      { const hpm = {}, pdpm = {};
       (histPrices[r] || []).forEach(p => { hpm[p.interval] = p.rrp; });
       (pdPrices[r]  || []).forEach(p => { pdpm[p.interval] = p.rrp; });
       const lastHistSlot = allSlots.slice().reverse().find(l => hpm[l] !== undefined) || '';
@@ -3002,6 +3038,7 @@ function drawBatteryCharts(data) {
         borderColor: '#ffffff99', backgroundColor: 'transparent',
         borderWidth: 0.75, borderDash: [5,4], pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
       });
+      } // end battShowPrices
     }
 
     const scales = {
@@ -3014,7 +3051,7 @@ function drawBatteryCharts(data) {
            grid: { color:'#1e293b' },
            title: { display:true, text:'MW', color:'#64748b', font:{family:'Space Mono',size:9} } },
     };
-    if (!isNEM) scales.yPrice = {
+    if (battShowPrices) scales.yPrice = {
       type:'linear', position:'right', stacked: false,
       ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
       grid:{drawOnChartArea:false},
@@ -3399,7 +3436,7 @@ function renderDayAhead(data) {
     html += chartPills('pasa', daPasaFilter);
     html += '</div>';
 
-    html += `<div class="week-chart-card" style="margin-top:8px"><div class="chart-title">7-Day Wind + Solar Forecast (ST PASA)</div>`;
+    html += `<div class="week-chart-card" style="margin-top:8px;margin-bottom:0"><div class="chart-title">7-Day Wind + Solar Forecast (ST PASA)</div>`;
     html += `<div style="position:relative;height:220px"><canvas id="weekRenewChart"></canvas></div>`;
     html += chartPills('renew', daRenewFilter);
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
