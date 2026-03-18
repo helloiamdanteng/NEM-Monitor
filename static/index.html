@@ -241,7 +241,8 @@ let currentPanel = 'prices';
 let charts = {};
 let latestData = null;
 let genRegion = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']); // multi-select Set
-let genPriceFilter = new Set(); // price lines off by default
+let genPriceFilter   = new Set(); // price lines off by default (gen page)
+let originPriceFilter = new Set(); // price lines off by default (origin page)
 let genShowRooftop = false;  // default: rooftop solar excluded
 let genData = null;
 let slowData = null;
@@ -592,25 +593,6 @@ function renderGeneration(data) {
   html += '<div class="chart-container" style="height:280px"><canvas id="fuelChart"></canvas></div>';
   html += '</div>';
 
-  // Price line toggles — below chart
-  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px">';
-  // Off button (grey, turns off all prices)
-  const anyPriceOn = genPriceFilter.size > 0;
-  html += `<button onclick="toggleGenPriceOff()"
-    style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;
-    border:1px solid #475569;background:${anyPriceOn ? 'transparent' : '#47556933'};
-    color:${anyPriceOn ? '#475569' : '#94a3b8'};opacity:${anyPriceOn ? '0.5' : '1'}">Off</button>`;
-  const REGION_SHORT_PRICE = {QLD1:'Q',NSW1:'N',VIC1:'V',SA1:'S',TAS1:'T'};
-  for (const r of REGIONS) {
-    const color = REGION_COLORS[r];
-    const on = genPriceFilter.has(r);
-    html += `<button onclick="toggleGenPrice('${r}')"
-      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;
-      border:1px solid ${color};background:${on ? color+'33' : 'transparent'};
-      color:${on ? color : '#475569'};opacity:${on ? '1' : '0.5'}">${REGION_SHORT_PRICE[r]} $</button>`;
-  }
-  html += '</div>';
-
   // Price toggle buttons — below chart
   html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center">';
   const allPricesOff = genPriceFilter.size === 0;
@@ -621,11 +603,10 @@ function renderGeneration(data) {
   for (const r of REGIONS) {
     const color = REGION_COLORS[r];
     const on = genPriceFilter.has(r);
-    const lbl = {'QLD1':'Q','NSW1':'N','VIC1':'V','SA1':'S','TAS1':'T'}[r];
     html += `<button onclick="toggleGenPrice('${r}')"
       style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
       border:1px solid ${on ? color : '#475569'};background:${on ? color+'33' : 'transparent'};
-      color:${on ? color : '#475569'}">${lbl} $</button>`;
+      color:${on ? color : '#475569'}">${REGION_SHORT[r]}$</button>`;
   }
   html += '</div>';
 
@@ -1747,6 +1728,22 @@ function renderOrigin(data) {
   html += `<div class="chart-card" style="margin-bottom:16px">
     <div style="position:relative;height:280px"><canvas id="origin-portfolio-chart"></canvas></div>
   </div>`;
+  // Price line toggles for origin chart
+  const _origAllOff = originPriceFilter.size === 0;
+  html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin:-10px 0 10px">';
+  html += `<button onclick="toggleOriginPriceOff()"
+    style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
+    border:1px solid #475569;background:${_origAllOff ? '#47556933' : 'transparent'};
+    color:${_origAllOff ? '#94a3b8' : '#475569'}">off</button>`;
+  for (const r of visibleRegs) {
+    const color = ORIGIN_STATE_COLORS[r] || REGION_COLORS[r];
+    const on = originPriceFilter.has(r);
+    html += `<button onclick="toggleOriginPrice('${r}')"
+      style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
+      border:1px solid ${on ? color : '#475569'};background:${on ? color+'33' : 'transparent'};
+      color:${on ? color : '#475569'}">${REGION_SHORT[r]}$</button>`;
+  }
+  html += '</div>';
 
   // ── Station tiles grouped by state ──────────────────────────────────────
   for (const [reg, stateLabel] of Object.entries(ORIGIN_STATE_LABELS)) {
@@ -1942,32 +1939,38 @@ function _drawOriginPortfolioChart(stationMap, fc) {
 
   // Price overlay — only if a single region is selected
   const priceDatasets = [];
-  if (visibleRegs.length === 1) {
-    const reg = visibleRegs[0];
-    const pdArr   = (latestData?.predispatch_prices || {})[reg] || [];
-    const histArr = (latestData?.historical_prices  || {})[reg] || [];
-    const live    = (latestData?.prices || {})[reg];
-    const pdMap = {}, histMap = {};
-    for (const p of pdArr)   pdMap[p.interval]   = p.rrp;
-    for (const p of histArr) histMap[p.interval]  = p.rrp;
-    priceDatasets.push({
-      label: 'Price (actual)',
-      data: allSlots.map(t => {
-        if (histMap[t] !== undefined) return histMap[t];
-        if (t === nowStr && live !== undefined) return live;
-        return null;
-      }),
-      borderColor: '#ffffff', backgroundColor: 'transparent',
-      borderWidth: 1, pointRadius: 0, tension: 0.2,
-      spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
-    });
-    priceDatasets.push({
-      label: 'Price (forecast)',
-      data: allSlots.map(t => pdMap[t] !== undefined ? pdMap[t] : null),
-      borderColor: '#ffffff', backgroundColor: 'transparent',
-      borderWidth: 1, borderDash: [5,4], pointRadius: 0, tension: 0.2,
-      spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
-    });
+  if (originPriceFilter.size > 0) {
+    const pdPricesAll   = latestData?.predispatch_prices || {};
+    const histPricesAll = latestData?.historical_prices  || {};
+    const livePricesAll = latestData?.prices             || {};
+    for (const reg of REGIONS) {
+      if (!originPriceFilter.has(reg)) continue;
+      const color   = REGION_COLORS[reg];
+      const pdArr   = pdPricesAll[reg]   || [];
+      const histArr = histPricesAll[reg] || [];
+      const live    = livePricesAll[reg];
+      const pdMap = {}, histMap = {};
+      for (const p of pdArr)   pdMap[p.interval]  = p.rrp;
+      for (const p of histArr) histMap[p.interval] = p.rrp;
+      priceDatasets.push({
+        label: `${REGION_SHORT[reg]} Price`,
+        data: allSlots.map(t => {
+          if (histMap[t] !== undefined) return histMap[t];
+          if (t === nowStr && live !== undefined) return live;
+          return null;
+        }),
+        borderColor: color, backgroundColor: 'transparent',
+        borderWidth: 1, pointRadius: 0, tension: 0.2,
+        spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
+      });
+      priceDatasets.push({
+        label: `${REGION_SHORT[reg]} Price (fcast)`,
+        data: allSlots.map(t => pdMap[t] !== undefined ? pdMap[t] : null),
+        borderColor: color + '99', backgroundColor: 'transparent',
+        borderWidth: 1, borderDash: [5,4], pointRadius: 0, tension: 0.2,
+        spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
+      });
+    }
   }
 
   const datasets = [...genDatasets, ...priceDatasets];
