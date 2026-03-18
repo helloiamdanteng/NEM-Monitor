@@ -2144,15 +2144,15 @@ async function openOriginStationModal(stnName) {
       if (t === lastSlot) return histPriceMap[t] ?? livePrices[region] ?? null;
       return null;
     }),
-    borderColor: '#f39c12', backgroundColor: 'transparent',
-    borderWidth: 1, pointRadius: 0, tension: 0.2,
+    borderColor: '#ffffff', backgroundColor: 'transparent',
+    borderWidth: 0.5, pointRadius: 0, tension: 0.2,
     spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
   });
   datasets.push({
     label: 'Price (forecast)',
     data: allLabels.map(t => t > lastSlot ? (pdPriceMap[t] ?? null) : null),
-    borderColor: '#f39c12', backgroundColor: 'transparent',
-    borderWidth: 1, borderDash: [5,4], pointRadius: 0, tension: 0.2,
+    borderColor: '#ffffff66', backgroundColor: 'transparent',
+    borderWidth: 0.5, borderDash: [5,4], pointRadius: 0, tension: 0.2,
     spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
   });
 
@@ -2207,9 +2207,9 @@ async function openOriginStationModal(stnName) {
           },
           yPrice: {
             type:'linear', position:'right',
-            ticks: { color:'#f39c12', font:{family:'Space Mono',size:9}, callback: v=>'$'+v.toFixed(0) },
+            ticks: { color:'#94a3b8', font:{family:'Space Mono',size:9}, callback: v=>'$'+v.toFixed(0) },
             grid: { drawOnChartArea:false },
-            title: { display:true, text:'$/MWh', color:'#f39c12', font:{family:'Space Mono',size:8} }
+            title: { display:true, text:'$/MWh', color:'#94a3b8', font:{family:'Space Mono',size:8} }
           }
         }
       },
@@ -2948,8 +2948,8 @@ function drawBatteryCharts(data) {
       datasets.push({
         label: 'Price (actual)', yAxisID: 'yPrice',
         data: allSlots.map((l,i) => i <= lastHistIdx ? (hpm[l] ?? null) : null),
-        borderColor: '#f39c12', backgroundColor: 'transparent',
-        borderWidth: 2, pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
+        borderColor: '#ffffff', backgroundColor: 'transparent',
+        borderWidth: 0.75, pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
       });
       datasets.push({
         label: 'Price (forecast)', yAxisID: 'yPrice',
@@ -2958,8 +2958,8 @@ function drawBatteryCharts(data) {
           if (i > lastHistIdx) return pdpm[l] ?? null;
           return null;
         }),
-        borderColor: '#f39c1299', backgroundColor: 'transparent',
-        borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
+        borderColor: '#ffffff99', backgroundColor: 'transparent',
+        borderWidth: 0.75, borderDash: [5,4], pointRadius: 0, tension: 0.2, spanGaps: true, fill: false, order: -1,
       });
     }
 
@@ -2975,7 +2975,7 @@ function drawBatteryCharts(data) {
     };
     if (!isNEM) scales.yPrice = {
       type:'linear', position:'right', stacked: false,
-      ticks:{color:'#f39c12',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
+      ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
       grid:{drawOnChartArea:false},
     };
 
