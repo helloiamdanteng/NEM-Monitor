@@ -587,22 +587,46 @@ function renderGeneration(data) {
   </button>`;
   html += '</div>';
 
-  // Price toggles per state
-  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px">';
-  for (const r of REGIONS) {
-    const color = REGION_COLORS[r];
-    const on = genPriceFilter.has(r);
-    html += `<button onclick="toggleGenPrice('${r}')" id="gp-${r}"
-      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;
-      border:1px solid ${color};background:${on ? color+'33' : 'transparent'};
-      color:${on ? color : '#475569'};opacity:${on ? '1' : '0.5'}">
-      $ ${REGION_SHORT[r]}</button>`;
-  }
-  html += '</div>';
-
   // Main 24hr chart
   html += '<div class="chart-card"><div class="chart-title">Loading…</div>';
   html += '<div class="chart-container" style="height:280px"><canvas id="fuelChart"></canvas></div>';
+  html += '</div>';
+
+  // Price line toggles — below chart
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px">';
+  // Off button (grey, turns off all prices)
+  const anyPriceOn = genPriceFilter.size > 0;
+  html += `<button onclick="toggleGenPriceOff()"
+    style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;
+    border:1px solid #475569;background:${anyPriceOn ? 'transparent' : '#47556933'};
+    color:${anyPriceOn ? '#475569' : '#94a3b8'};opacity:${anyPriceOn ? '0.5' : '1'}">Off</button>`;
+  const REGION_SHORT_PRICE = {QLD1:'Q',NSW1:'N',VIC1:'V',SA1:'S',TAS1:'T'};
+  for (const r of REGIONS) {
+    const color = REGION_COLORS[r];
+    const on = genPriceFilter.has(r);
+    html += `<button onclick="toggleGenPrice('${r}')"
+      style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;
+      border:1px solid ${color};background:${on ? color+'33' : 'transparent'};
+      color:${on ? color : '#475569'};opacity:${on ? '1' : '0.5'}">${REGION_SHORT_PRICE[r]} $</button>`;
+  }
+  html += '</div>';
+
+  // Price toggle buttons — below chart
+  html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center">';
+  const allPricesOff = genPriceFilter.size === 0;
+  html += `<button onclick="toggleGenPriceOff()"
+    style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
+    border:1px solid #475569;background:${allPricesOff ? '#47556933' : 'transparent'};
+    color:${allPricesOff ? '#94a3b8' : '#475569'}">off</button>`;
+  for (const r of REGIONS) {
+    const color = REGION_COLORS[r];
+    const on = genPriceFilter.has(r);
+    const lbl = {'QLD1':'Q','NSW1':'N','VIC1':'V','SA1':'S','TAS1':'T'}[r];
+    html += `<button onclick="toggleGenPrice('${r}')"
+      style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
+      border:1px solid ${on ? color : '#475569'};background:${on ? color+'33' : 'transparent'};
+      color:${on ? color : '#475569'}">${lbl} $</button>`;
+  }
   html += '</div>';
 
   // Current snapshot breakdown
@@ -669,7 +693,12 @@ function toggleGenRooftop() {
 function toggleGenPrice(r) {
   if (genPriceFilter.has(r)) { genPriceFilter.delete(r); }
   else { genPriceFilter.add(r); }
-  if (latestData) drawGenChart(latestData);
+  if (latestData) renderPanel('generation', latestData);
+}
+
+function toggleGenPriceOff() {
+  genPriceFilter.clear();
+  if (latestData) renderPanel('generation', latestData);
 }
 
 function drawGenChart(data) {
@@ -927,9 +956,9 @@ function drawGenChart(data) {
   // ── Price line datasets per region (only for toggled-on states) ──────────────
   const priceDatasets = [];
   if (genPriceFilter.size > 0) {
-    const histPricesMap = data.hist_prices || {};
-    const pdPricesMap   = data.pd_prices   || {};
-    const livePrices    = data.prices       || {};
+    const histPricesMap = data.historical_prices || {};
+    const pdPricesMap   = data.predispatch_prices || {};
+    const livePrices    = data.prices             || {};
     for (const r of REGIONS) {
       if (!genPriceFilter.has(r)) continue;
       const color = REGION_COLORS[r];
