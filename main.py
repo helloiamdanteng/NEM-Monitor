@@ -50,6 +50,7 @@ async def _run_fast():
             asyncio.get_running_loop().run_in_executor(None, scrape_all),
             timeout=60,
         )
+        fast_cache["data"] = None  # release old before storing new
         fast_cache["data"] = data
         fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         fast_cache["error"] = None
@@ -76,6 +77,7 @@ async def _run_slow():
             loop.run_in_executor(None, scrape_slow),
             timeout=180  # MTPASA(45s) + BOM(15s) + STPASA + margin
         )
+        slow_cache["data"] = None  # release old before storing new
         slow_cache["data"] = data
         slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         slow_cache["error"] = None
@@ -111,6 +113,7 @@ async def _run_gen():
     try:
         loop = asyncio.get_running_loop()
         data = await asyncio.wait_for(loop.run_in_executor(None, scrape_gen), timeout=60)
+        gen_cache["data"] = None  # release old before storing new
         gen_cache["data"] = data
         gen_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         gen_cache["error"] = None
