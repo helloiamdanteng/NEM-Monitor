@@ -28,6 +28,7 @@ DISPATCH_IS_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/Reports/CURRENT/PredispatchIS_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/Reports/CURRENT/Dispatch_SCADA/"
 TRADING_CURRENT   = f"{NEMWEB_BASE}/Reports/CURRENT/TradingIS_Reports/"
+TRADING_ARCHIVE   = f"{NEMWEB_BASE}/Reports/ARCHIVE/TradingIS_Reports/"
 ST_PASA_URL       = f"{NEMWEB_BASE}/Reports/CURRENT/Short_Term_PASA_Reports/"
 OPENNEM_API       = "https://api.opennem.org.au"
 AEMO_REG_LIST_URL = "https://www.aemo.com.au/-/media/Files/Electricity/NEM/Participant_Information/Current-Participants/NEM-Registration-and-Exemption-List.xls"
@@ -2300,6 +2301,71 @@ def scrape_gen() -> dict:
 
 # scrape_slow — background fetch for generators + week-ahead
 # ---------------------------------------------------------------------------
+
+def scrape_historical_prices(date_str: str) -> dict:
+    """
+    Fetch 30-min trading prices for any date (YYYYMMDD format).
+    Uses CURRENT directory for yesterday, ARCHIVE for older dates.
+    Returns { region: [ {interval: "HH:MM", rrp: float} ] }
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    now_aest = datetime.now(AEST)
+    today    = now_aest.date()
+    yesterday = (now_aest - _td(days=1)).date()
+
+    try:
+        req_date = _dt.strptime(date_str, "%Y%m%d").date()
+    except ValueError:
+        return {}
+
+    # Choose source directory
+    if req_date >= yesterday:
+        base_url = TRADING_CURRENT
+    else:
+        # Archive uses YYYYMM subdirectory
+        ym = req_date.strftime("%Y%m")
+        base_url = f"{TRADING_ARCHIVE}{ym}/"
+
+    try:
+        all_files = _list_hrefs(base_url)
+    except Exception as e:
+        logger.warning(f"scrape_historical_prices: listing failed for {date_str}: {e}")
+        return {}
+
+    date_files = sorted([u for u in all_files if date_str in u and "PUBLIC_TRADINGIS" in u.upper()])
+    if not date_files:
+        logger.warning(f"scrape_historical_prices: no files found for {date_str}")
+        return {}
+
+    prices: dict = {r: {} for r in NEM_REGIONS}
+    for url in date_files:
+        try:
+            text = _read_zip(url)
+            if not text:
+                continue
+            for row in _parse_aemo(text, "TRADING_PRICE"):
+                if row.get("INVALIDFLAG", "0") != "0":
+                    continue
+                region = row.get("REGIONID", "").strip()
+                if region not in prices:
+                    continue
+                try:
+                    period = int(row["PERIODID"])
+                    dt_str = row["SETTLEMENTDATE"]            # "YYYY/MM/DD HH:MM:SS"
+                    dt     = datetime.strptime(dt_str, "%Y/%m/%d %H:%M:%S")
+                    dt_adj = dt - timedelta(minutes=30)       # settlement end → start
+                    label  = dt_adj.strftime("%H:%M")
+                    prices[region][label] = round(float(row["RRP"]), 2)
+                except (KeyError, ValueError):
+                    continue
+        except Exception as e:
+            logger.debug(f"scrape_historical_prices: file error {url}: {e}")
+
+    return {r: sorted([{"interval": k, "rrp": v} for k, v in d.items()],
+                      key=lambda x: x["interval"])
+            for r, d in prices.items() if d}
+
+
 
 def scrape_yesterday() -> dict:
     """
