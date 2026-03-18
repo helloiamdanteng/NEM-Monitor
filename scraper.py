@@ -2790,6 +2790,13 @@ def scrape_slow() -> dict:
         if series:
             tomorrow_demand_stpasa[region] = series
 
+    # MTPASA outages
+    mtpasa = []
+    try:
+        mtpasa = _safe_mtpasa_outages()
+    except Exception as e:
+        logger.warning(f"mtpasa_outages in scrape_slow failed: {e}")
+
     logger.info("scrape_slow done")
     return {
         "timestamp":              datetime.now(timezone.utc).isoformat(),
@@ -2799,6 +2806,7 @@ def scrape_slow() -> dict:
         "weather":                weather_data,
         "fuel_colors":            FUEL_COLORS,
         "all_fuels":              ALL_FUELS,
+        "mtpasa_outages":         mtpasa,
     }
 
 
