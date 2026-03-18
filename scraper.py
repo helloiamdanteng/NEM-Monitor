@@ -2740,13 +2740,6 @@ def scrape_slow() -> dict:
     logger.info("scrape_slow starting...")
     pasa = scrape_stpasa_demand()
 
-    # Yesterday's data for D-1 page
-    yesterday_data = {}
-    try:
-        yesterday_data = scrape_yesterday()
-    except Exception as e:
-        logger.warning(f"scrape_yesterday failed: {e}")
-
     # Weather forecast from BOM for D+ page
     weather_data = {}
     try:
@@ -2779,7 +2772,7 @@ def scrape_slow() -> dict:
         "timestamp":              datetime.now(timezone.utc).isoformat(),
         "stpasa_demand":          pasa,
         "tomorrow_demand_stpasa": tomorrow_demand_stpasa,
-        "yesterday":              yesterday_data,
+        "yesterday":              {},
         "weather":                weather_data,
         "fuel_colors":            FUEL_COLORS,
         "all_fuels":              ALL_FUELS,
