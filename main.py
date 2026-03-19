@@ -41,7 +41,6 @@ _FAST_EMPTY = {
     "dispatch_prices_5min": {}, "demand_history": {}, "op_demand_history": {},
     "interconnectors": {}, "generation": {}, "fuel_colors": {}, "all_fuels": [],
     "bdu_history": {},
-    "loading": True,
 }
 
 async def _run_fast():
@@ -51,7 +50,6 @@ async def _run_fast():
             asyncio.get_running_loop().run_in_executor(None, scrape_all),
             timeout=60,
         )
-        fast_cache["data"] = None  # release old before storing new
         fast_cache["data"] = data
         fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         fast_cache["error"] = None
@@ -78,7 +76,6 @@ async def _run_slow():
             loop.run_in_executor(None, scrape_slow),
             timeout=180  # MTPASA(45s) + BOM(15s) + STPASA + margin
         )
-        slow_cache["data"] = None  # release old before storing new
         slow_cache["data"] = data
         slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         slow_cache["error"] = None
@@ -114,7 +111,6 @@ async def _run_gen():
     try:
         loop = asyncio.get_running_loop()
         data = await asyncio.wait_for(loop.run_in_executor(None, scrape_gen), timeout=60)
-        gen_cache["data"] = None  # release old before storing new
         gen_cache["data"] = data
         gen_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         gen_cache["error"] = None
@@ -186,11 +182,16 @@ async def slow_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Set empty cache immediately so health check passes right away
-    fast_cache["data"] = dict(_FAST_EMPTY)  # loading=True is in _FAST_EMPTY
-    fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
+    # Fast scrape first — prices/demand up immediately
+    # _run_fast() now handles its own exceptions and always sets cache
+    await _run_fast()
+    if fast_cache["data"] is None:
+        fast_cache["data"] = dict(_FAST_EMPTY)
+        fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
 
-    # All scraping runs in background — app is ready to serve instantly
+    # Gen and slow kick off in background
+    asyncio.create_task(_run_slow())
+
     fast_task   = asyncio.create_task(fast_loop())
     gen_task    = asyncio.create_task(gen_loop())
     slow_task   = asyncio.create_task(slow_loop())
@@ -199,7 +200,6 @@ async def lifespan(app: FastAPI):
     fast_task.cancel()
     gen_task.cancel()
     slow_task.cancel()
-    mtpasa_task.cancel()
 
 
 app = FastAPI(title="NEM Dashboard", lifespan=lifespan)
@@ -216,12 +216,6 @@ async def get_data():
         return JSONResponse(
             content={"error": fast_cache.get("error", "Data not yet available"), "loading": True},
             status_code=503 if fast_cache["error"] else 202,
-        )
-    # Return 202 while still warming up (empty placeholder cache)
-    if fast_cache["data"].get("loading"):
-        return JSONResponse(
-            content={**fast_cache["data"], "last_updated": fast_cache["last_updated"]},
-            status_code=202,
         )
     return JSONResponse(content={
         **fast_cache["data"],
