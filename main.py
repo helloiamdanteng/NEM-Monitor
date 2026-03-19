@@ -1,4 +1,4 @@
-"""
+""" 
 NEM Dashboard - FastAPI backend
 Fast cache: prices, demand, gen, IC, Origin — refreshed every 5 min
 Slow cache: all generators, ST PASA week-ahead — refreshed every 30 min
