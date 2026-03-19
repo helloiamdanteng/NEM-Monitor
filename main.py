@@ -41,6 +41,7 @@ _FAST_EMPTY = {
     "dispatch_prices_5min": {}, "demand_history": {}, "op_demand_history": {},
     "interconnectors": {}, "generation": {}, "fuel_colors": {}, "all_fuels": [],
     "bdu_history": {},
+    "loading": True,
 }
 
 async def _run_fast():
@@ -186,7 +187,7 @@ async def slow_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Set empty cache immediately so health check passes right away
-    fast_cache["data"] = dict(_FAST_EMPTY)
+    fast_cache["data"] = dict(_FAST_EMPTY)  # loading=True is in _FAST_EMPTY
     fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
 
     # All scraping runs in background — app is ready to serve instantly
@@ -215,6 +216,12 @@ async def get_data():
         return JSONResponse(
             content={"error": fast_cache.get("error", "Data not yet available"), "loading": True},
             status_code=503 if fast_cache["error"] else 202,
+        )
+    # Return 202 while still warming up (empty placeholder cache)
+    if fast_cache["data"].get("loading"):
+        return JSONResponse(
+            content={**fast_cache["data"], "last_updated": fast_cache["last_updated"]},
+            status_code=202,
         )
     return JSONResponse(content={
         **fast_cache["data"],
