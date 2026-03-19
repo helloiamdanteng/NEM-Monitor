@@ -895,10 +895,6 @@ def scrape_dispatch_history() -> dict:
         if region not in _rooftop_history:
             _rooftop_history[region] = {}
         _rooftop_history[region].update(rooftop[region])
-        # Trim to 144 slots
-        if len(_rooftop_history[region]) > 144:
-            for k in sorted(_rooftop_history[region].keys())[:-144]:
-                del _rooftop_history[region][k]
 
     logger.info(f"DispatchIS history: demand={sum(len(v) for v in demand_result.values())} pts, "
                 f"prices={sum(len(v) for v in price_result.values())} pts, "
@@ -1421,9 +1417,6 @@ def _update_bdu_history(region_summary: dict) -> None:
             "storage":   round(soc, 1) if soc is not None else None,
             "max_avail": round(cap, 1) if cap is not None else None,
         }
-        if len(_bdu_history[region]) > 144:
-            oldest = sorted(_bdu_history[region].keys())[0]
-            del _bdu_history[region][oldest]
 
 
 def _update_live_duid_history(scada: dict) -> None:
@@ -1613,8 +1606,10 @@ def scrape_all() -> dict:
         "op_demand":             op_demand,
         "generation":            generation,
         "interconnectors":       interconnectors,
+        "raw_summary":           region_summary,
         "historical_prices":     trading_prices,
         "dispatch_prices_5min":  capped_dispatch_prices,
+        "price_fetch_stats":     trading.get("fetch_stats", {}),
         "predispatch_prices":    pd_prices,
         "demand_history":        demand_history,
         "op_demand_history":     dispatch_op_demand,
