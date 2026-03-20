@@ -2537,12 +2537,14 @@ def scrape_historical_prices(date_str: str) -> dict:
         return {}
 
     # Choose source directory
-    if req_date >= yesterday:
+    # Use CURRENT for current month (archive not published until month completes)
+    # Use ARCHIVE only for past months
+    now_ym = now_aest.strftime("%Y%m")
+    req_ym = req_date.strftime("%Y%m")
+    if req_ym == now_ym:
         base_url = TRADING_CURRENT
     else:
-        # Archive uses YYYYMM subdirectory
-        ym = req_date.strftime("%Y%m")
-        base_url = f"{TRADING_ARCHIVE}{ym}/"
+        base_url = f"{TRADING_ARCHIVE}{req_ym}/"
 
     try:
         all_files = _list_hrefs(base_url)
