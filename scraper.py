@@ -493,6 +493,26 @@ def _read_zip(url: str) -> str:
         return ""
 
 
+def _read_zip_all(url: str) -> str:
+    """Read ALL CSVs from a ZIP concatenated — for weekly archive bundles."""
+    r = _get(url, timeout=60)
+    if not r:
+        return ""
+    try:
+        parts = []
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            csvs = sorted(n for n in z.namelist() if n.lower().endswith(".csv"))
+            if not csvs:
+                return ""
+            for name in csvs:
+                with z.open(name) as f:
+                    parts.append(f.read().decode("utf-8", errors="replace"))
+        return "\n".join(parts)
+    except Exception as e:
+        logger.warning(f"ZIP read_all failed {url}: {e}")
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # AEMO CSV parser
 # ---------------------------------------------------------------------------
@@ -2523,44 +2543,50 @@ def scrape_mtpasa_outages() -> list:
 def scrape_historical_prices(date_str: str) -> dict:
     """
     Fetch 30-min trading prices for any date (YYYYMMDD format).
-    Uses CURRENT directory for yesterday, ARCHIVE for older dates.
+    - Current month: use CURRENT directory (per-interval files)
+    - Older dates: use ARCHIVE which has weekly ZIP bundles
+      named PUBLIC_TRADINGIS_YYYYMMDD_YYYYMMDD.zip (Sun-Sat weeks)
     Returns { region: [ {interval: "HH:MM", rrp: float} ] }
     """
     from datetime import datetime as _dt, timedelta as _td
     now_aest = datetime.now(AEST)
-    today    = now_aest.date()
-    yesterday = (now_aest - _td(days=1)).date()
 
     try:
         req_date = _dt.strptime(date_str, "%Y%m%d").date()
     except ValueError:
         return {}
 
-    # Choose source directory
-    # Use CURRENT for current month (archive not published until month completes)
-    # Use ARCHIVE only for past months
     now_ym = now_aest.strftime("%Y%m")
     req_ym = req_date.strftime("%Y%m")
+
     if req_ym == now_ym:
-        base_url = TRADING_CURRENT
+        # Current month: per-interval files in CURRENT
+        try:
+            all_files = _list_hrefs(TRADING_CURRENT)
+        except Exception as e:
+            logger.warning(f"scrape_historical_prices: CURRENT listing failed: {e}")
+            return {}
+        date_files = sorted([u for u in all_files if date_str in u and "PUBLIC_TRADINGIS" in u.upper()])
+        if not date_files:
+            logger.warning(f"scrape_historical_prices: no files for {date_str} in CURRENT")
+            return {}
     else:
-        base_url = f"{TRADING_ARCHIVE}{req_ym}/"
-
-    try:
-        all_files = _list_hrefs(base_url)
-    except Exception as e:
-        logger.warning(f"scrape_historical_prices: listing failed for {date_str}: {e}")
-        return {}
-
-    date_files = sorted([u for u in all_files if date_str in u and "PUBLIC_TRADINGIS" in u.upper()])
-    if not date_files:
-        logger.warning(f"scrape_historical_prices: no files found for {date_str}")
-        return {}
+        # Older dates: find the weekly archive bundle that contains req_date
+        # Archive files span Sun-Sat: find which week contains req_date
+        # Week start = most recent Sunday on or before req_date
+        days_since_sunday = req_date.weekday() + 1  # Mon=1..Sat=6, Sun=0 -> +1 makes Sun=7%7=0
+        week_start = req_date - _td(days=days_since_sunday % 7)
+        week_end   = week_start + _td(days=6)
+        week_start_str = week_start.strftime("%Y%m%d")
+        week_end_str   = week_end.strftime("%Y%m%d")
+        archive_url = f"{TRADING_ARCHIVE}PUBLIC_TRADINGIS_{week_start_str}_{week_end_str}.zip"
+        logger.info(f"scrape_historical_prices: trying weekly archive {archive_url}")
+        date_files = [archive_url]
 
     prices: dict = {r: {} for r in NEM_REGIONS}
     for url in date_files:
         try:
-            text = _read_zip(url)
+            text = (_read_zip_all(url) if _use_read_all else _read_zip(url))
             if not text:
                 continue
             for row in _parse_aemo(text, "TRADING_PRICE"):
