@@ -2463,18 +2463,18 @@ def scrape_mtpasa_outages() -> list:
         if not sorted_days:
             continue
 
-        # Current availability = most recent entry ON OR BEFORE today
-        # MTPASA only publishes rows when availability CHANGES, so the last
-        # entry on/before today is the currently effective availability.
+        # MTPASA publishes forward-looking availability from now
+        # The FIRST entry = current availability (effective now or imminently)
+        # Subsequent entries = future planned changes
+        # Use the entry closest to today (on or after) as current availability
         current_entry = None
         for d in sorted_days:
-            if d <= today_str:
+            if d >= today_str:
                 current_entry = days[d]
-            else:
                 break
-        # No entry on or before today = outage hasn't started yet, skip
+        # If no future entry exists, use the last known entry
         if current_entry is None:
-            continue
+            current_entry = days[sorted_days[-1]]
 
         avail_today = current_entry["avail"]
         state_today = current_entry["state"]
