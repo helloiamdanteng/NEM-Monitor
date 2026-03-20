@@ -2487,11 +2487,6 @@ def scrape_mtpasa_outages() -> list:
         if avail_today >= capacity and state_today in ("NoDeratings", "Unknown"):
             continue
 
-        # Skip peakers/idle units: zero availability but no declared outage state
-        # These are gas peakers that simply aren't committed — not genuine outages
-        if avail_today == 0 and state_today in ("NoDeratings", "Unknown"):
-            continue
-
         change_mw = avail_today - capacity  # negative = MW below nameplate
 
         # Find the next date where availability meaningfully increases
