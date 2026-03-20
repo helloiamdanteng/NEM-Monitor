@@ -4023,148 +4023,146 @@ function renderPanel(panel, data) {
 function renderOutages(data) {
   const outages = (slowData && slowData.mtpasa_outages) || [];
 
-  const FUEL_STYLES = {
-    'Black Coal': { bg:'#6b728022', color:'#9ca3af', border:'#6b728066' },
-    'Brown Coal': { bg:'#8B451322', color:'#a16207', border:'#8B451366' },
-    'Gas':        { bg:'#ff9f4022', color:'#fb923c', border:'#ff9f4066' },
-    'Hydro':      { bg:'#36a2eb22', color:'#60a5fa', border:'#36a2eb66' },
-    'Wind':       { bg:'#4bc0c022', color:'#34d399', border:'#4bc0c066' },
-    'Solar':      { bg:'#ffd70022', color:'#fbbf24', border:'#ffd70066' },
-    'Battery':    { bg:'#9b59b622', color:'#c084fc', border:'#9b59b666' },
-    'Liquid':     { bg:'#94a3b822', color:'#cbd5e1', border:'#94a3b866' },
-  };
-
-  const STATE_STYLES = {
-    'Planned':  { bg:'#f59e0b22', color:'#fcd34d', border:'#f59e0b66' },
-    'Forced':   { bg:'#ef444422', color:'#fca5a5', border:'#ef444466' },
-    'Offline':  { bg:'#ef444422', color:'#fca5a5', border:'#ef444466' },
-    'Derated':  { bg:'#f9731622', color:'#fdba74', border:'#f9731666' },
-    'Returning':{ bg:'#22c55e22', color:'#86efac', border:'#22c55e66' },
-    'Seasonal': { bg:'#3b82f622', color:'#93c5fd', border:'#3b82f666' },
-  };
-
   function fmtDate(d) {
-    if (!d) return '<span style="color:#334155">—</span>';
+    if (!d) return null;
     const [y,m,dy] = d.split('/');
-    return new Date(y,m-1,dy).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    const dt = new Date(y, m-1, dy);
+    const days = Math.round((dt - new Date()) / 86400000);
+    const label = dt.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'});
+    return { label, days };
   }
 
-  let html = '<div class="section-title">MT PASA — Unit Availability</div>';
+  let html = '<div class="section-title">Capacity Reductions — MT PASA</div>';
 
-  // Summary cards
-  if (outages.length === 0 && (!!slowData || slowData.loading)) {
-    html += '<div class="state-msg"><div class="icon">⏳</div><div>Loading outage data… (arrives with slow cache ~3 min)</div></div>';
+  if (!slowData || outages.length === 0) {
+    html += '<div class="state-msg"><div class="icon">⏳</div><div>Loading outage data…</div></div>';
     return html;
   }
-  if (outages.length === 0) {
-    html += '<div class="state-msg"><div class="icon">✅</div><div>No significant outages found in MT PASA data</div></div>';
-    return html;
-  }
 
-  const offline   = outages.filter(r => r.avail_today === 0 && r.state !== 'Returning');
-  const derated   = outages.filter(r => r.avail_today > 0 && r.change_mw < 0);
-  const returning = outages.filter(r => r.state === 'Returning');
-  const mwLost    = outages.filter(r => r.change_mw < 0).reduce((s,r) => s + r.change_mw, 0);
-  const mwReturning = returning.reduce((s,r) => s + r.capacity - r.avail_today, 0);
+  // ── Summary strip ──────────────────────────────────────────────────────────
+  const totalLostMw = outages.reduce((s,r) => s + Math.abs(r.change_mw), 0);
+  const returning   = outages.filter(r => r.return_date);
+  html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+    <div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 10px;text-align:center">
+      <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:#ef4444">${outages.length}</div>
+      <div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-top:2px">UNITS AFFECTED</div>
+    </div>
+    <div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 10px;text-align:center">
+      <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:#ef4444">${Math.round(totalLostMw).toLocaleString()}</div>
+      <div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-top:2px">MW BELOW NAMEPLATE</div>
+    </div>
+    <div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 10px;text-align:center">
+      <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:#22c55e">${returning.length}</div>
+      <div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-top:2px">WITH RETURN DATE</div>
+    </div>
+  </div>`;
 
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
-  html += `<div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 12px">
-    <div style="font-family:var(--font-mono);font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Units Offline/Derated</div>
-    <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#ef4444">${offline.length + derated.length}</div>
-  </div>`;
-  html += `<div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 12px">
-    <div style="font-family:var(--font-mono);font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">MW Unavailable</div>
-    <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#ef4444">${Math.abs(mwLost).toLocaleString()}</div>
-  </div>`;
-  html += `<div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 12px">
-    <div style="font-family:var(--font-mono);font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Units Returning</div>
-    <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#22c55e">${returning.length}</div>
-  </div>`;
-  html += `<div style="background:#111827;border:1px solid #1e2d45;border-radius:8px;padding:8px 12px">
-    <div style="font-family:var(--font-mono);font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">MW Returning</div>
-    <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:#22c55e">${mwReturning.toLocaleString()}</div>
-  </div>`;
-  html += '</div>';
-
-  // Filter pills
-  const filters = [
-    {key:'all', label:'All', count:outages.length},
-    {key:'offline', label:'Offline', count:offline.length},
-    {key:'derated', label:'Derated', count:derated.length},
-    {key:'returning', label:'Returning', count:returning.length},
-  ];
-  html += '<div class="region-pills" style="margin-bottom:10px" id="outage-filters">';
-  for (const f of filters) {
-    const active = (window._outageFilter || 'all') === f.key ? 'active' : '';
+  // ── Filter pills ───────────────────────────────────────────────────────────
+  const filterState = window._outageFilter || 'all';
+  const offline  = outages.filter(r => r.avail_today === 0);
+  const derated  = outages.filter(r => r.avail_today > 0);
+  html += '<div class="region-pills" style="margin-bottom:12px">';
+  for (const [key, label, count] of [
+    ['all',     'All',     outages.length],
+    ['offline', 'Offline', offline.length],
+    ['derated', 'Derated', derated.length],
+    ['return',  'Has Return Date', returning.length],
+  ]) {
+    const active = filterState === key ? 'active' : '';
     html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
-      onclick="setOutageFilter('${f.key}')">${f.label} <span style="opacity:0.6">${f.count}</span></button>`;
+      onclick="setOutageFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${count}</span></button>`;
   }
   html += '</div>';
 
-  // Table
-  html += `<div style="overflow-x:auto">
-  <table style="width:100%;border-collapse:collapse;font-family:var(--font-mono)">
-    <thead>
-      <tr style="border-bottom:1px solid #1e2d45">
-        <th style="font-size:9px;color:#475569;text-align:left;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Station</th>
-        <th style="font-size:9px;color:#475569;text-align:left;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">DUID</th>
-        <th style="font-size:9px;color:#475569;text-align:left;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Fuel</th>
-        <th style="font-size:9px;color:#475569;text-align:left;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Rgn</th>
-        <th style="font-size:9px;color:#475569;text-align:left;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Status</th>
-        <th style="font-size:9px;color:#475569;text-align:right;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Avail MW</th>
-        <th style="font-size:9px;color:#475569;text-align:right;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Change</th>
-        <th style="font-size:9px;color:#475569;text-align:left;padding:5px 6px;font-weight:400;text-transform:uppercase;letter-spacing:.04em">Return Date</th>
-      </tr>
-    </thead>
-    <tbody id="outage-tbody">`;
-
-  const filter = window._outageFilter || 'all';
+  // ── Apply filter ───────────────────────────────────────────────────────────
   let visible = outages;
-  if (filter === 'offline')   visible = offline;
-  if (filter === 'derated')   visible = derated;
-  if (filter === 'returning') visible = returning;
+  if (filterState === 'offline')  visible = offline;
+  if (filterState === 'derated')  visible = derated;
+  if (filterState === 'return')   visible = returning;
 
-  for (const r of visible) {
-    const fs = FUEL_STYLES[r.fuel] || {bg:'#64748b22',color:'#94a3b8',border:'#64748b66'};
-    const ss = STATE_STYLES[r.state] || {bg:'#64748b22',color:'#94a3b8',border:'#64748b66'};
-    const rc = REGION_COLORS[r.region] || '#94a3b8';
-    const availColor = r.avail_today === 0 ? '#ef4444' : r.avail_today < r.capacity * 0.5 ? '#f97316' : '#94a3b8';
-    const changeColor = r.change_mw > 0 ? '#22c55e' : r.change_mw < 0 ? '#ef4444' : '#64748b';
-    const changePrefix = r.change_mw > 0 ? '+' : '−';
-    const retDate = r.state === 'Returning'
-      ? `<span style="color:#22c55e">↩ ${fmtDate(r.return_date || r.change_date)}</span>`
-      : fmtDate(r.return_date);
-
-    html += `<tr style="border-bottom:1px solid #0f172a">
-      <td style="padding:6px 6px;font-size:10px;font-weight:700;color:#e2e8f0">${r.station}</td>
-      <td style="padding:6px 6px;font-size:9px;color:#475569">${r.duid}</td>
-      <td style="padding:6px 6px">
-        <span style="font-size:9px;padding:2px 6px;border-radius:9px;background:${fs.bg};color:${fs.color};border:1px solid ${fs.border}">${r.fuel}</span>
-      </td>
-      <td style="padding:6px 6px;font-size:10px">
-        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${rc};margin-right:3px"></span>${r.region.replace('1','')}
-      </td>
-      <td style="padding:6px 6px">
-        <span style="font-size:9px;padding:2px 6px;border-radius:9px;background:${ss.bg};color:${ss.color};border:1px solid ${ss.border}">${r.state}</span>
-      </td>
-      <td style="padding:6px 6px;text-align:right">
-        <span style="font-size:11px;font-weight:700;color:${availColor}">${r.avail_today.toLocaleString()}</span>
-        <span style="font-size:8px;color:#334155;display:block">${r.capacity.toLocaleString()} cap</span>
-      </td>
-      <td style="padding:6px 6px;text-align:right;font-size:11px;font-weight:700;color:${changeColor}">${changePrefix}${Math.abs(r.change_mw).toLocaleString()}</td>
-      <td style="padding:6px 6px;font-size:10px;color:#64748b">${retDate}</td>
-    </tr>`;
+  // ── Group by fuel ──────────────────────────────────────────────────────────
+  const FUEL_COLORS_MAP = {
+    'Black Coal':'#6b7280','Brown Coal':'#8B4513','Gas':'#ff9f40',
+    'Hydro':'#36a2eb','Wind':'#4bc0c0','Solar':'#ffd700',
+    'Battery':'#9b59b6','Liquid':'#e74c3c','Other':'#475569'
+  };
+  const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Battery','Liquid','Other'];
+  const byFuel = {};
+  for (const u of visible) {
+    const f = u.fuel || 'Other';
+    if (!byFuel[f]) byFuel[f] = [];
+    byFuel[f].push(u);
   }
 
-  html += `</tbody></table></div>`;
+  for (const fuel of FUEL_ORDER) {
+    if (!byFuel[fuel]) continue;
+    const fuelColor = FUEL_COLORS_MAP[fuel] || '#475569';
+    html += `<div style="font-family:var(--font-mono);font-size:9px;font-weight:700;
+      color:${fuelColor};padding:8px 0 4px;letter-spacing:0.08em;
+      border-bottom:1px solid ${fuelColor}33;margin-bottom:6px">
+      ${fuel.toUpperCase()}
+    </div>`;
+
+    for (const u of byFuel[fuel]) {
+      const pct      = u.capacity > 0 ? Math.round(u.avail_today / u.capacity * 100) : 0;
+      const isZero   = u.avail_today === 0;
+      const ret      = u.return_date ? fmtDate(u.return_date) : null;
+      const chg      = u.change_date ? fmtDate(u.change_date) : null;
+      const rc       = REGION_COLORS[u.region] || '#64748b';
+
+      // Bar fill colour: red=offline, orange=derated
+      const barColor = isZero ? '#ef4444' : '#f97316';
+      const availColor = isZero ? '#ef4444' : '#f97316';
+
+      // Return date badge
+      let retBadge = '';
+      if (ret) {
+        const urgency = ret.days <= 3 ? '#22c55e' : ret.days <= 7 ? '#86efac' : '#475569';
+        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;
+          color:${urgency};margin-left:6px">↩ ${ret.label}${ret.days >= 0 ? ` (+${ret.days}d)` : ''}</span>`;
+      } else if (chg) {
+        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;
+          color:#475569;margin-left:6px">changes ${chg.label}</span>`;
+      } else {
+        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-left:6px">no return date</span>`;
+      }
+
+      html += `<div style="background:var(--surface);border:1px solid var(--border);
+        border-left:3px solid ${barColor};border-radius:8px;
+        padding:8px 10px;margin-bottom:5px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+          <div>
+            <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text)">${u.station}</span>
+            <span style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-left:6px">${u.duid}</span>
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${rc};margin-left:5px;vertical-align:middle"></span>
+            <span style="font-family:var(--font-mono);font-size:8px;color:${rc}">${(u.region||'').replace('1','')}</span>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${availColor}">
+            ${u.avail_today.toLocaleString()} <span style="font-size:8px;color:#475569">/ ${u.capacity.toLocaleString()} MW</span>
+          </div>
+        </div>
+        <div style="height:4px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:4px">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;
+            ${pct === 0 ? '' : 'min-width:2px'}"></div>
+        </div>
+        <div style="display:flex;align-items:center">
+          <span style="font-family:var(--font-mono);font-size:9px;color:#475569">
+            ${isZero ? 'OFFLINE' : Math.abs(u.change_mw).toLocaleString() + ' MW below nameplate'}
+          </span>
+          ${retBadge}
+        </div>
+      </div>`;
+    }
+  }
 
   const ts = slowData && slowData.timestamp
     ? new Date(slowData.timestamp).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZone:'Australia/Brisbane'})
     : '—';
-  html += `<div style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-top:8px">Source: AEMO MTPASA_DUIDAvailability · as at ${ts} AEST</div>`;
+  html += `<div style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-top:8px">Source: AEMO MT PASA DUID Availability · ${ts} AEST</div>`;
 
   return html;
 }
+
 
 function setOutageFilter(f) {
   window._outageFilter = f;
