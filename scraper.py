@@ -28,6 +28,7 @@ DISPATCH_IS_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/PredispatchIS_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/REPORTS/CURRENT/Dispatch_SCADA/"
 TRADING_CURRENT   = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
+DISPATCH_IS_ARCHIVE = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/DispatchIS_Reports/"
 TRADING_ARCHIVE   = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/TradingIS_Reports/"
 MTPASA_DUID_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
 ST_PASA_URL       = f"{NEMWEB_BASE}/REPORTS/CURRENT/Short_Term_PASA_Reports/"
@@ -2581,6 +2582,82 @@ def scrape_historical_prices(date_str: str) -> dict:
                       key=lambda x: x["interval"])
             for r, d in prices.items() if d}
 
+
+
+
+def scrape_historical_dispatch_prices(date_str: str) -> dict:
+    """
+    Fetch 5-min dispatch prices for a given date (YYYYMMDD format).
+    Uses CURRENT directory for today/yesterday, ARCHIVE for older dates.
+    Returns { region: [ {interval: "HH:MM", rrp: float} ] }
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    now_aest  = datetime.now(AEST)
+    today     = now_aest.date()
+    yesterday = (now_aest - _td(days=1)).date()
+
+    try:
+        req_date = _dt.strptime(date_str, "%Y%m%d").date()
+    except ValueError:
+        return {}
+
+    if req_date >= yesterday:
+        base_url = DISPATCH_IS_URL
+    else:
+        ym = req_date.strftime("%Y%m")
+        base_url = f"{DISPATCH_IS_ARCHIVE}{ym}/"
+
+    try:
+        all_files = _list_hrefs(base_url)
+    except Exception as e:
+        logger.warning(f"scrape_historical_dispatch_prices: listing failed for {date_str}: {e}")
+        return {}
+
+    date_files = sorted([u for u in all_files if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
+    if not date_files:
+        logger.warning(f"scrape_historical_dispatch_prices: no files found for {date_str}")
+        return {}
+
+    prices: dict = {r: {} for r in NEM_REGIONS}
+
+    def fetch_one(url):
+        try:
+            text = _read_zip(url)
+            if not text:
+                return {}
+            result = {}
+            for row in _parse_aemo(text, "DISPATCH_PRICE"):
+                if row.get("INTERVENTION", "0") not in ("0", ""):
+                    continue
+                region = row.get("REGIONID", "").strip()
+                if region not in NEM_REGIONS:
+                    continue
+                try:
+                    rrp    = round(float(row["RRP"]), 2)
+                    dt_str = row["SETTLEMENTDATE"]
+                    dt     = datetime.strptime(dt_str, "%Y/%m/%d %H:%M:%S") - timedelta(minutes=5)
+                    label  = dt.strftime("%H:%M")
+                    if region not in result:
+                        result[region] = {}
+                    result[region][label] = rrp
+                except (KeyError, ValueError):
+                    pass
+            return result
+        except Exception as e:
+            logger.debug(f"scrape_historical_dispatch_prices: file error {url}: {e}")
+            return {}
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(fetch_one, u): u for u in date_files}
+        for fut in as_completed(futures):
+            result = fut.result()
+            for region, slots in result.items():
+                prices[region].update(slots)
+
+    return {r: sorted([{"interval": k, "rrp": v} for k, v in prices[r].items()],
+                      key=lambda x: x["interval"])
+            for r in NEM_REGIONS if prices[r]}
 
 
 def scrape_yesterday() -> dict:
