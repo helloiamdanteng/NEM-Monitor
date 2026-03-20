@@ -2633,8 +2633,10 @@ function renderStations(fastData) {
   // ── Build station map: station name → { fuel, region, duids[], totalMw, totalCap }
   // Group across all selected regions, using station name from genData
   const stationMap = {};
-  for (const region of REGIONS) {
-    if (!stationsRegionFilter.has(region)) continue;
+  // Include Unknown region (DUIDs not in registration list)
+  const allGroupedRegions = [...REGIONS, ...Object.keys(grouped).filter(r => !REGIONS.includes(r))];
+  for (const region of allGroupedRegions) {
+    if (REGIONS.includes(region) && !stationsRegionFilter.has(region)) continue;
     const regionFuels = grouped[region] || {};
     for (const fuel of FUEL_ORDER) {
       for (const u of (regionFuels[fuel] || [])) {
