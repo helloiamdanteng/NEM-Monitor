@@ -2459,69 +2459,55 @@ def scrape_mtpasa_outages() -> list:
         if capacity <= 0:
             continue  # skip units we don't know
 
-        # Get today's or nearest availability
         sorted_days = sorted(days.keys())
         if not sorted_days:
             continue
 
-        # Find the day entry closest to today
-        today_entry = None
+        # Current availability = most recent entry ON OR BEFORE today
+        # MTPASA only publishes rows when availability CHANGES, so the last
+        # entry on/before today is the currently effective availability.
+        current_entry = None
         for d in sorted_days:
-            if d >= today_str:
-                today_entry = days[d]
+            if d <= today_str:
+                current_entry = days[d]
+            else:
                 break
-        if today_entry is None:
-            today_entry = days[sorted_days[-1]]
-
-        avail_today = today_entry["avail"]
-        state_today = today_entry["state"]
-
-        # Skip fully available units with no derating
-        if avail_today >= capacity and state_today in ("NoDeratings", "Unknown"):
+        # No entry on or before today = outage hasn't started yet, skip
+        if current_entry is None:
             continue
-        # Skip mothballed units (long-term, less interesting day-to-day)
+
+        avail_today = current_entry["avail"]
+        state_today = current_entry["state"]
+
+        # Skip mothballed units
         if state_today == "Mothballed":
             continue
 
-        change_mw = avail_today - capacity
+        # Skip fully available units
+        if avail_today >= capacity and state_today in ("NoDeratings", "Unknown"):
+            continue
 
-        # Find return date: first future day where availability increases from today's level
+        change_mw = avail_today - capacity  # negative = MW below nameplate
+
+        # Find the next date where availability meaningfully increases
         return_date = None
-        change_date = None
-        past_today  = False
         prev_avail  = avail_today
-
         for d in sorted_days:
-            if d < today_str:
-                continue
-            if not past_today:
-                past_today = True
+            if d <= today_str:
                 continue
             entry_avail = days[d]["avail"]
-            # Return to full capacity
-            if return_date is None and entry_avail >= capacity and prev_avail < capacity:
+            if entry_avail >= prev_avail + 50 or entry_avail >= capacity:
                 return_date = d
-            # Any significant increase from today's level (even partial recovery)
-            if change_date is None and entry_avail > avail_today + 10:
-                change_date = d
+                break
             prev_avail = entry_avail
 
-        # If no full return date but there is a partial recovery, use that
-        if return_date is None and change_date is not None:
-            # Check if change_date represents a meaningful increase
-            change_entry_avail = days.get(change_date, {}).get("avail", avail_today)
-            if change_entry_avail > avail_today + 50:
-                return_date = change_date  # treat significant partial recovery as return
-
-        # Determine label
+        # State label
         if avail_today == 0 and state_today in ("Forced", "Unknown"):
             label = "Forced"
         elif avail_today == 0 and state_today == "Planned":
             label = "Planned"
         elif avail_today == 0:
             label = "Offline"
-        elif return_date and avail_today > 0 and change_mw > 0:
-            label = "Returning"
         elif avail_today < capacity * 0.95:
             label = "Derated"
         else:
@@ -2536,9 +2522,9 @@ def scrape_mtpasa_outages() -> list:
             "avail_today": int(avail_today),
             "state":       label,
             "change_mw":   int(change_mw),
-            "change_date": change_date,
             "return_date": return_date,
         })
+
 
     # Sort by change_mw ascending (largest losses first)
     results.sort(key=lambda x: x["change_mw"])
