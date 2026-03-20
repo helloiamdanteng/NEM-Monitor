@@ -2588,39 +2588,82 @@ def scrape_historical_prices(date_str: str) -> dict:
 def scrape_historical_dispatch_prices(date_str: str) -> dict:
     """
     Fetch 5-min dispatch prices for a given date (YYYYMMDD format).
-    Tries CURRENT directory first (holds several days), then ARCHIVE.
+    - Today: use CURRENT (files appear at top of listing)
+    - Any other date: use ARCHIVE/YYYYMM/ directly (avoids pagination issues
+      with CURRENT which has 4000+ files and only returns the first page)
     Returns { region: [ {interval: "HH:MM", rrp: float} ] }
     """
     from datetime import datetime as _dt, timedelta as _td
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
 
     try:
-        _dt.strptime(date_str, "%Y%m%d")
+        req_dt = _dt.strptime(date_str, "%Y%m%d")
     except ValueError:
         return {}
 
-    # Try CURRENT first — it holds many days of files
-    date_files = []
-    try:
-        all_current = _list_hrefs(DISPATCH_IS_URL)
-        date_files = sorted([u for u in all_current if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
-    except Exception as e:
-        logger.warning(f"scrape_historical_dispatch_prices: CURRENT listing failed: {e}")
+    now_aest = datetime.now(AEST)
+    today_str = now_aest.strftime("%Y%m%d")
 
-    # Fall back to ARCHIVE if not found in CURRENT
-    if not date_files:
+    if date_str == today_str:
+        # Today: CURRENT listing returns newest files first, today's are at top
+        base_url = DISPATCH_IS_URL
+    else:
+        # Any past date: go directly to monthly archive directory
         ym = date_str[:6]  # YYYYMM
-        archive_url = f"{DISPATCH_IS_ARCHIVE}{ym}/"
-        try:
-            all_archive = _list_hrefs(archive_url)
-            date_files = sorted([u for u in all_archive if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
-        except Exception as e:
-            logger.warning(f"scrape_historical_dispatch_prices: ARCHIVE listing failed: {e}")
+        base_url = f"{DISPATCH_IS_ARCHIVE}{ym}/"
 
-    if not date_files:
-        logger.warning(f"scrape_historical_dispatch_prices: no files found for {date_str}")
+    try:
+        all_files = _list_hrefs(base_url)
+    except Exception as e:
+        logger.warning(f"scrape_historical_dispatch_prices: listing failed for {date_str}: {e}")
         return {}
 
-    logger.info(f"scrape_historical_dispatch_prices: {len(date_files)} files for {date_str}")
+    date_files = sorted([u for u in all_files
+                         if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
+    if not date_files:
+        logger.warning(f"scrape_historical_dispatch_prices: no files found for {date_str} in {base_url}")
+        return {}
+
+    logger.info(f"scrape_historical_dispatch_prices: fetching {len(date_files)} files for {date_str}")
+    prices: dict = {r: {} for r in NEM_REGIONS}
+
+    def fetch_one(url):
+        try:
+            text = _read_zip(url)
+            if not text:
+                return {}
+            result = {}
+            for row in _parse_aemo(text, "DISPATCH_PRICE"):
+                if row.get("INTERVENTION", "0") not in ("0", ""):
+                    continue
+                region = row.get("REGIONID", "").strip()
+                if region not in NEM_REGIONS:
+                    continue
+                try:
+                    rrp    = round(float(row["RRP"]), 2)
+                    dt_str = row["SETTLEMENTDATE"]
+                    dt     = datetime.strptime(dt_str, "%Y/%m/%d %H:%M:%S") - timedelta(minutes=5)
+                    label  = dt.strftime("%H:%M")
+                    if region not in result:
+                        result[region] = {}
+                    result[region][label] = rrp
+                except (KeyError, ValueError):
+                    pass
+            return result
+        except Exception as e:
+            logger.debug(f"scrape_historical_dispatch_prices: file error {url}: {e}")
+            return {}
+
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(fetch_one, u): u for u in date_files}
+        for fut in _as_completed(futures):
+            result = fut.result()
+            for region, slots in result.items():
+                prices[region].update(slots)
+
+    return {r: sorted([{"interval": k, "rrp": v} for k, v in prices[r].items()],
+                       key=lambda x: x["interval"])
+            for r in NEM_REGIONS if prices[r]}
 
     prices: dict = {r: {} for r in NEM_REGIONS}
 
