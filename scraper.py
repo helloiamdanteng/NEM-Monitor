@@ -2479,12 +2479,17 @@ def scrape_mtpasa_outages() -> list:
         avail_today = current_entry["avail"]
         state_today = current_entry["state"]
 
-        # Skip mothballed units
-        if state_today == "Mothballed":
+        # Skip permanently out-of-service units
+        if state_today in ("Mothballed", "Retired", "Decommissioned"):
             continue
 
-        # Skip fully available units
+        # Skip fully available units (at or above nameplate, no derating)
         if avail_today >= capacity and state_today in ("NoDeratings", "Unknown"):
+            continue
+
+        # Skip peakers/idle units: zero availability but no declared outage state
+        # These are gas peakers that simply aren't committed — not genuine outages
+        if avail_today == 0 and state_today in ("NoDeratings", "Unknown"):
             continue
 
         change_mw = avail_today - capacity  # negative = MW below nameplate
@@ -2521,6 +2526,7 @@ def scrape_mtpasa_outages() -> list:
             "capacity":    int(capacity),
             "avail_today": int(avail_today),
             "state":       label,
+            "pasa_state":  state_today,   # raw MTPASA UNITSTATE for filtering
             "change_mw":   int(change_mw),
             "return_date": return_date,
         })
