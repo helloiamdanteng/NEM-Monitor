@@ -376,7 +376,7 @@ async def debug():
             "scada_count":   gd.get("scada_count", 0),
             "reg_count":     gd.get("reg_count", 0),
             "fuel_mix_regions": list(gd.get("fuel_mix", {}).keys()),
-            "fuel_mix_sample": {r: dict(list(v.items())[:3]) for r, v in gd.get("fuel_mix", {}).items()},
+            "fuel_mix_sample": gd.get("fuel_mix", {}),
             "fuel_history_pts": {r: len(v) for r, v in gd.get("fuel_history", {}).items()},
             "gen_error":     gen_cache.get("error"),
         }
