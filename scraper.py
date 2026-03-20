@@ -2588,35 +2588,39 @@ def scrape_historical_prices(date_str: str) -> dict:
 def scrape_historical_dispatch_prices(date_str: str) -> dict:
     """
     Fetch 5-min dispatch prices for a given date (YYYYMMDD format).
-    Uses CURRENT directory for today/yesterday, ARCHIVE for older dates.
+    Tries CURRENT directory first (holds several days), then ARCHIVE.
     Returns { region: [ {interval: "HH:MM", rrp: float} ] }
     """
     from datetime import datetime as _dt, timedelta as _td
-    now_aest  = datetime.now(AEST)
-    today     = now_aest.date()
-    yesterday = (now_aest - _td(days=1)).date()
 
     try:
-        req_date = _dt.strptime(date_str, "%Y%m%d").date()
+        _dt.strptime(date_str, "%Y%m%d")
     except ValueError:
         return {}
 
-    if req_date >= yesterday:
-        base_url = DISPATCH_IS_URL
-    else:
-        ym = req_date.strftime("%Y%m")
-        base_url = f"{DISPATCH_IS_ARCHIVE}{ym}/"
-
+    # Try CURRENT first — it holds many days of files
+    date_files = []
     try:
-        all_files = _list_hrefs(base_url)
+        all_current = _list_hrefs(DISPATCH_IS_URL)
+        date_files = sorted([u for u in all_current if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
     except Exception as e:
-        logger.warning(f"scrape_historical_dispatch_prices: listing failed for {date_str}: {e}")
-        return {}
+        logger.warning(f"scrape_historical_dispatch_prices: CURRENT listing failed: {e}")
 
-    date_files = sorted([u for u in all_files if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
+    # Fall back to ARCHIVE if not found in CURRENT
+    if not date_files:
+        ym = date_str[:6]  # YYYYMM
+        archive_url = f"{DISPATCH_IS_ARCHIVE}{ym}/"
+        try:
+            all_archive = _list_hrefs(archive_url)
+            date_files = sorted([u for u in all_archive if date_str in u and "PUBLIC_DISPATCHIS" in u.upper()])
+        except Exception as e:
+            logger.warning(f"scrape_historical_dispatch_prices: ARCHIVE listing failed: {e}")
+
     if not date_files:
         logger.warning(f"scrape_historical_dispatch_prices: no files found for {date_str}")
         return {}
+
+    logger.info(f"scrape_historical_dispatch_prices: {len(date_files)} files for {date_str}")
 
     prices: dict = {r: {} for r in NEM_REGIONS}
 
