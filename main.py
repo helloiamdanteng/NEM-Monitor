@@ -589,6 +589,20 @@ async def dispatch_debug(date: str = "20260317"):
     except Exception as e:
         result["mmsdm_head_error"] = str(e)
     
+    # Check REPORTS/ARCHIVE path
+    from scraper import DISPATCH_IS_ARCHIVE
+    archive_url = f"{DISPATCH_IS_ARCHIVE}{ym}/"
+    result["archive_url"] = archive_url
+    try:
+        archive_zips = _list_hrefs(archive_url)
+        result["archive_total"] = len(archive_zips)
+        result["archive_sample"] = archive_zips[:3]
+        archive_date = [u for u in archive_zips if date in u and "PUBLIC_DISPATCHIS" in u.upper()]
+        result["archive_date_matches"] = len(archive_date)
+        result["archive_date_sample"] = archive_date[:2]
+    except Exception as e:
+        result["archive_error"] = str(e)
+
     return result
 
 @app.get("/api/historical_dispatch_prices")
