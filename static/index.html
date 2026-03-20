@@ -4107,7 +4107,7 @@ function renderOutages(data) {
       const pct      = u.capacity > 0 ? Math.round(u.avail_today / u.capacity * 100) : 0;
       const isZero   = u.avail_today === 0;
       const ret      = u.return_date ? fmtDate(u.return_date) : null;
-      const chg      = u.change_date ? fmtDate(u.change_date) : null;
+
       const rc       = REGION_COLORS[u.region] || '#64748b';
 
       // Bar fill colour: red=offline, orange=derated
@@ -4120,11 +4120,8 @@ function renderOutages(data) {
         const urgency = ret.days <= 3 ? '#22c55e' : ret.days <= 7 ? '#86efac' : '#475569';
         retBadge = `<span style="font-family:var(--font-mono);font-size:9px;
           color:${urgency};margin-left:6px">↩ ${ret.label}${ret.days >= 0 ? ` (+${ret.days}d)` : ''}</span>`;
-      } else if (chg) {
-        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;
-          color:#475569;margin-left:6px">changes ${chg.label}</span>`;
       } else {
-        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-left:6px">no return date</span>`;
+        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-left:6px">no return within 35 days</span>`;
       }
 
       html += `<div style="background:var(--surface);border:1px solid var(--border);
