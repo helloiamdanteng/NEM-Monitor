@@ -2313,6 +2313,33 @@ def scrape_gen() -> dict:
         if mw > 0:
             fuel_mix[region]["Rooftop Solar"] = mw
 
+    # Override Solar and Wind totals using authoritative DISPATCH_REGIONSUM fields
+    # SS_SOLAR_CLEAREDMW / SS_WIND_CLEAREDMW are exact totals including all semi-scheduled
+    # units regardless of whether they appear in NEM_UNITS or the registration list
+    try:
+        for row in _parse_aemo(dispatch_text, "DISPATCH_REGIONSUM"):
+            region = row.get("REGIONID", "").strip()
+            if region not in NEM_REGIONS:
+                continue
+            if row.get("INTERVENTION", "0") not in ("0", ""):
+                continue
+            sol_str = row.get("SS_SOLAR_CLEAREDMW", "")
+            win_str = row.get("SS_WIND_CLEAREDMW", "")
+            try:
+                sol = round(float(sol_str), 1)
+                if sol > 0:
+                    fuel_mix[region]["Solar"] = sol
+            except (ValueError, TypeError):
+                pass
+            try:
+                win = round(float(win_str), 1)
+                if win > 0:
+                    fuel_mix[region]["Wind"] = win
+            except (ValueError, TypeError):
+                pass
+    except Exception as e:
+        logger.debug(f"scrape_gen: REGIONSUM solar/wind override failed: {e}")
+
     # Accumulate into in-memory history
     _update_fuel_history(fuel_mix, scada, pump_load)
 
