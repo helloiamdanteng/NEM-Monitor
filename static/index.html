@@ -3963,10 +3963,11 @@ function drawDMinus1PriceChart(priceData) {
 
 
 function drawDMinus1Charts(data) {
-  // D-1 chart is loaded asynchronously via dMinusLoadPrices
+  // Canvas is now in DOM (called inside requestAnimationFrame after innerHTML set)
   const d = window._dMinusDate || (() => { const y = new Date(); y.setDate(y.getDate()-1); return y; })();
   const ds = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-  dMinusLoadPrices(ds);
+  // Use setTimeout 0 to let the browser paint first
+  setTimeout(() => dMinusLoadPrices(ds), 0);
 }
 
 function renderPanel(panel, data) {
@@ -3979,11 +3980,7 @@ function renderPanel(panel, data) {
     else if (panel === 'origin')     html = renderOrigin(data);
     else if (panel === 'stations')   html = renderStations(data);
     else if (panel === 'batteries')  html = renderBatteries(data);
-    else if (panel === 'dminus1')    { html = renderDMinus1(data); setTimeout(() => {
-      const d = window._dMinusDate || (() => { const y = new Date(); y.setDate(y.getDate()-1); return y; })();
-      const ds = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
-      dMinusLoadPrices(ds);
-    }, 0); }
+    else if (panel === 'dminus1')    { html = renderDMinus1(data); }
 
     else if (panel === 'dayahead')   html = renderDayAhead(data);
     else if (panel === 'about') html = renderAbout(data);
