@@ -4083,11 +4083,30 @@ function renderOutages(data) {
   }
   html += '</div>';
 
+  // ── Region filter (radio — one state at a time or NEM) ───────────────────
+  const regionFilter = window._outageRegionFilter || 'NEM';
+  html += '<div class="region-pills" style="margin-bottom:12px">';
+  const nemActive = regionFilter === 'NEM' ? 'active' : '';
+  html += `<button class="region-pill ${nemActive}" style="color:#94a3b8;border-color:#94a3b8"
+    onclick="setOutageRegion('NEM')">NEM</button>`;
+  for (const r of REGIONS) {
+    const active = regionFilter === r ? 'active' : '';
+    const color = REGION_COLORS[r];
+    html += `<button class="region-pill ${active}" style="color:${color};border-color:${color}"
+      onclick="setOutageRegion('${r}')">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div>';
+
   // ── Apply filters ──────────────────────────────────────────────────────────
   let visible = outages;
   if (filterState === 'offline')  visible = offline;
   if (filterState === 'derated')  visible = derated;
   if (filterState === 'return')   visible = withReturn;
+
+  // Apply region filter
+  if (regionFilter !== 'NEM') {
+    visible = visible.filter(r => r.region === regionFilter);
+  }
 
   // Apply PASA state filter
   if (!pasaStateFilter.has('all')) {
@@ -4182,6 +4201,11 @@ function renderOutages(data) {
 
 function setOutageFilter(f) {
   window._outageFilter = f;
+  if (latestData) renderPanel('outages', latestData);
+}
+
+function setOutageRegion(r) {
+  window._outageRegionFilter = r;
   if (latestData) renderPanel('outages', latestData);
 }
 
