@@ -2549,15 +2549,20 @@ def scrape_mtpasa_outages() -> list:
 
 def scrape_predispatch_sensitivities() -> dict:
     """
-    Fetch predispatch price sensitivity outputs.
-    Returns { region: [ {interval, rrp, rrp1..rrp8} ] }
-    RRP = base case, RRP1-RRP8 = sensitivity scenarios (demand variations)
+    Fetch predispatch price sensitivity outputs from Predispatch_Sensitivities report.
+    Table: PRICESENSITIVITIES, columns: RRPEEP1..RRPEEP43
+    Returns { region: [ {interval, rrp, scenarios: {label: value}} ] }
+    
+    Scenario mappings (AEMO MMS standard):
+      NSW1: RRPEEP1=+100MW, RRPEEP2=-100MW, RRPEEP11=+200MW, RRPEEP12=-200MW, RRPEEP13=+400MW, RRPEEP14=-400MW
+      VIC1: RRPEEP3=+100MW, RRPEEP4=-100MW, RRPEEP15=+200MW, RRPEEP16=-200MW
+      QLD1: RRPEEP5=+100MW, RRPEEP6=-100MW, RRPEEP25=+200MW, RRPEEP26=-200MW, RRPEEP27=+400MW, RRPEEP28=-400MW
+      SA1:  RRPEEP7=+100MW, RRPEEP8=-100MW
+      TAS1: RRPEEP9=+100MW, RRPEEP10=-100MW
     """
     url = get_latest_file_url(PREDISPATCH_SENS_URL, "PUBLIC_PREDISPATCH_SENSITIVITIES")
     if not url:
-        # Fall back to regular predispatch REGION_PRICES which has same columns
-        url = get_latest_file_url(PREDISPATCH_URL, "PUBLIC_PREDISPATCHIS")
-    if not url:
+        logger.warning("scrape_predispatch_sensitivities: no file found")
         return {}
 
     text = _read_zip(url)
@@ -2566,50 +2571,63 @@ def scrape_predispatch_sensitivities() -> dict:
 
     now_aest = datetime.now(AEST).replace(tzinfo=None)
     today    = now_aest.date()
-    region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
 
-    # Try PREDISPATCH_REGION_PRICES_SENSITIVITIES first, then REGION_PRICES
-    for table_key in ["PREDISPATCH_REGION_PRICES_SENSITIVITIES", "REGION_PRICES", "PREDISPATCH_REGION_PRICES"]:
-        rows = _parse_aemo(text, table_key)
-        if not rows:
+    # Per-region scenario column mappings
+    REGION_SCENARIOS = {
+        "NSW1": [("RRPEEP1","+100MW"),("RRPEEP11","+200MW"),("RRPEEP13","+400MW"),
+                 ("RRPEEP2","-100MW"), ("RRPEEP12","-200MW"),("RRPEEP14","-400MW")],
+        "VIC1": [("RRPEEP3","+100MW"),("RRPEEP15","+200MW"),
+                 ("RRPEEP4","-100MW"), ("RRPEEP16","-200MW")],
+        "QLD1": [("RRPEEP5","+100MW"),("RRPEEP25","+200MW"),("RRPEEP27","+400MW"),
+                 ("RRPEEP6","-100MW"), ("RRPEEP26","-200MW"),("RRPEEP28","-400MW")],
+        "SA1":  [("RRPEEP7","+100MW"),("RRPEEP8","-100MW")],
+        "TAS1": [("RRPEEP9","+100MW"),("RRPEEP10","-100MW")],
+    }
+
+    region_series: dict = {r: {} for r in NEM_REGIONS}
+
+    for row in _parse_aemo(text, "PRICESENSITIVITIES"):
+        region = row.get("REGIONID", "").strip()
+        if region not in NEM_REGIONS:
             continue
-        for row in rows:
-            region = row.get("REGIONID", "").strip()
-            if region not in NEM_REGIONS:
+        if row.get("INTERVENTION", "0") not in ("0", ""):
+            continue
+        dt_str = row.get("DATETIME", "")
+        if not dt_str:
+            continue
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+            if dt < now_aest - timedelta(minutes=30) or dt > now_aest + timedelta(hours=40):
                 continue
-            if row.get("INTERVENTION", "0") not in ("0", ""):
-                continue
-            dt_str  = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
-            rrp_str = row.get("RRP", "")
-            if not dt_str or not rrp_str:
-                continue
-            try:
-                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
-                if dt.date() not in (today, (now_aest + timedelta(days=1)).date()):
-                    continue
-                if dt < now_aest - timedelta(minutes=30):
-                    continue
+            # Build label using same 24hr+ convention as predispatch_prices
+            if dt.date() == today:
                 label = dt.strftime("%H:%M")
-                entry = {"rrp": round(float(rrp_str), 2)}
-                for i in range(1, 9):
-                    v = row.get(f"RRP{i}", "")
-                    if v and v.strip():
-                        try:
-                            entry[f"rrp{i}"] = round(float(v), 2)
-                        except ValueError:
-                            pass
-                region_series[region][label] = entry
-            except (ValueError, TypeError):
-                pass
-        if any(region_series.values()):
-            break
+            else:
+                days_ahead = (dt.date() - today).days
+                h = dt.hour + days_ahead * 24
+                label = f"{h:02d}:{dt.minute:02d}"
+
+            scenarios = {}
+            for col, desc in REGION_SCENARIOS.get(region, []):
+                v = row.get(col, "")
+                if v and v.strip():
+                    try:
+                        scenarios[desc] = round(float(v), 2)
+                    except ValueError:
+                        pass
+            if scenarios:
+                region_series[region][label] = scenarios
+        except (ValueError, TypeError):
+            pass
 
     result = {}
     for region, series in region_series.items():
         if series:
-            result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
+            result[region] = [{"interval": k, "scenarios": v}
+                              for k, v in sorted(series.items())]
     logger.info(f"Predispatch sensitivities: {sum(len(v) for v in result.values())} pts")
     return result
+
 
 
 def scrape_historical_prices(date_str: str) -> dict:
