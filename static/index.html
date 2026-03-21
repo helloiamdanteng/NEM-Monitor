@@ -424,7 +424,154 @@ function renderPrices(data) {
   html += '<button onclick="toggleRenewFuel(\'solar\')" id="rr-solar" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:0.35">☀ Solar</button>';
   html += '<button onclick="toggleRenewFuel(\'wind\')" id="rr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
   html += '</div></div>';
+
+  // ── Price Sensitivity Chart ────────────────────────────────────────────────
+  const sensPillState = window._pdSensRegion || null;
+  html += '<div class="section-title" style="margin-top:16px">Price Sensitivities — Predispatch</div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">';
+  for (const r of REGIONS) {
+    const active = sensPillState === r ? 'active' : '';
+    const col = REGION_COLORS[r];
+    html += `<button class="region-pill ${active}" style="color:${col};border-color:${col}"
+      onclick="setPdSensRegion('${r}')">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div>';
+  if (sensPillState) {
+    html += '<div class="chart-card"><div class="chart-container" style="height:200px"><canvas id="pdSensChart"></canvas></div></div>';
+  } else {
+    html += '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:12px 0">Select a region to view price sensitivities</div>';
+  }
+
   return html;
+}
+
+function setPdSensRegion(r) {
+  window._pdSensRegion = (window._pdSensRegion === r) ? null : r;
+  if (latestData) renderPanel('prices', latestData);
+  // Chart is drawn after re-render injects the canvas
+  setTimeout(() => { if (latestData) drawPriceSensitivityChart(latestData); }, 50);
+}
+
+function drawPriceSensitivityChart(data) {
+  const region = window._pdSensRegion;
+  if (!region) return;
+  const ctx = document.getElementById('pdSensChart');
+  if (!ctx) return;
+  destroyChart('pdSens');
+
+  const allSlots = [];
+  for (let h = 0; h < 48; h++)  // 48 hours for predispatch horizon
+    for (let m = 0; m < 60; m += 30)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  // Actual historical prices (5-min, mapped to 30-min slots)
+  const histPrices = data.historical_prices || {};
+  const histMap = {};
+  (histPrices[region] || []).forEach(p => {
+    // Snap 5-min to 30-min slot
+    const [hh, mm] = p.interval.split(':').map(Number);
+    const slot = (hh<10?'0':'')+hh+':'+(mm < 30 ? '00' : '30');
+    if (!histMap[slot]) histMap[slot] = [];
+    histMap[slot].push(p.rrp);
+  });
+  // Average within each 30-min slot
+  const histAvg = {};
+  for (const [slot, vals] of Object.entries(histMap))
+    histAvg[slot] = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 100)/100;
+
+  // Predispatch sensitivity data
+  const sensData = data.predispatch_sensitivity || {};
+  const sensMap = {};
+  (sensData[region] || []).forEach(p => { sensMap[p.interval] = p; });
+
+  // Find cutoff: last slot with actual data
+  const nowStr = nowAEST();
+  const [nh, nm] = nowStr.split(':').map(Number);
+  const nowSlot = (nh<10?'0':'')+nh+':'+(nm < 30 ? '00' : '30');
+  const nowIdx  = allSlots.findIndex(l => l >= nowSlot);
+
+  // Build today's slots (00:00–23:30)
+  const todaySlots = allSlots.slice(0, 48);
+  const color = REGION_COLORS[region];
+
+  // Sensitivity scenario labels (RRP1-8 = demand scenarios)
+  const SENS_LABELS = ['Base', '+Scenario 1','+Scenario 2','+Scenario 3','+Scenario 4',
+                       '-Scenario 1','-Scenario 2','-Scenario 3','-Scenario 4'];
+  const SENS_KEYS   = ['rrp','rrp1','rrp2','rrp3','rrp4','rrp5','rrp6','rrp7','rrp8'];
+  const SENS_COLORS = [color, '#22c55e','#16a34a','#15803d','#166534',
+                       '#f97316','#ea580c','#c2410c','#9a3412'];
+  const SENS_DASHES = [[],[5,3],[5,3],[5,3],[5,3],[5,3],[5,3],[5,3],[5,3]];
+
+  const datasets = [];
+
+  // Actual price line (historical)
+  datasets.push({
+    label: 'Actual',
+    data: todaySlots.map((l,i) => i <= nowIdx ? (histAvg[l] ?? null) : null),
+    borderColor: color, backgroundColor: color+'22',
+    borderWidth: 2, pointRadius: 0, tension: 0.2,
+    fill: false, spanGaps: true, order: 0,
+  });
+
+  // Predispatch sensitivity lines (forecast period only)
+  const hasSens = (sensData[region] || []).some(p => p.rrp1 !== undefined);
+
+  if (hasSens) {
+    SENS_KEYS.forEach((key, ki) => {
+      if (ki === 0) return; // skip base - draw separately below
+      datasets.push({
+        label: SENS_LABELS[ki],
+        data: todaySlots.map((l,i) => i >= nowIdx ? (sensMap[l]?.[key] ?? null) : null),
+        borderColor: SENS_COLORS[ki], backgroundColor: 'transparent',
+        borderWidth: 1, borderDash: [4,3],
+        pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
+      });
+    });
+  }
+
+  // PD base forecast line
+  datasets.push({
+    label: 'PD Forecast',
+    data: todaySlots.map((l,i) => {
+      if (i < nowIdx) return null;
+      if (i === nowIdx) return histAvg[l] ?? sensMap[l]?.rrp ?? null;
+      return sensMap[l]?.rrp ?? null;
+    }),
+    borderColor: color+'99', backgroundColor: 'transparent',
+    borderWidth: 1.5, borderDash: [6,3],
+    pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
+  });
+
+  charts.pdSens = new Chart(ctx, {
+    type: 'line',
+    data: { labels: todaySlots, datasets },
+    options: { ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins,
+        legend: { display: hasSens,
+          labels: { color:'#94a3b8', font:{family:'Space Mono',size:8}, boxWidth:8, padding:5 }
+        },
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw !== null,
+          callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` }
+        }
+      },
+      scales: {
+        x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
+               callback: function(val,idx) {
+                 const l = todaySlots[idx];
+                 if (!l) return '';
+                 const h = parseInt(l.split(':')[0]);
+                 return (l.endsWith(':00') && h%2===0) ? l : '';
+               }
+             },
+             grid: { color:'#1e293b' }
+        },
+        y: { ticks: { color:'#94a3b8', font:{family:'Space Mono',size:9},
+               callback: v => '$'+v.toFixed(0) },
+             grid: { color:'#1e293b' }
+        }
+      }
+    }
+  });
 }
 
 function togglePriceRegion(r) {
@@ -4028,7 +4175,7 @@ function renderPanel(panel, data) {
   main.innerHTML = html;
   requestAnimationFrame(() => {
     try {
-      if (panel === 'prices')          { drawPriceChart(data); drawDemandChart(data); drawRenewablesChart(data); }
+      if (panel === 'prices')          { drawPriceChart(data); drawDemandChart(data); drawRenewablesChart(data); setTimeout(()=>drawPriceSensitivityChart(data),50); }
       else if (panel === 'generation') { drawGenChart(data); drawIcChart(data); }
       else if (panel === 'demand')     drawDemandChart(data);
 
