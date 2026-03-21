@@ -459,38 +459,46 @@ function drawPriceSensitivityChart(data) {
   if (!ctx) return;
   destroyChart('pdSens');
 
-  // 5-min spine for historical period, then 30-min for PD horizon
-  const hist5Slots = [];
-  for (let h = 0; h < 24; h++)
+  // Full 5-min spine for today + 5-min slots for PD horizon (fills 30-min PD values across 6 slots each)
+  // This gives even visual spacing across the whole chart
+  const allSlots = [];
+  for (let h = 0; h < 48; h++)
     for (let m = 0; m < 60; m += 5)
-      hist5Slots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
 
-  // 30-min PD slots (24:00 onwards for tomorrow)
-  const pd30Slots = [];
-  for (let h = 24; h < 48; h++)
-    for (let m = 0; m < 60; m += 30)
-      pd30Slots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
-
-  // Today's 30-min PD slots
-  const pdTodaySlots = [];
-  for (let h = 0; h < 24; h++)
-    for (let m = 0; m < 60; m += 30)
-      pdTodaySlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
-
-  // Combined spine: 5-min today + 30-min tomorrow
-  const allSlots = [...hist5Slots, ...pd30Slots];
-
-  // Historical 5-min prices (direct, no averaging)
+  // Historical 5-min prices — direct lookup
   const histMap = {};
   ((data.historical_prices || {})[region] || []).forEach(p => { histMap[p.interval] = p.rrp; });
 
-  // Predispatch base forecast (30-min, uses 00:00-23:30 + 24:00+ labels)
+  // Expand 30-min PD prices to fill every 5-min slot in the window
+  // e.g. PD value at 14:30 fills 14:00, 14:05, 14:10, 14:15, 14:20, 14:25
   const pdMap = {};
-  ((data.predispatch_prices || {})[region] || []).forEach(p => { pdMap[p.interval] = p.rrp; });
+  ((data.predispatch_prices || {})[region] || []).forEach(p => {
+    const [hh, mm] = p.interval.split(':').map(Number);
+    for (let i = 0; i < 6; i++) {
+      let fm = mm + i * 5; let fh = hh;
+      if (fm >= 60) { fm -= 60; fh += 1; }
+      if (fh >= 48) return;
+      const slot = (fh<10?'0':'')+fh+':'+(fm<10?'0':'')+fm;
+      pdMap[slot] = p.rrp;
+    }
+  });
 
-  // Sensitivity scenarios
+  // Expand sensitivity scenarios the same way
   const sensMap = {};
-  ((data.predispatch_sensitivity || {})[region] || []).forEach(p => { sensMap[p.interval] = p.scenarios; });
+  ((data.predispatch_sensitivity || {})[region] || []).forEach(p => {
+    const [hh, mm] = p.interval.split(':').map(Number);
+    for (let i = 0; i < 6; i++) {
+      let fm = mm + i * 5; let fh = hh;
+      if (fm >= 60) { fm -= 60; fh += 1; }
+      if (fh >= 48) return;
+      const slot = (fh<10?'0':'')+fh+':'+(fm<10?'0':'')+fm;
+      sensMap[slot] = p.scenarios;
+    }
+  });
+
+  // Predispatch base forecast (30-min, uses 00:00-23:30 + 24:00+ labels)
+  // sensMap and pdMap already built above with 5-min expansion
 
   // Find now index
   const nowStr = nowAEST();
