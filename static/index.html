@@ -4396,22 +4396,7 @@ async function fetchSlowData() {
   _slowPollActive = false;
 }
 
-async function triggerRescrape() {
-  const btn = document.getElementById('rescrapeBtn');
-  if (btn) { btn.textContent = '⟳ …'; btn.disabled = true; }
-  try {
-    const r = await fetch('/api/rescrape');
-    const d = await r.json();
-    if (btn) btn.textContent = '⟳ Running';
-    // Refresh data after 30s to pick up new history
-    setTimeout(() => {
-      fetchData();
-      if (btn) { btn.textContent = '⟳ Full'; btn.disabled = false; }
-    }, 30000);
-  } catch(e) {
-    if (btn) { btn.textContent = '⟳ Full'; btn.disabled = false; }
-  }
-}
+
 
 async function fetchData() {
   const dot = document.getElementById('statusDot');
