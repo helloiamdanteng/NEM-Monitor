@@ -547,9 +547,8 @@ function drawPriceChart(data) {
             color: '#64748b',
             font: { family: 'Space Mono', size: 9 },
             maxRotation: 0,
-            // Only show hour marks — every 12th 5-min slot
             callback: function(val, idx) {
-              return idx % 12 === 0 ? labels[idx] : '';
+              return idx % 24 === 0 ? labels[idx] : '';
             }
           },
           grid: { color: '#1e293b' }
@@ -1290,9 +1289,8 @@ function drawDemandChart(data) {
             color: '#64748b',
             font: { family: 'Space Mono', size: 9 },
             maxRotation: 0,
-            // Show only hour marks
             callback: function(val, idx) {
-              return idx % 12 === 0 ? labels[idx] : '';
+              return idx % 24 === 0 ? labels[idx] : '';
             }
           },
           grid: { color: '#1e293b' }
@@ -1473,7 +1471,7 @@ function drawRenewablesChart(data) {
       scales: {
         x: { stacked: true,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
-            callback(v,i){ const l=this.getLabelForValue(i); return l&&l.endsWith(':00')?l:null; }
+            callback(v,i){ const l=this.getLabelForValue(i); return (l&&l.endsWith(':00')&&parseInt(l.split(':')[0])%2===0)?l:null; }
           },
           grid: { color:'#1e293b' }
         },
