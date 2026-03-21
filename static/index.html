@@ -459,16 +459,15 @@ function drawPriceSensitivityChart(data) {
   if (!ctx) return;
   destroyChart('pdSens');
 
-  // Build 30-min spine: today 00:00 → tomorrow ~18:00 (48 slots today + pd horizon)
+  // 30-min spine: today 00:00 through 48hrs
   const allSlots = [];
   for (let h = 0; h < 48; h++)
     for (let m = 0; m < 60; m += 30)
       allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
 
-  // Actual historical prices (5-min, averaged into 30-min slots using HH:MM labels)
-  const histPrices = data.historical_prices || {};
+  // Historical actual prices (5-min averaged to 30-min slots)
   const histMap = {};
-  (histPrices[region] || []).forEach(p => {
+  ((data.historical_prices || {})[region] || []).forEach(p => {
     const [hh, mm] = p.interval.split(':').map(Number);
     const slot = (hh<10?'0':'')+hh+':'+(mm < 30 ? '00' : '30');
     if (!histMap[slot]) histMap[slot] = [];
@@ -476,96 +475,99 @@ function drawPriceSensitivityChart(data) {
   });
   const histAvg = {};
   for (const [slot, vals] of Object.entries(histMap))
-    histAvg[slot] = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 100)/100;
+    histAvg[slot] = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 100) / 100;
 
-  // Predispatch data — use sensitivity if available, fall back to predispatch_prices
-  const sensData = data.predispatch_sensitivity || {};
-  const pdPrices = data.predispatch_prices || {};
+  // Predispatch base forecast
+  const pdMap = {};
+  ((data.predispatch_prices || {})[region] || []).forEach(p => { pdMap[p.interval] = p.rrp; });
+
+  // Sensitivity scenarios
   const sensMap = {};
-  // First populate from regular predispatch_prices (base forecast)
-  (pdPrices[region] || []).forEach(p => { sensMap[p.interval] = { rrp: p.rrp }; });
-  // Then overlay sensitivity data if available (adds rrp1-8)
-  (sensData[region] || []).forEach(p => {
-    sensMap[p.interval] = { ...(sensMap[p.interval] || {}), ...p };
-  });
+  ((data.predispatch_sensitivity || {})[region] || []).forEach(p => { sensMap[p.interval] = p.scenarios; });
 
-  // Find cutoff: last slot with actual data
+  // Find now index
   const nowStr = nowAEST();
-  const [nh, nm] = nowStr.split(':').map(Number);
-  const nowSlot = (nh<10?'0':'')+nh+':'+(nm < 30 ? '00' : '30');
-  const nowIdx  = allSlots.findIndex(l => l >= nowSlot);
+  const nowIdx = allSlots.findIndex(l => l >= nowStr);
 
-  // Build today's slots (00:00–23:30)
-  const todaySlots = allSlots;  // full spine including overnight PD
   const color = REGION_COLORS[region];
-
-  // Sensitivity scenario labels (RRP1-8 = demand scenarios)
-  const SENS_LABELS = ['Base', '+Scenario 1','+Scenario 2','+Scenario 3','+Scenario 4',
-                       '-Scenario 1','-Scenario 2','-Scenario 3','-Scenario 4'];
-  const SENS_KEYS   = ['rrp','rrp1','rrp2','rrp3','rrp4','rrp5','rrp6','rrp7','rrp8'];
-  const SENS_COLORS = [color, '#22c55e','#16a34a','#15803d','#166534',
-                       '#f97316','#ea580c','#c2410c','#9a3412'];
-  const SENS_DASHES = [[],[5,3],[5,3],[5,3],[5,3],[5,3],[5,3],[5,3],[5,3]];
-
   const datasets = [];
 
-  // Actual price line (historical)
+  // 1. Actual prices (solid line up to now)
   datasets.push({
     label: 'Actual',
-    data: todaySlots.map((l,i) => i <= nowIdx ? (histAvg[l] ?? null) : null),
-    borderColor: color, backgroundColor: color+'22',
+    data: allSlots.map((l,i) => i <= nowIdx ? (histAvg[l] ?? null) : null),
+    borderColor: color, backgroundColor: color + '22',
     borderWidth: 2, pointRadius: 0, tension: 0.2,
-    fill: false, spanGaps: true, order: 0,
+    fill: false, spanGaps: true,
   });
 
-  // Predispatch sensitivity lines (forecast period only)
-  const hasSens = (sensData[region] || []).some(p => p.rrp1 !== undefined);
-
-  if (hasSens) {
-    SENS_KEYS.forEach((key, ki) => {
-      if (ki === 0) return; // skip base - draw separately below
-      datasets.push({
-        label: SENS_LABELS[ki],
-        data: todaySlots.map((l,i) => i >= nowIdx ? (sensMap[l]?.[key] ?? null) : null),
-        borderColor: SENS_COLORS[ki], backgroundColor: 'transparent',
-        borderWidth: 1, borderDash: [4,3],
-        pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
-      });
-    });
-  }
-
-  // PD base forecast line
+  // 2. PD base forecast (dashed from now)
   datasets.push({
     label: 'PD Forecast',
-    data: todaySlots.map((l,i) => {
+    data: allSlots.map((l,i) => {
       if (i < nowIdx) return null;
-      if (i === nowIdx) return histAvg[l] ?? sensMap[l]?.rrp ?? null;
-      return sensMap[l]?.rrp ?? null;
+      if (i === nowIdx) return histAvg[l] ?? pdMap[l] ?? null;
+      return pdMap[l] ?? null;
     }),
-    borderColor: color+'99', backgroundColor: 'transparent',
+    borderColor: color + 'aa', backgroundColor: 'transparent',
     borderWidth: 1.5, borderDash: [6,3],
     pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
   });
 
+  // 3. Sensitivity scenario lines
+  const SENS_COLORS = {
+    '+100MW': '#22c55e', '+200MW': '#16a34a', '+400MW': '#15803d',
+    '-100MW': '#f97316', '-200MW': '#ea580c', '-400MW': '#c2410c',
+  };
+
+  // Collect all scenario labels present in the data
+  const scenarioLabels = new Set();
+  Object.values(sensMap).forEach(s => Object.keys(s).forEach(k => scenarioLabels.add(k)));
+
+  for (const scen of [...scenarioLabels].sort()) {
+    const col = SENS_COLORS[scen] || '#94a3b8';
+    datasets.push({
+      label: scen,
+      data: allSlots.map((l,i) => {
+        if (i < nowIdx) return null;
+        if (i === nowIdx) return histAvg[l] ?? sensMap[l]?.[scen] ?? null;
+        return sensMap[l]?.[scen] ?? null;
+      }),
+      borderColor: col, backgroundColor: 'transparent',
+      borderWidth: 1, borderDash: [4, 3],
+      pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
+    });
+  }
+
+  const hasSens = scenarioLabels.size > 0;
+
   charts.pdSens = new Chart(ctx, {
     type: 'line',
-    data: { labels: todaySlots, datasets },
+    data: { labels: allSlots, datasets },
     options: { ...CHART_DEFAULTS,
       plugins: { ...CHART_DEFAULTS.plugins,
-        legend: { display: hasSens,
+        legend: { display: true,
           labels: { color:'#94a3b8', font:{family:'Space Mono',size:8}, boxWidth:8, padding:5 }
         },
         tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw !== null,
-          callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` }
+          callbacks: {
+            title: cs => {
+              const l = cs[0]?.label || '';
+              const h = parseInt(l.split(':')[0]);
+              return h >= 24 ? String(h-24).padStart(2,'0')+':'+l.split(':')[1]+' (+1d)' : l;
+            },
+            label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh`
+          }
         }
       },
       scales: {
         x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
                callback: function(val,idx) {
-                 const l = todaySlots[idx];
+                 const l = allSlots[idx];
                  if (!l) return '';
                  const h = parseInt(l.split(':')[0]);
-                 return (l.endsWith(':00') && h%2===0) ? l : '';
+                 if (!l.endsWith(':00') || h % 2 !== 0) return '';
+                 return h >= 24 ? String(h-24).padStart(2,'0')+':00' : l;
                }
              },
              grid: { color:'#1e293b' }
@@ -578,6 +580,7 @@ function drawPriceSensitivityChart(data) {
     }
   });
 }
+
 
 function togglePriceRegion(r) {
   if (!charts.priceHist) return;
