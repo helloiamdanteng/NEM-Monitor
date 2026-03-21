@@ -26,6 +26,7 @@ AEST = ZoneInfo("Australia/Brisbane")  # UTC+10 fixed — AEMO never uses daylig
 NEMWEB_BASE       = "https://www.nemweb.com.au"
 DISPATCH_IS_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/PredispatchIS_Reports/"
+PREDISPATCH_SENS_URL = f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/"
 SCADA_URL         = f"{NEMWEB_BASE}/REPORTS/CURRENT/Dispatch_SCADA/"
 TRADING_CURRENT   = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
 DISPATCH_IS_ARCHIVE = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/DispatchIS_Reports/"
@@ -1553,6 +1554,7 @@ def scrape_all() -> dict:
         f_predispatch   = ex.submit(_fetch_predispatch)
         f_trading       = ex.submit(scrape_trading_history)
         f_dispatch_hist = ex.submit(scrape_dispatch_history)
+        f_pd_sens       = ex.submit(scrape_predispatch_sensitivities)
         f_scada         = ex.submit(_fetch_full_scada)
 
     def _safe_result(fut, default, name):
@@ -1566,6 +1568,7 @@ def scrape_all() -> dict:
     predispatch_text = _safe_result(f_predispatch,    "",  "predispatch")
     trading          = _safe_result(f_trading,        {"prices": {}, "fetch_stats": {}}, "trading")
     dispatch_hist    = _safe_result(f_dispatch_hist,  {"demand": {}, "op_demand": {}, "prices": {}}, "dispatch_hist")
+    pd_sens          = _safe_result(f_pd_sens,          {}, "pd_sens")
     scada_vals       = _safe_result(f_scada,          {}, "scada")
 
     dispatch_demand       = dispatch_hist.get("demand", {})
@@ -1681,6 +1684,7 @@ def scrape_all() -> dict:
         "dispatch_prices_5min":  capped_dispatch_prices,
         "price_fetch_stats":     trading.get("fetch_stats", {}),
         "predispatch_prices":    pd_prices,
+        "predispatch_sensitivity": pd_sens,
         "demand_history":        demand_history,
         "op_demand_history":     dispatch_op_demand,
         "dispatch_history":      dispatch_demand,
@@ -2532,6 +2536,71 @@ def scrape_mtpasa_outages() -> list:
     logger.info(f"scrape_mtpasa_outages: {len(results)} units with availability changes")
     return results
 
+
+
+def scrape_predispatch_sensitivities() -> dict:
+    """
+    Fetch predispatch price sensitivity outputs.
+    Returns { region: [ {interval, rrp, rrp1..rrp8} ] }
+    RRP = base case, RRP1-RRP8 = sensitivity scenarios (demand variations)
+    """
+    url = get_latest_file_url(PREDISPATCH_SENS_URL, "PUBLIC_PREDISPATCH_SENSITIVITIES")
+    if not url:
+        # Fall back to regular predispatch REGION_PRICES which has same columns
+        url = get_latest_file_url(PREDISPATCH_URL, "PUBLIC_PREDISPATCHIS")
+    if not url:
+        return {}
+
+    text = _read_zip(url)
+    if not text:
+        return {}
+
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    today    = now_aest.date()
+    region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+
+    # Try PREDISPATCH_REGION_PRICES_SENSITIVITIES first, then REGION_PRICES
+    for table_key in ["PREDISPATCH_REGION_PRICES_SENSITIVITIES", "REGION_PRICES", "PREDISPATCH_REGION_PRICES"]:
+        rows = _parse_aemo(text, table_key)
+        if not rows:
+            continue
+        for row in rows:
+            region = row.get("REGIONID", "").strip()
+            if region not in NEM_REGIONS:
+                continue
+            if row.get("INTERVENTION", "0") not in ("0", ""):
+                continue
+            dt_str  = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
+            rrp_str = row.get("RRP", "")
+            if not dt_str or not rrp_str:
+                continue
+            try:
+                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                if dt.date() not in (today, (now_aest + timedelta(days=1)).date()):
+                    continue
+                if dt < now_aest - timedelta(minutes=30):
+                    continue
+                label = dt.strftime("%H:%M")
+                entry = {"rrp": round(float(rrp_str), 2)}
+                for i in range(1, 9):
+                    v = row.get(f"RRP{i}", "")
+                    if v and v.strip():
+                        try:
+                            entry[f"rrp{i}"] = round(float(v), 2)
+                        except ValueError:
+                            pass
+                region_series[region][label] = entry
+            except (ValueError, TypeError):
+                pass
+        if any(region_series.values()):
+            break
+
+    result = {}
+    for region, series in region_series.items():
+        if series:
+            result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
+    logger.info(f"Predispatch sensitivities: {sum(len(v) for v in result.values())} pts")
+    return result
 
 
 def scrape_historical_prices(date_str: str) -> dict:
