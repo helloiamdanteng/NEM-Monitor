@@ -479,10 +479,16 @@ function drawPriceSensitivityChart(data) {
   for (const [slot, vals] of Object.entries(histMap))
     histAvg[slot] = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length * 100)/100;
 
-  // Predispatch sensitivity data
+  // Predispatch data — use sensitivity if available, fall back to predispatch_prices
   const sensData = data.predispatch_sensitivity || {};
+  const pdPrices = data.predispatch_prices || {};
   const sensMap = {};
-  (sensData[region] || []).forEach(p => { sensMap[p.interval] = p; });
+  // First populate from regular predispatch_prices (base forecast)
+  (pdPrices[region] || []).forEach(p => { sensMap[p.interval] = { rrp: p.rrp }; });
+  // Then overlay sensitivity data if available (adds rrp1-8)
+  (sensData[region] || []).forEach(p => {
+    sensMap[p.interval] = { ...(sensMap[p.interval] || {}), ...p };
+  });
 
   // Find cutoff: last slot with actual data
   const nowStr = nowAEST();
@@ -611,7 +617,7 @@ function drawPriceChart(data) {
   const lastSlot = allSlots.filter(s => hasData.has(s)).pop();
   if (!lastSlot) return; // nothing to draw yet
 
-  const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
+  const labels = allSlots;  // full 24hr spine for consistent axis
 
   // Snap "now" to nearest slot
   const [nh, nm] = now.split(':').map(Number);
@@ -1339,7 +1345,7 @@ function drawDemandChart(data) {
     return;
   }
   ctx.style.display = '';
-  const labels = allSlots.slice(0, allSlots.indexOf(lastSlot) + 1);
+  const labels = allSlots;  // full 24hr spine for consistent axis
 
   const [nh, nm] = now.split(':').map(Number);
   const nowMins  = nh * 60 + nm;
