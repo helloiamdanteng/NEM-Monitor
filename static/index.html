@@ -4066,26 +4066,33 @@ function renderOutages(data) {
   }
 
   // ── Filter pills ───────────────────────────────────────────────────────────
-  const filterState = window._outageFilter || 'all';
-  const offline  = outages.filter(r => r.avail_today === 0);
-  const derated  = outages.filter(r => r.avail_today > 0);
+  // Two independent filters:
+  // 1. Status radio: All / Offline / Derated
+  // 2. Has Return toggle: can combine with status radio
+  const filterState   = window._outageFilter    || 'all';
+  const returnFilter  = window._outageReturnFilter || false;
+  const offline    = outages.filter(r => r.avail_today === 0);
+  const derated    = outages.filter(r => r.avail_today > 0);
   const withReturn = outages.filter(r => r.return_date);
 
-  // PASA state filter — let user show/hide by UNITSTATE category
+  // PASA state filter
   const pasaStateFilter = window._outageStateFilter || new Set(['all']);
-  const allPasaStates = [...new Set(outages.map(r => r.pasa_state || 'Unknown'))].sort();
+  const allPasaStates = [...new Set(outages.map(r => r.pasa_state || 'Unknown'))].filter(s => s !== 'Unknown').sort();
 
   html += '<div class="region-pills" style="margin-bottom:6px">';
-  for (const [key, label, count] of [
-    ['all',     'All',          outages.length],
-    ['offline', 'Offline',      offline.length],
-    ['derated', 'Derated',      derated.length],
-    ['return',  'Has Return',   withReturn.length],
+  for (const [key, label, arr] of [
+    ['all',     'All',     outages],
+    ['offline', 'Offline', offline],
+    ['derated', 'Derated', derated],
   ]) {
     const active = filterState === key ? 'active' : '';
     html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
-      onclick="setOutageFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${count}</span></button>`;
+      onclick="setOutageFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${arr.length}</span></button>`;
   }
+  // Has Return as independent toggle
+  const retActive = returnFilter ? 'active' : '';
+  html += `<button class="region-pill ${retActive}" style="color:#22c55e;border-color:#22c55e"
+    onclick="toggleOutageReturn()">↩ Has Return <span style="opacity:0.5;font-size:9px">${withReturn.length}</span></button>`;
   html += '</div>';
 
   // PASA state pills — show/hide by UNITSTATE
@@ -4121,9 +4128,9 @@ function renderOutages(data) {
 
   // ── Apply filters ──────────────────────────────────────────────────────────
   let visible = outages;
-  if (filterState === 'offline')  visible = offline;
-  if (filterState === 'derated')  visible = derated;
-  if (filterState === 'return')   visible = withReturn;
+  if (filterState === 'offline') visible = offline;
+  if (filterState === 'derated') visible = derated;
+  if (returnFilter) visible = visible.filter(r => r.return_date);
 
   // Apply region filter
   if (regionFilter !== 'NEM') {
@@ -4223,6 +4230,11 @@ function renderOutages(data) {
 
 function setOutageFilter(f) {
   window._outageFilter = f;
+  if (latestData) renderPanel('outages', latestData);
+}
+
+function toggleOutageReturn() {
+  window._outageReturnFilter = !window._outageReturnFilter;
   if (latestData) renderPanel('outages', latestData);
 }
 
