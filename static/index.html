@@ -513,7 +513,7 @@ function drawPriceSensitivityChart(data) {
     label: 'Actual',
     data: allSlots.map((l,i) => i <= nowIdx ? (histMap[l] ?? null) : null),
     borderColor: color, backgroundColor: color + '22',
-    borderWidth: 2, pointRadius: 0, tension: 0.2,
+    borderWidth: 1, pointRadius: 0, tension: 0,
     fill: false, spanGaps: true,
   });
 
@@ -578,15 +578,16 @@ function drawPriceSensitivityChart(data) {
       },
       scales: {
         x: { ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
-               callback: function(val,idx) {
-                 const l = allSlots[idx];
-                 if (!l) return '';
+               autoSkip: false, maxTicksLimit: 1000,
+               callback: function(val) {
+                 const l = this.getLabelForValue(val);
+                 if (!l) return null;
                  const h = parseInt(l.split(':')[0]);
-                 if (!l.endsWith(':00') || h % 2 !== 0) return '';
+                 if (!l.endsWith(':00') || h % 2 !== 0) return null;
                  return h >= 24 ? String(h-24).padStart(2,'0')+':00' : l;
                }
              },
-             grid: { color:'#1e293b' }
+             grid: { color:'#1e293b', drawOnChartArea:true, drawTicks:false }
         },
         y: { ticks: { color:'#94a3b8', font:{family:'Space Mono',size:9},
                callback: v => '$'+v.toFixed(0) },
@@ -718,14 +719,19 @@ function drawPriceChart(data) {
             color: '#64748b',
             font: { family: 'Space Mono', size: 9 },
             maxRotation: 0,
-            callback: function(val, idx) {
+            autoSkip: false,
+            maxTicksLimit: 1000,
+            callback: function(val) {
               const l = this.getLabelForValue(val);
-              if (!l) return '';
+              if (!l) return null;
               const h = parseInt(l.split(':')[0]);
-              return (l.endsWith(':00') && h % 2 === 0) ? l : '';
+              return (l.endsWith(':00') && h % 2 === 0) ? l : null;
             }
           },
-          grid: { color: '#1e293b' }
+          grid: { color: '#1e293b',
+            drawOnChartArea: true,
+            drawTicks: false,
+          }
         },
         y: {
           ticks: {
@@ -1463,14 +1469,19 @@ function drawDemandChart(data) {
             color: '#64748b',
             font: { family: 'Space Mono', size: 9 },
             maxRotation: 0,
-            callback: function(val, idx) {
+            autoSkip: false,
+            maxTicksLimit: 1000,
+            callback: function(val) {
               const l = this.getLabelForValue(val);
-              if (!l) return '';
+              if (!l) return null;
               const h = parseInt(l.split(':')[0]);
-              return (l.endsWith(':00') && h % 2 === 0) ? l : '';
+              return (l.endsWith(':00') && h % 2 === 0) ? l : null;
             }
           },
-          grid: { color: '#1e293b' }
+          grid: { color: '#1e293b',
+            drawOnChartArea: true,
+            drawTicks: false,
+          }
         },
         y: {
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
@@ -1648,9 +1659,10 @@ function drawRenewablesChart(data) {
       scales: {
         x: { stacked: true,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
-            callback: function(val) { const l=this.getLabelForValue(val); if(!l) return ''; const h=parseInt(l.split(':')[0]); return (l.endsWith(':00')&&h%2===0)?l:''; }
+            autoSkip: false, maxTicksLimit: 1000,
+            callback: function(val) { const l=this.getLabelForValue(val); if(!l) return null; const h=parseInt(l.split(':')[0]); return (l.endsWith(':00')&&h%2===0)?l:null; }
           },
-          grid: { color:'#1e293b' }
+          grid: { color:'#1e293b', drawOnChartArea:true, drawTicks:false }
         },
         y: { stacked: true,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9} },
