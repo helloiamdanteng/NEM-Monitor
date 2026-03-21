@@ -2573,15 +2573,20 @@ def scrape_predispatch_sensitivities() -> dict:
     today    = now_aest.date()
 
     # Per-region scenario column mappings
+    # Derived empirically from price impact analysis (RRPEEP2 = base case, no change)
+    # NSW: scen 5=+100, 7=+200, 14=+400, 6=-100, 13=-200
+    # QLD: scen 33=+200, 35=+400, 34=-200 (no clean +100 isolated)
+    # SA:  scen 15=+100, 17=+200, 19=+400, 16=-100, 18=-200, 20=-400
+    # VIC/TAS: no clean isolated scenarios identified yet
     REGION_SCENARIOS = {
-        "NSW1": [("RRPEEP1","+100MW"),("RRPEEP11","+200MW"),("RRPEEP13","+400MW"),
-                 ("RRPEEP2","-100MW"), ("RRPEEP12","-200MW"),("RRPEEP14","-400MW")],
-        "VIC1": [("RRPEEP3","+100MW"),("RRPEEP15","+200MW"),
-                 ("RRPEEP4","-100MW"), ("RRPEEP16","-200MW")],
-        "QLD1": [("RRPEEP5","+100MW"),("RRPEEP25","+200MW"),("RRPEEP27","+400MW"),
-                 ("RRPEEP6","-100MW"), ("RRPEEP26","-200MW"),("RRPEEP28","-400MW")],
-        "SA1":  [("RRPEEP7","+100MW"),("RRPEEP8","-100MW")],
-        "TAS1": [("RRPEEP9","+100MW"),("RRPEEP10","-100MW")],
+        "NSW1": [("RRPEEP5", "+100MW"), ("RRPEEP7",  "+200MW"), ("RRPEEP14", "+400MW"),
+                 ("RRPEEP6", "-100MW"), ("RRPEEP13", "-200MW")],
+        "QLD1": [("RRPEEP33", "+200MW"), ("RRPEEP35", "+400MW"),
+                 ("RRPEEP34", "-200MW")],
+        "SA1":  [("RRPEEP15", "+100MW"), ("RRPEEP17", "+200MW"), ("RRPEEP19", "+400MW"),
+                 ("RRPEEP16", "-100MW"), ("RRPEEP18", "-200MW"), ("RRPEEP20", "-400MW")],
+        "VIC1": [("RRPEEP3",  "+100MW"), ("RRPEEP4",  "-100MW")],
+        "TAS1": [("RRPEEP9",  "+100MW"), ("RRPEEP10", "-100MW")],
     }
 
     region_series: dict = {r: {} for r in NEM_REGIONS}
