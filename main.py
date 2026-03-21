@@ -253,6 +253,28 @@ async def get_slow():
     })
 
 
+@app.get("/api/rescrape")
+async def rescrape():
+    """Force a full rescrape: backfill history + fast + gen caches."""
+    import asyncio
+    from scraper import scrape_scada_history, scrape_dispatch_history
+
+    async def _run():
+        loop = asyncio.get_running_loop()
+        # Run backfills in parallel
+        await asyncio.gather(
+            loop.run_in_executor(None, scrape_scada_history),
+            loop.run_in_executor(None, scrape_dispatch_history),
+        )
+        # Then fast scrape
+        await _run_fast()
+        # Then gen scrape
+        await _run_gen()
+
+    asyncio.create_task(_run())
+    return {"status": "rescrape started — allow ~60s for data to refresh"}
+
+
 @app.get("/api/health")
 async def health():
     return {
@@ -558,6 +580,37 @@ async def historical_prices(date: str):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+
+@app.get("/api/mtpasa-debug")
+async def mtpasa_debug():
+    from scraper import _list_hrefs, MTPASA_DUID_URL
+    files = _list_hrefs(MTPASA_DUID_URL)
+    latest = sorted(files)[-1] if files else None
+    return {"total_files": len(files), "latest_file": latest, "all_files": files[-5:]}
+
+@app.get("/api/rescrape")
+async def rescrape():
+    """Force immediate re-run of all scrape jobs including history backfill."""
+    import asyncio
+    from scraper import scrape_all, scrape_gen, scrape_slow, scrape_scada_history, scrape_mtpasa_outages
+    loop = asyncio.get_running_loop()
+
+    async def _run():
+        # Kick off all jobs concurrently
+        await asyncio.gather(
+            loop.run_in_executor(None, scrape_scada_history),
+            return_exceptions=True
+        )
+        # Then fast + gen
+        data = await loop.run_in_executor(None, scrape_all)
+        fast_cache["data"] = data
+        fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
+        gen_data = await loop.run_in_executor(None, scrape_gen)
+        gen_cache["data"] = gen_data
+        gen_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+    asyncio.create_task(_run())
+    return {"status": "rescrape triggered — history backfill + fast + gen running in background"}
 
 @app.get("/api/historical_dispatch_prices")
 async def historical_dispatch_prices(date: str):
