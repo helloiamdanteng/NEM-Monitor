@@ -38,7 +38,7 @@ _FAST_EMPTY = {
     "predispatch_gen": {}, "predispatch_ic": {}, "ic_flows": {}, "ic_history": {},
     "origin_assets": {}, "tomorrow_prices": {}, "tomorrow_demand": {},
     "dispatch_history": {}, "fuel_mix": {}, "predispatch_units": {},
-    "dispatch_prices_5min": {}, "demand_history": {}, "op_demand_history": {},
+    "dispatch_prices_5min": {}, "demand_history": {}, "op_demand_history": {}, "predispatch_sensitivity": {},
     "interconnectors": {}, "generation": {}, "fuel_colors": {}, "all_fuels": [],
     "bdu_history": {},
 }
