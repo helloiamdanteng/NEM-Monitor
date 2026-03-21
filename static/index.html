@@ -548,7 +548,10 @@ function drawPriceChart(data) {
             font: { family: 'Space Mono', size: 9 },
             maxRotation: 0,
             callback: function(val, idx) {
-              return idx % 24 === 0 ? labels[idx] : '';
+              const l = labels[idx];
+              if (!l) return '';
+              const h = parseInt(l.split(':')[0]);
+              return (l.endsWith(':00') && h % 2 === 0) ? l : '';
             }
           },
           grid: { color: '#1e293b' }
@@ -1290,7 +1293,10 @@ function drawDemandChart(data) {
             font: { family: 'Space Mono', size: 9 },
             maxRotation: 0,
             callback: function(val, idx) {
-              return idx % 24 === 0 ? labels[idx] : '';
+              const l = labels[idx];
+              if (!l) return '';
+              const h = parseInt(l.split(':')[0]);
+              return (l.endsWith(':00') && h % 2 === 0) ? l : '';
             }
           },
           grid: { color: '#1e293b' }
@@ -1471,7 +1477,7 @@ function drawRenewablesChart(data) {
       scales: {
         x: { stacked: true,
           ticks: { color:'#64748b', font:{family:'Space Mono',size:9}, maxRotation:0,
-            callback(v,i){ const l=this.getLabelForValue(i); return (l&&l.endsWith(':00')&&parseInt(l.split(':')[0])%2===0)?l:null; }
+            callback(v,i){ const l=this.getLabelForValue(i); if(!l) return ''; const h=parseInt(l.split(':')[0]); return (l.endsWith(':00')&&h%2===0)?l:null; }
           },
           grid: { color:'#1e293b' }
         },
