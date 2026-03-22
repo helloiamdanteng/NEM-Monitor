@@ -709,8 +709,7 @@ async def mtpasa_calendar():
     if not text:
         return {"error": "failed to read MTPASA file"}
 
-    COAL_FUELS = {"Black Coal", "Brown Coal"}
-
+    # All fuel types — filter happens on frontend
     # Collect raw per-DUID per-day data
     duid_days: dict = {}
     for row in _parse_aemo(text, "MTPASA_DUIDAVAILABILITY"):
@@ -718,7 +717,7 @@ async def mtpasa_calendar():
         if not duid:
             continue
         unit = NEM_UNITS.get(duid, {})
-        if unit.get("fuel") not in COAL_FUELS:
+        if not unit or not unit.get("capacity"):
             continue
         day   = row.get("DAY", "").strip()[:10]
         try:
