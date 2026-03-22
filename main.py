@@ -688,6 +688,69 @@ async def sens_debug():
             break
     return result
 
+@app.get("/api/mtpasa-calendar")
+async def mtpasa_calendar():
+    """
+    Return full MTPASA availability series for coal DUIDs across the 2yr horizon.
+    Returns { duid: { station, fuel, region, capacity, days: [{day, avail, state}] } }
+    """
+    from scraper import (
+        _list_hrefs, _read_zip, _parse_aemo, NEM_UNITS,
+        MTPASA_DUID_URL, AEST
+    )
+    from datetime import datetime
+
+    files = _list_hrefs(MTPASA_DUID_URL)
+    if not files:
+        return {"error": "no MTPASA files found"}
+
+    latest = sorted(files)[-1]
+    text   = _read_zip(latest)
+    if not text:
+        return {"error": "failed to read MTPASA file"}
+
+    COAL_FUELS = {"Black Coal", "Brown Coal"}
+
+    # Collect raw per-DUID per-day data
+    duid_days: dict = {}
+    for row in _parse_aemo(text, "MTPASA_DUIDAVAILABILITY"):
+        duid = row.get("DUID", "").strip()
+        if not duid:
+            continue
+        unit = NEM_UNITS.get(duid, {})
+        if unit.get("fuel") not in COAL_FUELS:
+            continue
+        day   = row.get("DAY", "").strip()[:10]
+        try:
+            avail = round(float(row.get("PASAAVAILABILITY") or 0))
+        except ValueError:
+            avail = 0
+        state = row.get("UNITSTATE", "").strip() or "Unknown"
+
+        if duid not in duid_days:
+            duid_days[duid] = {"days": {}}
+        duid_days[duid]["days"][day] = {"avail": avail, "state": state}
+
+    # Build response
+    result = {}
+    for duid, data in duid_days.items():
+        unit = NEM_UNITS.get(duid, {})
+        capacity = int(unit.get("capacity") or 0)
+        result[duid] = {
+            "station":  unit.get("station", duid),
+            "fuel":     unit.get("fuel", "Other"),
+            "region":   unit.get("region", ""),
+            "capacity": capacity,
+            "days":     [{"day": k, "avail": v["avail"], "state": v["state"]}
+                         for k, v in sorted(data["days"].items())]
+        }
+
+    return {
+        "source": latest,
+        "as_of":  datetime.now(AEST).isoformat(),
+        "duids":  result
+    }
+
 @app.get("/api/historical_dispatch_prices")
 async def historical_dispatch_prices(date: str):
     """Fetch 5-min dispatch prices for a given date (YYYYMMDD)."""
