@@ -136,10 +136,14 @@ body { background:var(--bg); color:var(--text); font-family:var(--font-sans); mi
   position:fixed; bottom:0; left:0; right:0;
   background:rgba(10,14,26,0.96); backdrop-filter:blur(12px);
   border-top:1px solid var(--border);
-  display:flex; justify-content:space-around;
-  padding:8px 0 calc(8px + env(safe-area-inset-bottom)); z-index:100;
+  display:flex;
+  overflow-x:auto; overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  padding:8px 4px calc(8px + env(safe-area-inset-bottom)); z-index:100;
 }
-.nav-btn { display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; cursor:pointer; padding:4px 10px; color:var(--text-muted); }
+.bottom-nav::-webkit-scrollbar { display:none; }
+.nav-btn { display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:none; cursor:pointer; padding:4px 10px; color:var(--text-muted); flex-shrink:0; }
 .nav-btn.active { color:var(--accent); }
 .nav-btn .icon { font-size:18px; }
 .nav-btn .label { font-size:10px; font-family:var(--font-mono); }
