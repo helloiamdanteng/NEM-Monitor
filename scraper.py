@@ -955,10 +955,15 @@ def scrape_dispatch_history() -> dict:
                      for r, s in prices.items() if s}
 
     # Backfill _ic_history so IC chart shows full day on startup
+    # Only keep today's data — clear any stale yesterday keys first
     for ic_id, series in ic_flows.items():
         if ic_id not in _ic_history:
             _ic_history[ic_id] = {}
         _ic_history[ic_id].update(series)
+        # Trim to 290 points (~24h of 5-min data)
+        while len(_ic_history[ic_id]) > 290:
+            oldest = sorted(_ic_history[ic_id].keys())[0]
+            del _ic_history[ic_id][oldest]
 
     # Store rooftop data globally so scrape_scada_history can merge it in after backfill
     global _rooftop_history
@@ -1404,6 +1409,14 @@ def _update_fuel_history(fuel_mix: dict, scada: dict | None = None, pump_load: d
     # Snap to nearest 5-min boundary so labels align with the 5-min time spine in the frontend
     snapped_min = (now.minute // 5) * 5
     label = now.strftime("%H:") + f"{snapped_min:02d}"
+
+    # Purge any slots AFTER the current label — these are yesterday's data
+    # that wrapped around midnight and are now "future" slots on today's spine
+    for region in NEM_REGIONS:
+        stale = [k for k in list(_fuel_history.get(region, {}).keys()) if k > label]
+        for k in stale:
+            del _fuel_history[region][k]
+
     for region in NEM_REGIONS:
         if region not in fuel_mix:
             continue
@@ -1426,6 +1439,10 @@ def _update_fuel_history(fuel_mix: dict, scada: dict | None = None, pump_load: d
             # Pump-load DUIDs report positive MW when consuming — negate for display
             stored_mw = -round(mw, 1) if duid in PUMP_LOAD_DUIDS else round(mw, 1)
             _duid_history[duid][label] = stored_mw
+            # Purge stale future slots from yesterday
+            stale_d = [k for k in list(_duid_history[duid].keys()) if k > label]
+            for k in stale_d:
+                del _duid_history[duid][k]
             if len(_duid_history[duid]) > 290:
                 oldest = sorted(_duid_history[duid].keys())[0]
                 del _duid_history[duid][oldest]
@@ -1443,6 +1460,12 @@ def _update_demand_history(region_summary: dict) -> None:
     for region, data in region_summary.items():
         if region in NEM_REGIONS and "TOTALDEMAND" in data:
             _demand_history[region][label] = data["TOTALDEMAND"]
+            stale_dem = [k for k in list(_demand_history[region].keys()) if k > label]
+            for k in stale_dem:
+                del _demand_history[region][k]
+            if len(_demand_history[region]) > 290:
+                oldest = sorted(_demand_history[region].keys())[0]
+                del _demand_history[region][oldest]
 
 
 def _get_demand_history() -> dict:
@@ -1466,7 +1489,14 @@ def _update_ic_history(ic_snapshot: dict) -> None:
     for ic_id, vals in ic_snapshot.items():
         if ic_id not in _ic_history:
             _ic_history[ic_id] = {}
+        # Purge stale future slots from yesterday
+        stale = [k for k in list(_ic_history[ic_id].keys()) if k > label]
+        for k in stale:
+            del _ic_history[ic_id][k]
         _ic_history[ic_id][label] = vals.get("flow", 0)
+        if len(_ic_history[ic_id]) > 290:
+            oldest = sorted(_ic_history[ic_id].keys())[0]
+            del _ic_history[ic_id][oldest]
 
 
 def _get_ic_history() -> dict:
@@ -1497,6 +1527,13 @@ def _update_bdu_history(region_summary: dict) -> None:
             "storage":   round(soc, 1) if soc is not None else None,
             "max_avail": round(cap, 1) if cap is not None else None,
         }
+        # Purge stale future slots from yesterday and trim
+        stale_b = [k for k in list(_bdu_history[region].keys()) if k > label]
+        for k in stale_b:
+            del _bdu_history[region][k]
+        if len(_bdu_history[region]) > 290:
+            oldest = sorted(_bdu_history[region].keys())[0]
+            del _bdu_history[region][oldest]
 
 
 def _update_live_duid_history(scada: dict) -> None:
