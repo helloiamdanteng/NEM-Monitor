@@ -901,8 +901,11 @@ function toggleGenRegion(r) {
 
 function toggleGenMultiSelect() {
   genMultiSelect = !genMultiSelect;
-  if (!genMultiSelect) {
-    // Switching off multi-select: if multiple regions selected, reset to NEM
+  if (genMultiSelect) {
+    // Switching ON multi-select: clear any price overlays
+    genPriceFilter.clear();
+  } else {
+    // Switching OFF multi-select: reset to NEM if multiple regions selected
     if (genRegion.size !== 1) {
       genRegion = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
       genPriceFilter.clear();
