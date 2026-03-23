@@ -2559,3 +2559,29 @@ def scrape_mtpasa_outages() -> list:
     results.sort(key=lambda x: x["change_mw"])
     logger.info(f"scrape_mtpasa_outages: {len(results)} units (MTPASA+STPASA blend)")
     return results
+
+
+
+
+def scrape_slow() -> dict:
+    """
+    Combined slow scrape: STPASA demand forecast.
+    Called by _run_slow in main.py every 30 minutes.
+    """
+    logger.info("scrape_slow starting...")
+    result = {
+        "timestamp":     datetime.now(timezone.utc).isoformat(),
+        "stpasa_demand": {},
+        "fuel_colors":   FUEL_COLORS,
+        "all_fuels":     ALL_FUELS,
+        "fuel_mix_today": {},
+    }
+
+    # ST PASA demand forecast
+    try:
+        result["stpasa_demand"] = scrape_stpasa_demand()
+    except Exception as e:
+        logger.warning(f"scrape_slow: stpasa_demand failed: {e}")
+
+    logger.info("scrape_slow done")
+    return result
