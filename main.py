@@ -231,8 +231,10 @@ async def get_gen():
             content={"loading": True, "error": gen_cache.get("error")},
             status_code=202,
         )
+    from scraper import _get_fuel_history
     return JSONResponse(content={
         **gen_cache["data"],
+        "fuel_history":  _get_fuel_history(),   # always fresh — gen cache is 15min stale
         "last_updated": gen_cache["last_updated"],
         "cache_error":  gen_cache.get("error"),
     })
