@@ -576,6 +576,45 @@ async def historical_prices(date: str):
 
 
 
+@app.get("/api/pasa-structure-debug")
+async def pasa_structure_debug():
+    """Inspect PDPASA and STPASA DUID availability file structures."""
+    import asyncio
+    from scraper import _read_zip, _parse_aemo, NEMWEB_BASE
+
+    loop = asyncio.get_running_loop()
+
+    def _fetch():
+        import csv, io, requests
+        results = {}
+        targets = {
+            "PDPASA": f"{NEMWEB_BASE}/REPORTS/CURRENT/PDPASA_DUIDAvailability/PUBLIC_PDPASA_DUIDAVAILABILITY_202603232100_0000000509352436.zip",
+            "STPASA": f"{NEMWEB_BASE}/REPORTS/CURRENT/STPASA_DUIDAvailability/PUBLIC_STPASA_DUIDAVAILABILITY_202603232000_0000000509348868.zip",
+        }
+        for name, url in targets.items():
+            text = _read_zip(url)
+            if not text:
+                results[name] = {"error": "failed to read"}
+                continue
+            # Get all table names and columns
+            tables = {}
+            reader = csv.reader(io.StringIO(text))
+            for row in reader:
+                if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+                    tbl = row[2].strip().upper()
+                    cols = [c.strip() for c in row[4:] if c.strip()]
+                    tables[tbl] = cols
+            # Sample rows from DUID tables
+            samples = {}
+            for tbl in tables:
+                if 'DUID' in tbl:
+                    rows = list(_parse_aemo(text, tbl))
+                    samples[tbl] = rows[:3]
+            results[name] = {"tables": tables, "samples": samples}
+        return results
+
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/pasa-probe-debug")
 async def pasa_probe_debug():
     """Probe known PDPASA and STPASA DUID availability paths on NEMWeb."""
