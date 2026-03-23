@@ -1940,6 +1940,7 @@ const ORIGIN_STATE_COLORS = {QLD1:'#f39c12',NSW1:'#3498db',VIC1:'#2ed573',SA1:'#
 
 // 'NEM' = all on; single reg = only that one
 let originStateFilter = new Set(['QLD1','NSW1','VIC1','SA1']); // multi-select, all on by default
+let originMultiSelect = false; // when false, clicking a state selects only that one
 let originPortfolioChart = null;
 
 function _originVisibleRegs() {
@@ -1998,6 +1999,17 @@ function renderOrigin(data) {
     html += `<button class="region-pill ${active ? 'active' : ''}" style="color:${col};border-color:${col}" onclick="toggleOriginState('${reg}')">${label}</button>`;
   }
   html += '</div>';
+
+  // Select Multiple toggle
+  html += `<div style="margin-top:5px;margin-bottom:2px">
+    <button onclick="toggleOriginMultiSelect()"
+      style="font-family:var(--font-mono);font-size:9px;padding:3px 10px;border-radius:20px;cursor:pointer;
+      border:1px solid ${originMultiSelect ? '#94a3b8' : '#334155'};
+      background:${originMultiSelect ? '#94a3b822' : 'transparent'};
+      color:${originMultiSelect ? '#94a3b8' : '#475569'}">
+      ${originMultiSelect ? '✓ ' : ''}Select Multiple
+    </button>
+  </div>`;
 
   // ── Portfolio output total ────────────────────────────────────────────────
   let visibleMw = 0;
@@ -2166,9 +2178,37 @@ function toggleOriginState(r) {
     const all = Object.keys(ORIGIN_STATE_LABELS);
     const allOn = all.every(x => originStateFilter.has(x));
     originStateFilter = allOn ? new Set() : new Set(all);
-  } else {
+    originPriceFilter.clear();
+  } else if (originMultiSelect) {
+    // Multi-select: add/remove
     if (originStateFilter.has(r)) { originStateFilter.delete(r); }
     else { originStateFilter.add(r); }
+  } else {
+    // Single-select: switch to just this region, auto-enable its price
+    const alreadyOnlyThis = originStateFilter.size === 1 && originStateFilter.has(r);
+    if (alreadyOnlyThis) {
+      // Clicking already-selected single → go back to NEM
+      originStateFilter = new Set(Object.keys(ORIGIN_STATE_LABELS));
+      originPriceFilter.clear();
+    } else {
+      originStateFilter = new Set([r]);
+      originPriceFilter = new Set([r]); // auto-enable price for this region
+    }
+  }
+  if (latestData) showPanel('origin');
+}
+
+function toggleOriginMultiSelect() {
+  originMultiSelect = !originMultiSelect;
+  if (originMultiSelect) {
+    // Switching ON: clear prices
+    originPriceFilter.clear();
+  } else {
+    // Switching OFF: reset to NEM if multiple selected
+    if (originStateFilter.size !== 1) {
+      originStateFilter = new Set(Object.keys(ORIGIN_STATE_LABELS));
+      originPriceFilter.clear();
+    }
   }
   if (latestData) showPanel('origin');
 }
