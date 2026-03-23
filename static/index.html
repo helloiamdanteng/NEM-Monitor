@@ -4536,7 +4536,7 @@ async function fetchGenData() {
   _genPollActive = true;
 
   const POLL_INTERVAL    = 8000;
-  const REFRESH_INTERVAL = 900000;  // 15 min
+  const REFRESH_INTERVAL = 300000;  // 5 min — matches fast scrape so fuel_history stays current
   const MAX_WAIT_MS      = 90000;   // 90s max wait
   const started = Date.now();
 
