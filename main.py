@@ -512,11 +512,39 @@ async def gen_debug():
             unmatched[duid] = {"mw": mw, "inferred_fuel": inferred}
     top_unmatched = dict(sorted(unmatched.items(), key=lambda x: abs(x[1]["mw"] or 0), reverse=True)[:30])
 
+    # Check fuel_history for QLD Black Coal specifically
+    from scraper import _fuel_history
+    qld_hist = _fuel_history.get("QLD1", {})
+    sample_slot = sorted(qld_hist.keys())[-1] if qld_hist else None
+    qld_fuels = qld_hist.get(sample_slot, {}) if sample_slot else {}
+
+    # Check which SCADA DUIDs map to QLD Black Coal
+    qld_coal_scada = {}
+    for duid, mw in scada.items():
+        info = NEM_UNITS.get(duid.upper(), {})
+        if info.get("region") == "QLD1" and info.get("fuel") == "Black Coal":
+            qld_coal_scada[duid] = {"mw": mw, "station": info.get("station")}
+
+    # Show fuel_mix totals from gen_cache vs what SCADA should give
+    gen_data = gen_cache.get("data") or {}
+    fuel_mix_totals = {}
+    for region, fuels in gen_data.get("fuel_mix", {}).items():
+        fuel_mix_totals[region] = {f: round(mw,1) for f,mw in fuels.items() if mw > 0}
+    fuel_mix_grand_total = sum(sum(f.values()) for f in fuel_mix_totals.values())
+
+    # SCADA total vs fuel_mix total
+    scada_total = sum(abs(v) for v in scada.values() if v and v > 0)
+
     return JSONResponse(content={
         "other_by_region": other_by_region,
         "top_unmatched_scada_duids": top_unmatched,
         "nem_units_count": len(NEM_UNITS),
-        "sample_nem_units_keys": list(NEM_UNITS.keys())[:20],
+        "scada_total_mw": round(scada_total, 1),
+        "fuel_mix_total_mw": round(fuel_mix_grand_total, 1),
+        "fuel_mix_by_region": fuel_mix_totals,
+        "qld_fuel_history_slot": sample_slot,
+        "qld_fuel_history_fuels": qld_fuels,
+        "qld_coal_scada_duids": qld_coal_scada,
     })
 
 
