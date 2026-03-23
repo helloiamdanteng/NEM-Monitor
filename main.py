@@ -182,16 +182,8 @@ async def slow_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fast scrape first — prices/demand up immediately
-    # _run_fast() now handles its own exceptions and always sets cache
-    await _run_fast()
-    if fast_cache["data"] is None:
-        fast_cache["data"] = dict(_FAST_EMPTY)
-        fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
-
-    # Gen and slow kick off in background
-    asyncio.create_task(_run_slow())
-
+    # Kick off all scrapes in background — don't block startup
+    # Server binds immediately; /api/data returns 202 until data arrives
     fast_task   = asyncio.create_task(fast_loop())
     gen_task    = asyncio.create_task(gen_loop())
     slow_task   = asyncio.create_task(slow_loop())
@@ -200,6 +192,7 @@ async def lifespan(app: FastAPI):
     fast_task.cancel()
     gen_task.cancel()
     slow_task.cancel()
+    mtpasa_task.cancel()
 
 
 app = FastAPI(title="NEM Dashboard", lifespan=lifespan)
