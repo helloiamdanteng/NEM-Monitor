@@ -576,6 +576,43 @@ async def historical_prices(date: str):
 
 
 
+@app.get("/api/stpasa-debug")
+async def stpasa_debug():
+    """Inspect STPASA file tables and columns."""
+    import asyncio
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, ST_PASA_URL
+
+    loop = asyncio.get_running_loop()
+
+    def _fetch():
+        urls = _list_hrefs(ST_PASA_URL)
+        pasa_urls = sorted([u for u in urls if "STPASA" in u.upper()])
+        if not pasa_urls:
+            return {"error": "no STPASA files"}
+        url = pasa_urls[-1]
+        text = _read_zip(url)
+
+        import csv, io
+        tables = {}
+        reader = csv.reader(io.StringIO(text))
+        for row in reader:
+            if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+                tbl = row[2].strip().upper()
+                cols = [c.strip() for c in row[4:] if c.strip()]
+                tables[tbl] = cols
+
+        # Sample first 2 rows from DUIDAVAILABILITY if it exists
+        samples = {}
+        for tbl in tables:
+            if 'DUID' in tbl or 'AVAIL' in tbl:
+                rows = list(_parse_aemo(text, tbl))
+                samples[tbl] = rows[:2]
+
+        return {"file": url, "tables": tables, "samples": samples}
+
+    result = await loop.run_in_executor(None, _fetch)
+    return result
+
 @app.get("/api/mtpasa-debug")
 async def mtpasa_debug():
     from scraper import _list_hrefs, MTPASA_DUID_URL
