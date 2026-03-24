@@ -2646,62 +2646,90 @@ def scrape_mtpasa_outages() -> list:
         if state_now in ("Mothballed", "Retired", "Decommissioned"):
             continue
 
-        # ── Step 2: Find first upcoming change ────────────────────────────────
-        # Check STPASA future slots first (30-min resolution, next 7 days)
+        # ── Step 2: Find next significant upcoming change ────────────────────
+        # Horizon: 3 months (90 days)
+        # Significance: increase from zero, OR increase >= 50% of nameplate
+        # STPASA: compare daily 00:30 snapshots (avoids ramp noise)
+        # MTPASA: weekly change-points beyond STPASA horizon
+        from datetime import timedelta as _td
+        horizon_date = (now_aest + _td(days=90)).strftime("%Y-%m-%d")
+        horizon_str  = (now_aest + _td(days=90)).strftime("%Y/%m/%d")
+        sig_threshold = capacity * 0.50  # 50% of nameplate = significant change
+
         future_st = sorted([k for k in stpasa_slots if k > now_label])
         next_change_date = None
         next_change_avail = None
         next_change_source = None
 
-        prev = avail_now
+        # STPASA: build daily 00:30 snapshots and look for significant increases
+        daily_st = {}  # { "YYYY-MM-DD": avail_at_0030 }
         for slot in future_st:
-            slot_avail = stpasa_slots[slot]
-            if slot_avail != prev:
-                next_change_date = slot[:10].replace("-", "/")
-                next_change_avail = slot_avail
+            if slot[:10] > horizon_date:
+                break
+            if slot[11:] == "00:30":
+                daily_st[slot[:10]] = stpasa_slots[slot]
+
+        prev_day_avail = avail_now
+        for day in sorted(daily_st.keys()):
+            day_avail = daily_st[day]
+            increase = day_avail - prev_day_avail
+            # Significant: was zero and now positive, or increase >= 50% nameplate
+            if (prev_day_avail == 0 and day_avail > 0) or increase >= sig_threshold:
+                next_change_date = day.replace("-", "/")
+                next_change_avail = day_avail
                 next_change_source = "STPASA"
                 break
-            prev = slot_avail
+            prev_day_avail = day_avail
 
-        # If STPASA didn't find a change, check MTPASA beyond STPASA horizon
+        # MTPASA: look beyond STPASA horizon, within 3-month window
         if not next_change_date and sorted_days:
-            stpasa_end = future_st[-1][:10].replace("-", "/") if future_st else today_str
+            stpasa_end = sorted(daily_st.keys())[-1].replace("-", "/") if daily_st else today_str
             prev_m = avail_now
             for d in sorted_days:
+                if d > horizon_str:
+                    break
                 if d <= stpasa_end:
                     prev_m = mtpasa_days[d]["avail"]
                     continue
                 entry_avail = mtpasa_days[d]["avail"]
-                if entry_avail != prev_m:
+                increase = entry_avail - prev_m
+                if (prev_m == 0 and entry_avail > 0) or increase >= sig_threshold:
                     next_change_date = d
                     next_change_avail = entry_avail
                     next_change_source = "MTPASA"
                     break
                 prev_m = entry_avail
 
-        # ── Step 3: Find return to full capacity ──────────────────────────────
+        # ── Step 3: Find return to significant capacity ───────────────────────
+        # Return = first day where avail increases by >= 50% nameplate or from zero
         return_date = None
         return_source = None
 
-        if avail_now < capacity:
-            # Look in STPASA first
+        if avail_now < capacity * 0.70:
+            # STPASA daily snapshots
             prev_ret = avail_now
-            for slot in future_st:
-                slot_avail = stpasa_slots[slot]
-                if slot_avail > prev_ret:
-                    return_date = slot[:10].replace("-", "/")
+            for day in sorted(daily_st.keys()):
+                day_avail = daily_st[day]
+                increase = day_avail - prev_ret
+                if (prev_ret == 0 and day_avail > 0) or increase >= sig_threshold:
+                    return_date = day.replace("-", "/")
                     return_source = "STPASA"
                     break
-                prev_ret = slot_avail
+                prev_ret = day_avail
 
-            # Fallback to MTPASA
+            # MTPASA fallback (within 3-month horizon)
             if not return_date and sorted_days:
+                stpasa_end = sorted(daily_st.keys())[-1].replace("-", "/") if daily_st else today_str
                 prev_m = avail_now
                 for d in sorted_days:
-                    if d <= today_str:
+                    if d > horizon_str:
+                        break
+                    if d <= stpasa_end:
+                        prev_m = mtpasa_days[d]["avail"]
                         continue
                     entry_avail = mtpasa_days[d]["avail"]
-                    if entry_avail > prev_m:
+                    increase = entry_avail - prev_m
+                    if (prev_m == 0 and entry_avail > 0) or increase >= sig_threshold:
                         return_date = d
                         return_source = "MTPASA"
                         break
