@@ -723,6 +723,43 @@ async def pasa_dirs_debug():
     result = await loop.run_in_executor(None, _fetch)
     return result
 
+@app.get("/api/eraring-debug2")
+async def eraring_debug2():
+    """Check earliest/latest STPASA slots for Eraring."""
+    import asyncio
+    from scraper import scrape_pasa_duid_availability, NEM_UNITS, AEST
+    from datetime import datetime
+
+    loop = asyncio.get_running_loop()
+
+    def _fetch():
+        now_aest = datetime.now(AEST)
+        now_label = now_aest.strftime("%Y-%m-%d %H:%M")
+
+        stpasa_result = scrape_pasa_duid_availability("STPASA")
+        stpasa_slots = stpasa_result.get("slots", {})
+
+        result = {}
+        for duid in ["ER01","ER02","ER03","ER04"]:
+            duid_slots = stpasa_slots.get(duid, {})
+            all_slots = sorted(duid_slots.keys())
+            past = [k for k in all_slots if k <= now_label]
+            future = [k for k in all_slots if k > now_label]
+            result[duid] = {
+                "now": now_label,
+                "total_slots": len(all_slots),
+                "earliest": all_slots[0] if all_slots else None,
+                "latest": all_slots[-1] if all_slots else None,
+                "past_count": len(past),
+                "future_count": len(future),
+                "first_future": future[0] if future else None,
+                "first_future_avail": duid_slots[future[0]] if future else None,
+                "sample_future": {k: duid_slots[k] for k in future[:5]},
+            }
+        return result
+
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/eraring-debug")
 async def eraring_debug():
     """Check what MTPASA and STPASA show for Eraring units right now."""
