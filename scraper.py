@@ -2611,12 +2611,15 @@ def scrape_mtpasa_outages() -> list:
         capacity = pasa_capacity
 
         # ── Step 2: Current availability ──────────────────────────────────────
-        # Priority: PDPASA > STPASA current slot > MTPASA today
+        # For the outage page we want the most conservative (lowest) availability
+        # to correctly identify units on outage.
+        # MTPASA = planned availability (authoritative for outages)
+        # STPASA/PDPASA = refine downward only (if they show lower than MTPASA)
         avail_now = capacity  # assume full until proven otherwise
         state_now = "Unknown"
         avail_source = "assumed"
 
-        # MTPASA baseline
+        # MTPASA baseline — most authoritative for planned outages
         mtpasa_days = duid_data.get(duid, {})
         sorted_days = sorted(mtpasa_days.keys())
         if sorted_days:
@@ -2627,20 +2630,23 @@ def scrape_mtpasa_outages() -> list:
             state_now = today_entry["state"]
             avail_source = "MTPASA"
 
-        # STPASA override (most recent slot <= now)
+        # STPASA: use most recent slot — take the LOWER of STPASA or MTPASA
         stpasa_slots = stpasa_avail.get(duid, {})
         past_st = sorted([k for k in stpasa_slots if k <= now_label])
         if past_st:
-            avail_now = stpasa_slots[past_st[-1]]
-            avail_source = "STPASA"
-            state_now = state_now  # keep MTPASA state if available
+            st_avail = stpasa_slots[past_st[-1]]
+            if st_avail < avail_now:
+                avail_now = st_avail
+                avail_source = "STPASA"
 
-        # PDPASA override (most current)
+        # PDPASA: most current — again take the LOWER value only
         pdpasa_slots = pdpasa_avail.get(duid, {})
         past_pd = sorted([k for k in pdpasa_slots if k <= now_label])
         if past_pd:
-            avail_now = pdpasa_slots[past_pd[-1]]
-            avail_source = "PDPASA"
+            pd_avail = pdpasa_slots[past_pd[-1]]
+            if pd_avail < avail_now:
+                avail_now = pd_avail
+                avail_source = "PDPASA"
 
         # Skip permanently retired
         if state_now in ("Mothballed", "Retired", "Decommissioned"):
@@ -2677,14 +2683,11 @@ def scrape_mtpasa_outages() -> list:
                     return_source = "STPASA"
                     break
 
-            # Fallback to MTPASA across full horizon
+            # Fallback to MTPASA across full horizon (no window exclusion)
             if not return_date and sorted_days:
-                stpasa_end = sorted(daily_st.keys())[-1].replace("-", "/") if daily_st else today_str
                 for d in sorted_days:
                     if d <= today_str:
                         continue
-                    if d <= stpasa_end:
-                        continue  # already covered by STPASA
                     entry_avail = mtpasa_days[d]["avail"]
                     if entry_avail >= THRESHOLD:
                         return_date = d
