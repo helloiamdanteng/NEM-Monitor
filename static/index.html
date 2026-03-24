@@ -4378,8 +4378,8 @@ function renderOutages(data) {
   // Two independent filters:
   // 1. Status radio: All / Offline / Derated
   // 2. Has Return toggle: can combine with status radio
-  const filterState   = window._outageFilter    || null;
-  const returnFilter  = window._outageReturnFilter || false;
+  const filterState   = window._outageFilter !== undefined ? window._outageFilter : 'offline';
+  const w3mFilter     = window._outageW3m !== undefined ? window._outageW3m : true;
   const offline    = outages.filter(r => r.avail_today === 0);
   const derated    = outages.filter(r => r.avail_today > 0);
   const withReturn = outages.filter(r => r.return_date);
@@ -4396,7 +4396,7 @@ function renderOutages(data) {
     const [y,m,d] = r.return_date.split('/');
     return new Date(y,m-1,d) <= now3m;
   });
-  // Radio group: All / Offline / Derated
+  // Row: All / Offline / Derated + Within 3 months (independent)
   for (const [key, label, arr] of [
     ['all',     'All',     outages],
     ['offline', 'Offline', offline],
@@ -4406,13 +4406,10 @@ function renderOutages(data) {
     html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
       onclick="setOutageFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${arr.length}</span></button>`;
   }
+  // Within 3 months — independent, in same row
+  html += `<button class="region-pill ${w3mFilter ? 'active' : ''}" style="color:#f59e0b;border-color:#f59e0b;margin-left:8px"
+    onclick="toggleOutageW3m()">⏱ Within 3m <span style="opacity:0.5;font-size:9px">${within3m.length}</span></button>`;
   html += '</div>';
-  // Independent toggle: Within 3 months
-  const w3mActive = filterState === 'within3m';
-  html += `<div class="region-pills" style="margin-bottom:6px">
-    <button class="region-pill ${w3mActive ? 'active' : ''}" style="color:#f59e0b;border-color:#f59e0b"
-      onclick="setOutageFilter3m()">⏱ Within 3 months <span style="opacity:0.5;font-size:9px">${within3m.length}</span></button>
-  </div>`;
 
   html += '</div>';
 
@@ -4451,8 +4448,9 @@ function renderOutages(data) {
   let visible = outages;
   if (filterState === 'offline') visible = offline;
   else if (filterState === 'derated') visible = derated;
-  else if (filterState === 'within3m') visible = within3m;
-  // null = no filter, show all
+  // null/all = show all
+  // Apply within3m independently (intersect)
+  if (w3mFilter) visible = visible.filter(r => within3m.includes(r));
 
 
   // Apply region filter
@@ -4555,9 +4553,8 @@ function renderOutages(data) {
 }
 
 
-function setOutageFilter3m() {
-  // Toggle within3m — independent of the radio group
-  window._outageFilter = window._outageFilter === 'within3m' ? 'all' : 'within3m';
+function toggleOutageW3m() {
+  window._outageW3m = window._outageW3m !== undefined ? !window._outageW3m : false;
   if (latestData) renderPanel('outages', latestData);
 }
 
