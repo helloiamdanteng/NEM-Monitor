@@ -4379,7 +4379,7 @@ function renderOutages(data) {
   // 1. Status radio: All / Offline / Derated
   // 2. Has Return toggle: can combine with status radio
   const filterState   = window._outageFilter !== undefined ? window._outageFilter : 'offline';
-  const w3mFilter     = window._outageW3m !== undefined ? window._outageW3m : true;
+  const w3mFilter     = window._outageW3m !== undefined ? window._outageW3m : false;
   const offline    = outages.filter(r => r.avail_today === 0);
   const derated    = outages.filter(r => r.avail_today > 0);
   const withReturn = outages.filter(r => r.return_date);
@@ -4445,10 +4445,14 @@ function renderOutages(data) {
   html += '</div>';
 
   // ── Apply filters ──────────────────────────────────────────────────────────
+  // null = no filter selected, show nothing
+  if (!filterState) {
+    return html + '<div style="font-family:var(--font-mono);font-size:11px;color:#475569;padding:16px 0">Select a filter above to view outages.</div>';
+  }
   let visible = outages;
   if (filterState === 'offline') visible = offline;
   else if (filterState === 'derated') visible = derated;
-  // null/all = show all
+  // 'all' = show all
   // Apply within3m independently (intersect)
   if (w3mFilter) visible = visible.filter(r => within3m.includes(r));
 
@@ -4532,7 +4536,7 @@ function renderOutages(data) {
           <div style="display:flex;align-items:center;gap:6px">
             ${u.pasa_state && u.pasa_state !== 'Unknown' && u.pasa_state !== '' ? `<span style="font-family:var(--font-mono);font-size:7px;padding:1px 5px;border-radius:9px;
               background:${psCol}22;color:${psCol};border:1px solid ${psCol}55">${u.pasa_state}</span>` : ''}
-            <span style="font-family:var(--font-mono);font-size:8px;color:#475569">${isZero ? 'offline' : Math.abs(u.change_mw).toLocaleString() + ' MW below nameplate'}</span>
+            
             <span style="font-family:var(--font-mono);font-size:7px;color:#334155">src: ${u.avail_source || '?'}</span>
             ${u.outage_start ? `<span style="font-family:var(--font-mono);font-size:8px;color:#64748b">from ${u.outage_start}</span>` : ''}
           </div>
