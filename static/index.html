@@ -4378,7 +4378,7 @@ function renderOutages(data) {
   // Two independent filters:
   // 1. Status radio: All / Offline / Derated
   // 2. Has Return toggle: can combine with status radio
-  const filterState   = window._outageFilter    || 'offline';
+  const filterState   = window._outageFilter    || null;
   const returnFilter  = window._outageReturnFilter || false;
   const offline    = outages.filter(r => r.avail_today === 0);
   const derated    = outages.filter(r => r.avail_today > 0);
@@ -4396,16 +4396,23 @@ function renderOutages(data) {
     const [y,m,d] = r.return_date.split('/');
     return new Date(y,m-1,d) <= now3m;
   });
+  // Radio group: All / Offline / Derated
   for (const [key, label, arr] of [
-    ['all',      'All',      outages],
-    ['offline',  'Offline',  offline],
-    ['derated',  'Derated',  derated],
-    ['within3m', 'Within 3 months', within3m],
+    ['all',     'All',     outages],
+    ['offline', 'Offline', offline],
+    ['derated', 'Derated', derated],
   ]) {
     const active = filterState === key ? 'active' : '';
     html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
       onclick="setOutageFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${arr.length}</span></button>`;
   }
+  html += '</div>';
+  // Independent toggle: Within 3 months
+  const w3mActive = filterState === 'within3m';
+  html += `<div class="region-pills" style="margin-bottom:6px">
+    <button class="region-pill ${w3mActive ? 'active' : ''}" style="color:#f59e0b;border-color:#f59e0b"
+      onclick="setOutageFilter3m()">⏱ Within 3 months <span style="opacity:0.5;font-size:9px">${within3m.length}</span></button>
+  </div>`;
 
   html += '</div>';
 
@@ -4443,8 +4450,9 @@ function renderOutages(data) {
   // ── Apply filters ──────────────────────────────────────────────────────────
   let visible = outages;
   if (filterState === 'offline') visible = offline;
-  if (filterState === 'derated') visible = derated;
-  if (filterState === 'within3m') visible = within3m;
+  else if (filterState === 'derated') visible = derated;
+  else if (filterState === 'within3m') visible = within3m;
+  // null = no filter, show all
 
 
   // Apply region filter
@@ -4505,21 +4513,21 @@ function renderOutages(data) {
       }
 
       html += `<div style="background:var(--surface);border:1px solid var(--border);
-        border-left:3px solid ${barColor};border-radius:8px;
-        padding:8px 10px;margin-bottom:5px">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+        border-left:3px solid ${barColor};border-radius:6px;
+        padding:5px 8px;margin-bottom:3px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px">
           <div>
-            <span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text)">${u.station}</span>
-            <span style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-left:6px">${u.duid}</span>
-            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${rc};margin-left:5px;vertical-align:middle"></span>
-            <span style="font-family:var(--font-mono);font-size:8px;color:${rc}">${(u.region||'').replace('1','')}</span>
+            <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text)">${u.station}</span>
+            <span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:5px">${u.duid}</span>
+            <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${rc};margin-left:4px;vertical-align:middle"></span>
+            <span style="font-family:var(--font-mono);font-size:7px;color:${rc}">${(u.region||'').replace('1','')}</span>
             ${u.avail_source && u.avail_source !== 'MTPASA' ? `<span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:4px;padding:1px 4px;border:1px solid #1e293b;border-radius:4px">${u.avail_source}</span>` : ''}
           </div>
-          <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${availColor}">
-            ${u.avail_today.toLocaleString()} <span style="font-size:8px;color:#475569">/ ${u.capacity.toLocaleString()} MW</span>
+          <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:${availColor}">
+            ${u.avail_today.toLocaleString()} <span style="font-size:7px;color:#475569">/ ${u.capacity.toLocaleString()} MW</span>
           </div>
         </div>
-        <div style="height:4px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:4px">
+        <div style="height:3px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:2px">
           <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;min-width:${pct>0?'2px':'0'}"></div>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -4547,8 +4555,15 @@ function renderOutages(data) {
 }
 
 
+function setOutageFilter3m() {
+  // Toggle within3m — independent of the radio group
+  window._outageFilter = window._outageFilter === 'within3m' ? 'all' : 'within3m';
+  if (latestData) renderPanel('outages', latestData);
+}
+
 function setOutageFilter(f) {
-  window._outageFilter = f;
+  // Clicking the already-active filter deselects it
+  window._outageFilter = window._outageFilter === f ? null : f;
   if (latestData) renderPanel('outages', latestData);
 }
 
