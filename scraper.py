@@ -2708,10 +2708,17 @@ def scrape_mtpasa_outages() -> list:
                     prev_m = entry_avail
 
         # ── Step 4: Include or skip ───────────────────────────────────────────
-        currently_affected = avail_now < capacity
-        has_upcoming_change = next_change_date is not None
+        # ── Step 4: Apply 85% threshold ──────────────────────────────────────
+        # Minor deratings <15% of capacity are ambient/seasonal and not meaningful
+        DERATE_THRESHOLD = 0.85
+        currently_affected = avail_now < capacity * DERATE_THRESHOLD
+        has_upcoming_change = (
+            next_change_date is not None and
+            next_change_avail is not None and
+            next_change_avail < capacity * DERATE_THRESHOLD
+        )
 
-        # Skip if fully available AND no upcoming changes
+        # Skip if not meaningfully affected AND no significant upcoming changes
         if not currently_affected and not has_upcoming_change:
             continue
 
