@@ -723,6 +723,64 @@ async def pasa_dirs_debug():
     result = await loop.run_in_executor(None, _fetch)
     return result
 
+@app.get("/api/eraring-debug")
+async def eraring_debug():
+    """Check what MTPASA and STPASA show for Eraring units right now."""
+    import asyncio
+    from scraper import scrape_pasa_duid_availability, _list_hrefs, _read_zip, _parse_aemo, NEM_UNITS, MTPASA_DUID_URL, AEST
+    from datetime import datetime
+
+    loop = asyncio.get_running_loop()
+
+    def _fetch():
+        now_aest = datetime.now(AEST)
+        today_str = now_aest.strftime("%Y/%m/%d")
+        now_label = now_aest.strftime("%Y-%m-%d %H:%M")
+
+        # Fetch MTPASA
+        files = _list_hrefs(MTPASA_DUID_URL)
+        latest = sorted(files)[-1]
+        text = _read_zip(latest)
+
+        eraring_duids = ["ER01","ER02","ER03","ER04"]
+        mtpasa = {}
+        for row in _parse_aemo(text, "MTPASA_DUIDAVAILABILITY"):
+            duid = row.get("DUID","").strip()
+            if duid in eraring_duids:
+                day = row.get("DAY","").strip()[:10]
+                avail = float(row.get("PASAAVAILABILITY") or 0)
+                state = row.get("UNITSTATE","").strip()
+                if duid not in mtpasa:
+                    mtpasa[duid] = []
+                mtpasa[duid].append({"day": day, "avail": avail, "state": state})
+
+        # Fetch STPASA
+        stpasa_result = scrape_pasa_duid_availability("STPASA")
+        stpasa_slots = stpasa_result.get("slots", {})
+
+        result = {}
+        for duid in eraring_duids:
+            cap = NEM_UNITS.get(duid, {}).get("capacity", 750)
+            mt = sorted(mtpasa.get(duid, []), key=lambda x: x["day"])
+            # Current MTPASA: last entry on or before today
+            past = [e for e in mt if e["day"] <= today_str]
+            cur_mt = past[-1] if past else (mt[0] if mt else None)
+            # STPASA current
+            duid_st = stpasa_slots.get(duid, {})
+            past_st = sorted([k for k in duid_st if k <= now_label])
+            cur_st = duid_st[past_st[-1]] if past_st else None
+            result[duid] = {
+                "capacity": cap,
+                "threshold_70pct": round(cap * 0.70),
+                "mtpasa_current": cur_mt,
+                "mtpasa_next_5": [e for e in mt if e["day"] > today_str][:5],
+                "stpasa_current": cur_st,
+                "stpasa_in_file": duid in stpasa_slots,
+            }
+        return {"today": today_str, "duids": result}
+
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/stpasa-debug")
 async def stpasa_debug():
     """Inspect STPASA file tables and columns."""
