@@ -4380,6 +4380,7 @@ function renderOutages(data) {
   // 2. Has Return toggle: can combine with status radio
   const filterState   = window._outageFilter !== undefined ? window._outageFilter : 'offline';
   const w3mFilter     = window._outageW3m !== undefined ? window._outageW3m : false;
+  const timeFilter    = window._outageTimeFilter !== undefined ? window._outageTimeFilter : 'current';
   const offline    = outages.filter(r => r.avail_today === 0);
   const derated    = outages.filter(r => r.avail_today > 0);
   const withReturn = outages.filter(r => r.return_date);
@@ -4389,6 +4390,14 @@ function renderOutages(data) {
   const allPasaStates = [...new Set(outages.map(r => r.pasa_state || 'Unknown'))].filter(s => s !== 'Unknown').sort();
 
   html += '<div class="region-pills" style="margin-bottom:6px">';
+  // Timing sets
+  const nowIso = new Date().toISOString().slice(0,10);
+  const now7d = new Date(); now7d.setDate(now7d.getDate() + 7);
+  const now7dStr = now7d.toISOString().slice(0,10);
+  // "current" = outage_start is today or earlier (already underway)
+  const currentOut = outages.filter(r => !r.outage_start || r.outage_start.replace(/\//g,'-') <= nowIso);
+  // "next7d" = outage_start is within the next 7 days (future, not yet started)
+  const next7dOut  = outages.filter(r => r.outage_start && r.outage_start.replace(/\//g,'-') > nowIso && r.outage_start.replace(/\//g,'-') <= now7dStr);
   // Within 3 months: outage return_date within 90 days
   const now3m = new Date(); now3m.setDate(now3m.getDate() + 90);
   const within3m = outages.filter(r => {
@@ -4409,6 +4418,17 @@ function renderOutages(data) {
   // Within 3 months — independent, in same row
   html += `<button class="region-pill ${w3mFilter ? 'active' : ''}" style="color:#f59e0b;border-color:#f59e0b;margin-left:8px"
     onclick="toggleOutageW3m()">⏱ Within 3m <span style="opacity:0.5;font-size:9px">${within3m.length}</span></button>`;
+  html += '</div>';
+  // Row 2: timing filter (radio, deselectable)
+  html += '<div class="region-pills" style="margin-bottom:6px">';
+  for (const [key, label, arr] of [
+    ['current', 'Current outages', currentOut],
+    ['next7d',  'Starting next 7d', next7dOut],
+  ]) {
+    const active = timeFilter === key ? 'active' : '';
+    html += `<button class="region-pill ${active}" style="color:#818cf8;border-color:#818cf8"
+      onclick="setOutageTimeFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${arr.length}</span></button>`;
+  }
   html += '</div>';
 
   html += '</div>';
@@ -4455,6 +4475,8 @@ function renderOutages(data) {
   // 'all' = show all
   // Apply within3m independently (intersect)
   if (w3mFilter) visible = visible.filter(r => within3m.includes(r));
+  if (timeFilter === 'current') visible = visible.filter(r => currentOut.includes(r));
+  else if (timeFilter === 'next7d') visible = visible.filter(r => next7dOut.includes(r));
 
 
   // Apply region filter
@@ -4555,6 +4577,11 @@ function renderOutages(data) {
   return html;
 }
 
+
+function setOutageTimeFilter(f) {
+  window._outageTimeFilter = window._outageTimeFilter === f ? null : f;
+  if (latestData) renderPanel('outages', latestData);
+}
 
 function toggleOutageW3m() {
   window._outageW3m = window._outageW3m !== undefined ? !window._outageW3m : false;
