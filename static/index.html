@@ -4389,21 +4389,24 @@ function renderOutages(data) {
   const allPasaStates = [...new Set(outages.map(r => r.pasa_state || 'Unknown'))].filter(s => s !== 'Unknown').sort();
 
   html += '<div class="region-pills" style="margin-bottom:6px">';
-  const upcoming  = outages.filter(r => r.state === 'Upcoming');
+  // Within 3 months: outage return_date within 90 days
+  const now3m = new Date(); now3m.setDate(now3m.getDate() + 90);
+  const within3m = outages.filter(r => {
+    if (!r.return_date) return false;
+    const [y,m,d] = r.return_date.split('/');
+    return new Date(y,m-1,d) <= now3m;
+  });
   for (const [key, label, arr] of [
     ['all',      'All',      outages],
     ['offline',  'Offline',  offline],
     ['derated',  'Derated',  derated],
-    ['upcoming', 'Upcoming', upcoming],
+    ['within3m', 'Within 3 months', within3m],
   ]) {
     const active = filterState === key ? 'active' : '';
     html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
       onclick="setOutageFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${arr.length}</span></button>`;
   }
-  // Has Return as independent toggle
-  const retActive = returnFilter ? 'active' : '';
-  html += `<button class="region-pill ${retActive}" style="color:#22c55e;border-color:#22c55e"
-    onclick="toggleOutageReturn()">↩ Has Return <span style="opacity:0.5;font-size:9px">${withReturn.length}</span></button>`;
+
   html += '</div>';
 
   // PASA state pills — show/hide by UNITSTATE
@@ -4441,8 +4444,8 @@ function renderOutages(data) {
   let visible = outages;
   if (filterState === 'offline') visible = offline;
   if (filterState === 'derated') visible = derated;
-  if (filterState === 'upcoming') visible = upcoming;
-  if (returnFilter) visible = visible.filter(r => r.return_date);
+  if (filterState === 'within3m') visible = within3m;
+
 
   // Apply region filter
   if (regionFilter !== 'NEM') {
