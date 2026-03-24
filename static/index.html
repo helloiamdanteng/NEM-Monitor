@@ -398,7 +398,7 @@ function renderPrices(data) {
       >${REGION_SHORT[r]}</button>`;
   }
   html += `<button onclick="togglePriceLogScale()"
-    style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;margin-left:4px;
+    style="font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:20px;cursor:pointer;margin-left:auto;
     border:1px solid ${priceLogScale ? '#94a3b8' : '#334155'};
     background:${priceLogScale ? '#94a3b822' : 'transparent'};
     color:${priceLogScale ? '#94a3b8' : '#475569'}">
@@ -3270,7 +3270,7 @@ function drawBatteryCharts(data) {
         datasets.push({
           label: REGION_SHORT[r], regionId: r,
           data: allSlots.map((l,i) => i <= lastIdx ? (hm[l] ?? null) : null),
-          borderColor: color, backgroundColor: color + '88',
+          borderColor: color, backgroundColor: color + 'cc',
           borderWidth: 1, pointRadius: 0, tension: 0.2,
           fill: 'origin', spanGaps: false, stack: 'batt', yAxisID: 'y', order: 2,
         });
