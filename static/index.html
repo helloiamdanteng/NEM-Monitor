@@ -4526,6 +4526,7 @@ function renderOutages(data) {
             <span style="font-family:var(--font-mono);font-size:9px;color:#475569">
               ${isZero ? 'offline' : Math.abs(u.change_mw).toLocaleString() + ' MW below nameplate'}
             </span>
+            ${u.outage_start ? `<span style="font-family:var(--font-mono);font-size:8px;color:#64748b">from ${u.outage_start}</span>` : ''}
           </div>
           ${retBadge}
         </div>
