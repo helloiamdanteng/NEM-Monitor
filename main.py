@@ -723,6 +723,74 @@ async def pasa_dirs_debug():
     result = await loop.run_in_executor(None, _fetch)
     return result
 
+@app.get("/api/yallourn-debug")
+async def yallourn_debug():
+    """Check what STPASA, PDPASA and MTPASA show for Yallourn units."""
+    import asyncio
+    from scraper import scrape_pasa_duid_availability, _list_hrefs, _read_zip, _parse_aemo, NEM_UNITS, MTPASA_DUID_URL, AEST
+    from datetime import datetime
+
+    loop = asyncio.get_running_loop()
+
+    def _fetch():
+        now_aest = datetime.now(AEST)
+        today_str = now_aest.strftime("%Y/%m/%d")
+        now_label = now_aest.strftime("%Y-%m-%d %H:%M")
+
+        duids = ["YWPS1","YWPS2","YWPS3","YWPS4"]
+
+        # STPASA
+        st = scrape_pasa_duid_availability("STPASA")
+        st_slots = st.get("slots", {})
+        st_max = st.get("max_avail", {})
+
+        # PDPASA
+        pd = scrape_pasa_duid_availability("PDPASA")
+        pd_slots = pd.get("slots", {})
+
+        # MTPASA
+        files = _list_hrefs(MTPASA_DUID_URL)
+        text = _read_zip(sorted(files)[-1])
+        mtpasa = {}
+        for row in _parse_aemo(text, "MTPASA_DUIDAVAILABILITY"):
+            duid = row.get("DUID","").strip()
+            if duid in duids:
+                day = row.get("DAY","").strip()[:10]
+                avail = float(row.get("PASAAVAILABILITY") or 0)
+                state = row.get("UNITSTATE","").strip()
+                if duid not in mtpasa: mtpasa[duid] = []
+                mtpasa[duid].append({"day": day, "avail": avail, "state": state})
+
+        result = {}
+        for duid in duids:
+            cap = NEM_UNITS.get(duid, {}).get("capacity", 0)
+            # STPASA first interval
+            duid_st = st_slots.get(duid, {})
+            st_first_dt = sorted(duid_st.keys())[0] if duid_st else None
+            st_first_val = duid_st[st_first_dt] if st_first_dt else None
+            # PDPASA first interval
+            duid_pd = pd_slots.get(duid, {})
+            pd_first_dt = sorted(duid_pd.keys())[0] if duid_pd else None
+            pd_first_val = duid_pd[pd_first_dt] if pd_first_dt else None
+            # MTPASA
+            mt = sorted(mtpasa.get(duid, []), key=lambda x: x["day"])
+            past = [e for e in mt if e["day"] <= today_str]
+            cur_mt = past[-1] if past else (mt[0] if mt else None)
+
+            result[duid] = {
+                "capacity": cap,
+                "threshold_70": round(cap * 0.70),
+                "stpasa_first_dt": st_first_dt,
+                "stpasa_first_avail": st_first_val,
+                "pdpasa_first_dt": pd_first_dt,
+                "pdpasa_first_avail": pd_first_val,
+                "mtpasa_current": cur_mt,
+                "mtpasa_next_3": [e for e in mt if e["day"] > today_str][:3],
+            }
+        return result
+
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/stpasa-snapshot")
 async def stpasa_snapshot():
     """Check the first STPASA interval - what is available/unavailable right now."""
