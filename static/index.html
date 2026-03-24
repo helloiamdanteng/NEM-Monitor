@@ -1650,6 +1650,9 @@ function drawRenewablesChart(data) {
   for (const r of activeRegs) {
     const col = REGION_COLORS[r] || '#94a3b8';
     const colFade = col + '55';
+    // Solar: lighter pastel version of region colour
+    const SOLAR_COLORS = {QLD1:'#fbd07c',NSW1:'#90c8f0',VIC1:'#86e8b0',SA1:'#f0908a',TAS1:'#c49fd8'};
+    const colSolar = SOLAR_COLORS[r] || col;
 
     // Build lookups
     const solarLookup = {};
@@ -1675,7 +1678,7 @@ function drawRenewablesChart(data) {
     if (showSolar) datasets.push({
       label: REGION_SHORT[r] + ' Solar',
       data: allSlots.map((l, i) => i <= lastActualIdx ? (solarLookup[l] ?? null) : null),
-      borderColor: col + 'aa', backgroundColor: col + '44',
+      borderColor: colSolar, backgroundColor: colSolar + 'cc',
       borderWidth: 1, pointRadius: 0, tension: 0.2,
       fill: 'origin', stack: 'renew', yAxisID: 'y', order: 2,
       regionId: r, fuelType: 'solar', spanGaps: false,
