@@ -1675,7 +1675,7 @@ function drawRenewablesChart(data) {
     if (showSolar) datasets.push({
       label: REGION_SHORT[r] + ' Solar',
       data: allSlots.map((l, i) => i <= lastActualIdx ? (solarLookup[l] ?? null) : null),
-      borderColor: col, backgroundColor: col + '77',
+      borderColor: col + 'aa', backgroundColor: col + '44',
       borderWidth: 1, pointRadius: 0, tension: 0.2,
       fill: 'origin', stack: 'renew', yAxisID: 'y', order: 2,
       regionId: r, fuelType: 'solar', spanGaps: false,
