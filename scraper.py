@@ -2639,16 +2639,32 @@ def scrape_mtpasa_outages() -> list:
         stpasa_slots = stpasa_avail.get(duid, {})
 
         # ── Current availability ───────────────────────────────────────────────
-        # Priority (lowest value wins — most conservative):
-        #  1. PDPASA first interval — coal units only (30-min, next 36h)
-        #  2. STPASA first interval — all fuel types (next 7d)
-        #  3. MTPASA most recent change-point — all fuel types (full horizon)
+        # Priority (most recent/accurate wins):
+        #  1. PDPASA first interval — coal units only (most current, 30-min)
+        #  2. STPASA first interval — all fuel types (7d horizon)
+        #  3. MTPASA — only used if neither STPASA nor PDPASA have data for this DUID
+        # STPASA/PDPASA override MTPASA — they are more current and accurate.
+        # MTPASA is only used as fallback and for return date scanning.
         avail_now = None
         state_now = "Unknown"
         avail_source = None
 
-        # MTPASA baseline — most recent past change-point
-        if sorted_days:
+        # STPASA first interval — primary for all fuels
+        if duid in stpasa_first:
+            avail_now = stpasa_first[duid]
+            avail_source = "STPASA"
+
+        # PDPASA first interval — overrides STPASA for coal (more current)
+        if fuel in ("Black Coal", "Brown Coal"):
+            pdpasa_slots = pdpasa_avail.get(duid, {})
+            if pdpasa_slots:
+                pdpasa_first_slot = sorted(pdpasa_slots.keys())[0]
+                pd_val = pdpasa_slots[pdpasa_first_slot]
+                avail_now = pd_val
+                avail_source = "PDPASA"
+
+        # MTPASA fallback — only if STPASA/PDPASA have no data for this DUID
+        if avail_now is None and sorted_days:
             past_days = [d for d in sorted_days if d <= today_str]
             if past_days:
                 entry = mtpasa_days[past_days[-1]]
@@ -2660,23 +2676,6 @@ def scrape_mtpasa_outages() -> list:
                 avail_now = entry["avail"]
                 state_now = entry["state"]
                 avail_source = "MTPASA"
-
-        # STPASA first interval — all fuels, take lower
-        if duid in stpasa_first:
-            st_val = stpasa_first[duid]
-            if avail_now is None or st_val < avail_now:
-                avail_now = st_val
-                avail_source = "STPASA"
-
-        # PDPASA first interval — coal only, take lower
-        if fuel in ("Black Coal", "Brown Coal"):
-            pdpasa_slots = pdpasa_avail.get(duid, {})
-            if pdpasa_slots:
-                pdpasa_first_slot = sorted(pdpasa_slots.keys())[0]
-                pd_val = pdpasa_slots[pdpasa_first_slot]
-                if avail_now is None or pd_val < avail_now:
-                    avail_now = pd_val
-                    avail_source = "PDPASA"
 
         if avail_now is None:
             avail_now = capacity  # assume full if no data
