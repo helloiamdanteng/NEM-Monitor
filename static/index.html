@@ -1675,7 +1675,7 @@ function drawRenewablesChart(data) {
     if (showSolar) datasets.push({
       label: REGION_SHORT[r] + ' Solar',
       data: allSlots.map((l, i) => i <= lastActualIdx ? (solarLookup[l] ?? null) : null),
-      borderColor: col, backgroundColor: col + '44',
+      borderColor: col, backgroundColor: col + '77',
       borderWidth: 1, pointRadius: 0, tension: 0.2,
       fill: 'origin', stack: 'renew', yAxisID: 'y', order: 2,
       regionId: r, fuelType: 'solar', spanGaps: false,
@@ -3815,7 +3815,7 @@ function drawDayAheadCharts(data) {
         priceDatasets.push({
           label: REGION_SHORT[r], regionId: r,
           data: allSlots.map(l => pm[l] ?? null),
-          borderColor: color, backgroundColor: color + '12',
+          borderColor: color, backgroundColor: color + 'cc',
           borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: true, fill: false,
         });
       }
@@ -3865,7 +3865,7 @@ function drawDayAheadCharts(data) {
         demDatasets.push({
           label: REGION_SHORT[r], regionId: r,
           data: allSlots.map(l => mergedDemand[r][l] ?? null),
-          borderColor: color, backgroundColor: color + '22',
+          borderColor: color, backgroundColor: color + 'cc',
           borderWidth: 1, pointRadius: 0, tension: 0.2, spanGaps: true, fill: false,
         });
       }
