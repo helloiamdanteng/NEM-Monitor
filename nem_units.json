@@ -2184,10 +2184,10 @@
     "station": "Moorabool PV2"
   },
   "MCINTYR1": {
-    "capacity": 440,
-    "fuel": "Black Coal",
+    "capacity": 923,
+    "fuel": "Wind",
     "region": "QLD1",
-    "station": "MacIntyre"
+    "station": "MacIntyre Wind Farm"
   },
   "MCKAY1": {
     "capacity": 75,
@@ -3324,10 +3324,10 @@
     "station": "Taralga Wind"
   },
   "TARBESS1": {
-    "capacity": 443,
-    "fuel": "Black Coal",
+    "capacity": 100,
+    "fuel": "Battery",
     "region": "QLD1",
-    "station": "Tarong North"
+    "station": "Tarong BESS"
   },
   "TARONG#1": {
     "capacity": 350,
@@ -3927,7 +3927,7 @@
     "capacity": 320,
     "fuel": "Black Coal",
     "region": "NSW1",
-    "station": "Wallerawang"
+    "station": "Wallerawang D"
   },
   "WELLSF1": {
     "capacity": 65,
