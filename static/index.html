@@ -1684,7 +1684,7 @@ function drawRenewablesChart(data) {
     if (showWind) datasets.push({
       label: REGION_SHORT[r] + ' Wind',
       data: allSlots.map((l, i) => i <= lastActualIdx ? (windLookup[l] ?? null) : null),
-      borderColor: col, backgroundColor: col + '88',
+      borderColor: col, backgroundColor: col + 'cc',
       borderWidth: 1.5, pointRadius: 0, tension: 0.2,
       fill: 'stack', stack: 'renew', yAxisID: 'y', order: 2,
       regionId: r, fuelType: 'wind', spanGaps: false,
