@@ -4529,17 +4529,7 @@ function renderOutages(data) {
           </div>
           ${retBadge}
         </div>
-        ${u.next_change_date ? (() => {
-          const ncd = fmtDate(u.next_change_date);
-          const arrow = u.next_change_avail > u.avail_today ? '↑' : '↓';
-          const col = u.next_change_avail > u.avail_today ? '#22c55e' : '#ef4444';
-          const src = u.next_change_source === 'STPASA' ? ' ST' : ' MT';
-          return `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-top:3px">
-            Next change: <span style="color:${col}">${arrow} ${(u.next_change_avail||0).toLocaleString()} MW</span>
-            on ${ncd ? ncd.label : u.next_change_date}
-            <span style="color:#334155">(+${ncd ? ncd.days : '?'}d${src})</span>
-          </div>`;
-        })() : ''}
+
       </div>`;
     }
   }
