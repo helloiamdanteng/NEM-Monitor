@@ -726,16 +726,16 @@
     "station": "Coopers Gap"
   },
   "CPP_3": {
-    "capacity": 720,
+    "capacity": 450,
     "fuel": "Black Coal",
-    "region": "NSW1",
-    "station": "Eraring"
+    "region": "QLD1",
+    "station": "Callide C"
   },
   "CPP_4": {
-    "capacity": 720,
+    "capacity": 450,
     "fuel": "Black Coal",
-    "region": "NSW1",
-    "station": "Eraring"
+    "region": "QLD1",
+    "station": "Callide C"
   },
   "CPSA": {
     "capacity": 50,
