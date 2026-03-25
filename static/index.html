@@ -366,7 +366,16 @@ function showPanel(name) {
   currentPanel = name;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById('nav-' + name);
-  if (btn) btn.classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+    // Scroll nav bar so selected button is centred (clamped to scroll bounds)
+    const nav = btn.closest('.bottom-nav');
+    if (nav) {
+      const btnMid = btn.offsetLeft + btn.offsetWidth / 2;
+      const target = btnMid - nav.clientWidth / 2;
+      nav.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+    }
+  }
   // coalcal doesn't need latestData - it fetches its own data
   if (name === 'coalcal') renderPanel(name, latestData || {});
   else if (latestData) renderPanel(name, latestData);
