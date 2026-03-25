@@ -2643,7 +2643,10 @@ def scrape_mtpasa_outages() -> list:
 
         # PDPASA — coal only: find FIRST slot below threshold and overall minimum
         pdpasa_first_below = None
+        pdpasa_first_avail = None   # avail at very first PDPASA slot (regardless of threshold)
         if fuel in ("Black Coal", "Brown Coal") and pdpasa_slots:
+            first_pd_slot = sorted(pdpasa_slots.keys())[0]
+            pdpasa_first_avail = pdpasa_slots[first_pd_slot]
             for slot in sorted(pdpasa_slots.keys()):
                 avail = pdpasa_slots[slot]
                 if avail < threshold_mw and pdpasa_first_below is None:
@@ -2655,6 +2658,10 @@ def scrape_mtpasa_outages() -> list:
 
         # STPASA — all fuels: find FIRST day below threshold and overall minimum
         stpasa_first_below = None
+        stpasa_first_avail = None   # avail at very first STPASA daily slot
+        if daily_st:
+            first_st_day = sorted(daily_st.keys())[0]
+            stpasa_first_avail = daily_st[first_st_day]
         for day in sorted(daily_st.keys()):
             avail = daily_st[day]
             if avail < threshold_mw and stpasa_first_below is None:
@@ -2663,6 +2670,13 @@ def scrape_mtpasa_outages() -> list:
                 min_avail = avail
                 min_avail_date = day.replace("-", "/")
                 min_avail_source = "STPASA"
+
+        # is_current: the unit is already below threshold at the FIRST available PASA slot
+        is_current = False
+        if fuel in ("Black Coal", "Brown Coal") and pdpasa_first_avail is not None:
+            is_current = pdpasa_first_avail < threshold_mw
+        elif stpasa_first_avail is not None:
+            is_current = stpasa_first_avail < threshold_mw
 
         # MTPASA — fallback: scan all change-points
         mtpasa_first_below = None
@@ -2734,6 +2748,7 @@ def scrape_mtpasa_outages() -> list:
             "outage_start":  outage_start,
             "return_date":   return_date,
             "return_source": return_source,
+            "is_current":   is_current,
         })
 
     results.sort(key=lambda x: x["change_mw"])
