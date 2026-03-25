@@ -1495,10 +1495,11 @@ def _update_fuel_history(fuel_mix: dict, scada: dict | None = None, pump_load: d
                 del _duid_history[duid][oldest]
 
 def _get_fuel_history() -> dict:
+    now_label = datetime.now(AEST).strftime("%H:%M")
     result = {}
     for region, series in _fuel_history.items():
         if series:
-            result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
+            result[region] = [{"interval": k, **v} for k, v in sorted(series.items()) if k <= now_label]
     return result
 
 
@@ -1582,10 +1583,11 @@ def _update_live_duid_history(scada: dict) -> None:
 
 
 def _get_bdu_history() -> dict:
+    now_label = datetime.now(AEST).strftime("%H:%M")
     result = {}
     for region, series in _bdu_history.items():
         if series:
-            result[region] = [{"interval": k, **v} for k, v in sorted(series.items())]
+            result[region] = [{"interval": k, **v} for k, v in sorted(series.items()) if k <= now_label]
     return result
 
 
