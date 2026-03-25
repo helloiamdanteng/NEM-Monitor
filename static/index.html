@@ -3825,6 +3825,7 @@ function renderDayAhead(data) {
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
     html += '<button onclick="toggleWeekRenewFuel(\'solar\')" id="wr-solar" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:0.35">☀ Solar</button>';
     html += '<button onclick="toggleWeekRenewFuel(\'wind\')" id="wr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
+    html += '<button onclick="toggleWeekRenewFuel(\'demand\')" id="wr-demand" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #ffffff;background:transparent;color:#94a3b8;cursor:pointer;opacity:0.35">📊 Demand</button>';
     html += '</div>';
     html += '</div>';
   }
@@ -4028,6 +4029,37 @@ function drawWeekCharts(fastData) {
         borderColor: REGION_COLORS[r], backgroundColor: REGION_COLORS[r] + 'cc',
         borderWidth: 1.5, fill: 'stack', pointRadius: 0, tension: 0.2,
         spanGaps: true, stack: 'renew', yAxisID: 'y',
+      });
+    }
+  }
+
+  // Demand line — sum of op_demand_history across active regions
+  const weekShowDemand = document.getElementById('wr-demand')?.dataset.on !== '0';
+  if (weekShowDemand) {
+    const demLookup = {};
+    for (const r of REGIONS) {
+      if (!weekRenewFilter.has(r)) continue;
+      const hist = (fastData.op_demand_history || fastData.demand_history || {})[r] || [];
+      for (const pt of hist) {
+        const lbl = pt.interval;
+        if (!lbl) continue;
+        const val = pt.demand ?? null;
+        if (val !== null) demLookup[lbl] = (demLookup[lbl] || 0) + val;
+      }
+    }
+    if (Object.keys(demLookup).length > 0) {
+      renewDatasets.push({
+        label: 'Demand',
+        data: pasaLabels.map(l => demLookup[l] ?? null),
+        borderColor: '#ffffff',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.2,
+        fill: false,
+        order: 0,
+        spanGaps: true,
+        stack: undefined,
       });
     }
   }
