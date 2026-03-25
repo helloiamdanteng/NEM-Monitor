@@ -4399,7 +4399,7 @@ function renderOutages(data) {
   const now7dStr = now7d.toISOString().slice(0,10);
   const now3m = new Date(); now3m.setDate(now3m.getDate() + 90);
   // "current" = outage already underway (start on or before first STPASA interval ~2 days out)
-  const currentOut = outages.filter(r => !r.outage_start || r.outage_start.replace(/\//g,'-') <= now2dStr);
+  const currentOut = outages.filter(r => r.is_current);
   // "within7d" = outage starts within 7 days
   const within7dOut = outages.filter(r => r.outage_start && r.outage_start.replace(/\//g,'-') <= now7dStr);
   // Within 3 months: return_date within 90 days
@@ -4531,13 +4531,20 @@ function renderOutages(data) {
       const psCol    = pasaColors[u.pasa_state] || '#475569';
 
       let retBadge = '';
+      const todayIso = new Date().toISOString().slice(0,10);
+      const outageStartLabel = u.outage_start
+        ? (u.outage_start.replace(/\//g,'-') <= todayIso ? 'Now' : u.outage_start)
+        : null;
+      const startStr = outageStartLabel
+        ? `<span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:4px">from: ${outageStartLabel}</span>`
+        : '';
       if (ret) {
         const urgency = ret.days <= 3 ? '#22c55e' : ret.days <= 7 ? '#86efac' : '#475569';
         const srcMap = {'PDPASA':'PD','STPASA':'ST','MTPASA':'MT'};
         const srcLabel = srcMap[u.return_source] ? ` <span style="color:#475569;font-size:7px">${srcMap[u.return_source]}</span>` : '';
-        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;color:${urgency};margin-left:6px">↩ ${ret.label} (+${ret.days}d)${srcLabel}</span>`;
+        retBadge = `<div style="text-align:right"><span style="font-family:var(--font-mono);font-size:9px;color:${urgency}">↩ ${ret.label} (+${ret.days}d)${srcLabel}</span>${startStr}</div>`;
       } else {
-        retBadge = `<span style="font-family:var(--font-mono);font-size:9px;color:#334155;margin-left:6px">no return date</span>`;
+        retBadge = startStr ? `<div style="text-align:right">${startStr}</div>` : '';
       }
 
       html += `<div style="background:var(--surface);border:1px solid var(--border);
