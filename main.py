@@ -791,6 +791,27 @@ async def yallourn_debug():
 
     return await loop.run_in_executor(None, _fetch)
 
+@app.get("/api/outage-debug")
+async def outage_debug():
+    """Show first 20 outages with is_current flag to debug filter."""
+    import asyncio
+    from scraper import scrape_mtpasa_outages
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        results = scrape_mtpasa_outages()
+        # Show all outages, flag is_current
+        return [{
+            "duid": r["duid"],
+            "station": r["station"],
+            "fuel": r["fuel"],
+            "avail_today": r["avail_today"],
+            "capacity": r["capacity"],
+            "avail_source": r["avail_source"],
+            "is_current": r.get("is_current"),
+            "outage_start": r.get("outage_start"),
+        } for r in results[:30]]
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/stpasa-snapshot")
 async def stpasa_snapshot():
     """Check the first STPASA interval - what is available/unavailable right now."""
