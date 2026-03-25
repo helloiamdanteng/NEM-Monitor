@@ -137,8 +137,12 @@ body { background:var(--bg); color:var(--text); font-family:var(--font-sans); mi
   background:rgba(10,14,26,0.96); backdrop-filter:blur(12px);
   border-top:1px solid var(--border);
   display:flex;
-  overflow-x:auto; overflow-y:hidden;
+  overflow-x:scroll; overflow-y:hidden;
   -webkit-overflow-scrolling:touch;
+  scroll-behavior:smooth;
+  overscroll-behavior-x:contain;
+  overscroll-behavior-y:none;
+  touch-action:pan-x;
   scrollbar-width:none;
   padding:8px 4px calc(8px + env(safe-area-inset-bottom)); z-index:100;
 }
