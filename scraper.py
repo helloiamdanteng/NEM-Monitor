@@ -2641,29 +2641,44 @@ def scrape_mtpasa_outages() -> list:
         min_avail_source = None
         state_now = "Unknown"
 
-        # PDPASA — coal only: scan all slots
+        # PDPASA — coal only: find FIRST slot below threshold and overall minimum
+        pdpasa_first_below = None
         if fuel in ("Black Coal", "Brown Coal") and pdpasa_slots:
-            for slot, avail in pdpasa_slots.items():
+            for slot in sorted(pdpasa_slots.keys()):
+                avail = pdpasa_slots[slot]
+                if avail < threshold_mw and pdpasa_first_below is None:
+                    pdpasa_first_below = slot[:10].replace("-", "/")
                 if avail < min_avail:
                     min_avail = avail
                     min_avail_date = slot[:10].replace("-", "/")
                     min_avail_source = "PDPASA"
 
-        # STPASA — all fuels: scan daily 00:30 snapshots
-        for day, avail in daily_st.items():
+        # STPASA — all fuels: find FIRST day below threshold and overall minimum
+        stpasa_first_below = None
+        for day in sorted(daily_st.keys()):
+            avail = daily_st[day]
+            if avail < threshold_mw and stpasa_first_below is None:
+                stpasa_first_below = day.replace("-", "/")
             if avail < min_avail:
                 min_avail = avail
                 min_avail_date = day.replace("-", "/")
                 min_avail_source = "STPASA"
 
         # MTPASA — fallback: scan all change-points
+        mtpasa_first_below = None
         for d in sorted_days:
             entry = mtpasa_days[d]
+            if entry["avail"] < threshold_mw and mtpasa_first_below is None:
+                mtpasa_first_below = d
             if entry["avail"] < min_avail:
                 min_avail = entry["avail"]
                 min_avail_date = d
                 min_avail_source = "MTPASA"
                 state_now = entry["state"]
+
+        # outage_start = earliest date across all sources where avail drops below threshold
+        candidates = [d for d in [pdpasa_first_below, stpasa_first_below, mtpasa_first_below] if d]
+        outage_start = min(candidates) if candidates else min_avail_date
 
         # Skip if always above threshold
         if min_avail >= threshold_mw:
@@ -2716,7 +2731,7 @@ def scrape_mtpasa_outages() -> list:
             "state":         label,
             "pasa_state":    state_now,
             "change_mw":     int(min_avail - capacity),
-            "outage_start":  min_avail_date,
+            "outage_start":  outage_start,
             "return_date":   return_date,
             "return_source": return_source,
         })
