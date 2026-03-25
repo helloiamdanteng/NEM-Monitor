@@ -4417,7 +4417,7 @@ function renderOutages(data) {
   }
 
   html += '</div>';
-  // Row 2: timing — Current / Within 7d (radio, deselectable) + Within 3m (independent)
+  // Row 2: timing — Current / Within 7d (radio) + Has Return (independent)
   html += '<div class="region-pills" style="margin-bottom:6px">';
   for (const [key, label, arr] of [
     ['current',  'Current',    currentOut],
@@ -4427,14 +4427,10 @@ function renderOutages(data) {
     html += `<button class="region-pill ${active}" style="color:#818cf8;border-color:#818cf8"
       onclick="setOutageTimeFilter('${key}')">${label} <span style="opacity:0.5;font-size:9px">${arr.length}</span></button>`;
   }
-
-  html += '</div>';
-
-  html += '</div>';
-  // Row 3: Has Return — independent toggle
-  html += '<div class="region-pills" style="margin-bottom:6px">';
-  html += `<button class="region-pill ${hasReturnFilter ? 'active' : ''}" style="color:#22c55e;border-color:#22c55e"
+  html += `<button class="region-pill ${hasReturnFilter ? 'active' : ''}" style="color:#22c55e;border-color:#22c55e;margin-left:8px"
     onclick="toggleOutageHasReturn()">↩ Has return <span style="opacity:0.5;font-size:9px">${withReturn.length}</span></button>`;
+  html += '</div>';
+
   html += '</div>';
 
   // PASA state pills — show/hide by UNITSTATE
@@ -4537,13 +4533,13 @@ function renderOutages(data) {
         ? (u.outage_start.replace(/\//g,'-') <= todayIso ? 'Now' : u.outage_start)
         : null;
       const startStr = outageStartLabel
-        ? `<span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:4px">from: ${outageStartLabel}</span>`
+        ? `<span style="font-family:var(--font-mono);font-size:8px;color:#64748b;margin-left:4px">from: ${outageStartLabel}</span>`
         : '';
       if (ret) {
         const urgency = ret.days <= 3 ? '#22c55e' : ret.days <= 7 ? '#86efac' : '#475569';
         const srcMap = {'PDPASA':'PD','STPASA':'ST','MTPASA':'MT'};
         const srcLabel = srcMap[u.return_source] ? ` <span style="color:#475569;font-size:7px">${srcMap[u.return_source]}</span>` : '';
-        retBadge = `<div style="text-align:right"><span style="font-family:var(--font-mono);font-size:9px;color:${urgency}">↩ ${ret.label} (+${ret.days}d)${srcLabel}</span>${startStr}</div>`;
+        retBadge = `<div style="text-align:right"><span style="font-family:var(--font-mono);font-size:10px;color:${urgency}">↩ ${ret.label} (+${ret.days}d)${srcLabel}</span>${startStr}</div>`;
       } else {
         retBadge = startStr ? `<div style="text-align:right">${startStr}</div>` : '';
       }
@@ -4553,19 +4549,19 @@ function renderOutages(data) {
         padding:5px 8px;margin-bottom:3px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2px">
           <div>
-            <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text)">${u.station}</span>
-            <span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:5px">${u.duid}</span>
+            <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--text)">${u.station}</span>
+            <span style="font-family:var(--font-mono);font-size:9px;color:#64748b;margin-left:5px">${u.duid}</span>
             <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${rc};margin-left:4px;vertical-align:middle"></span>
-            <span style="font-family:var(--font-mono);font-size:7px;color:${rc}">${(u.region||'').replace('1','')}</span>
+            <span style="font-family:var(--font-mono);font-size:9px;color:${rc}">${(u.region||'').replace('1','')}</span>
           </div>
           ${retBadge}
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text)">${u.avail_today.toLocaleString()} <span style="font-size:7px;color:#475569">/ ${u.capacity.toLocaleString()} MW</span></span>
-            ${u.pasa_state && u.pasa_state !== 'Unknown' && u.pasa_state !== '' ? `<span style="font-family:var(--font-mono);font-size:7px;padding:1px 5px;border-radius:9px;background:${psCol}22;color:${psCol};border:1px solid ${psCol}55">${u.pasa_state}</span>` : ''}
+            <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--text)">${u.avail_today.toLocaleString()} <span style="font-size:9px;color:#64748b">/ ${u.capacity.toLocaleString()} MW</span></span>
+            ${u.pasa_state && u.pasa_state !== 'Unknown' && u.pasa_state !== '' ? `<span style="font-family:var(--font-mono);font-size:8px;padding:1px 5px;border-radius:9px;background:${psCol}22;color:${psCol};border:1px solid ${psCol}55">${u.pasa_state}</span>` : ''}
           </div>
-          <span style="font-family:var(--font-mono);font-size:7px;color:#334155">src: ${u.avail_source || '?'}</span>
+          <span style="font-family:var(--font-mono);font-size:8px;color:#64748b">src: ${u.avail_source || '?'}</span>
         </div>
 
       </div>`;
