@@ -791,6 +791,33 @@ async def yallourn_debug():
 
     return await loop.run_in_executor(None, _fetch)
 
+@app.get("/api/tnps1-debug")
+async def tnps1_debug():
+    """Check exactly what PDPASA and STPASA show for TNPS1."""
+    import asyncio
+    from scraper import scrape_pasa_duid_availability, NEM_UNITS, AEST
+    from datetime import datetime
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        now = datetime.now(AEST).strftime("%Y-%m-%d %H:%M")
+        pd = scrape_pasa_duid_availability("PDPASA")
+        st = scrape_pasa_duid_availability("STPASA")
+        pd_slots = pd.get("slots", {}).get("TNPS1", {})
+        st_slots = st.get("slots", {}).get("TNPS1", {})
+        cap = NEM_UNITS.get("TNPS1", {}).get("capacity", 0)
+        pd_sorted = sorted(pd_slots.items())
+        st_sorted = sorted(st_slots.items())
+        return {
+            "now": now,
+            "capacity": cap,
+            "threshold_70": round(cap * 0.70),
+            "pdpasa_first_5": pd_sorted[:5],
+            "pdpasa_in_file": bool(pd_slots),
+            "stpasa_first_5": st_sorted[:5],
+            "stpasa_in_file": bool(st_slots),
+        }
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/outage-debug")
 async def outage_debug():
     """Show first 20 outages with is_current flag to debug filter."""
