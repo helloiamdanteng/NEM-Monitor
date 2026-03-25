@@ -4379,6 +4379,7 @@ function renderOutages(data) {
   // 1. Status radio: All / Offline / Derated
   // 2. Has Return toggle: can combine with status radio
   const filterState   = window._outageFilter !== undefined ? window._outageFilter : 'offline';
+  const hasReturnFilter = window._outageHasReturn !== undefined ? window._outageHasReturn : true;
 
   const timeFilter    = window._outageTimeFilter !== undefined ? window._outageTimeFilter : 'current';
   // offline/derated based on avail_now (current PDPASA/STPASA reading)
@@ -4430,6 +4431,11 @@ function renderOutages(data) {
   html += '</div>';
 
   html += '</div>';
+  // Row 3: Has Return — independent toggle
+  html += '<div class="region-pills" style="margin-bottom:6px">';
+  html += `<button class="region-pill ${hasReturnFilter ? 'active' : ''}" style="color:#22c55e;border-color:#22c55e"
+    onclick="toggleOutageHasReturn()">↩ Has return <span style="opacity:0.5;font-size:9px">${withReturn.length}</span></button>`;
+  html += '</div>';
 
   // PASA state pills — show/hide by UNITSTATE
   html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">';
@@ -4475,6 +4481,7 @@ function renderOutages(data) {
 
   if (timeFilter === 'current') visible = visible.filter(r => currentOut.includes(r));
   else if (timeFilter === 'within7d') visible = visible.filter(r => within7dOut.includes(r));
+  if (hasReturnFilter) visible = visible.filter(r => r.return_date);
 
 
   // Apply region filter
@@ -4573,6 +4580,11 @@ function renderOutages(data) {
   return html;
 }
 
+
+function toggleOutageHasReturn() {
+  window._outageHasReturn = window._outageHasReturn !== undefined ? !window._outageHasReturn : false;
+  if (latestData) renderPanel('outages', latestData);
+}
 
 function setOutageTimeFilter(f) {
   window._outageTimeFilter = window._outageTimeFilter === f ? null : f;
