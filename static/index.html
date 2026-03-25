@@ -3624,6 +3624,8 @@ function toggleWeekRenewFuel(fuel) {
   const on = btn.dataset.on === '1';
   btn.dataset.on = on ? '0' : '1';
   btn.style.opacity = on ? '0.35' : '1';
+  // Persist demand state so it survives panel re-renders
+  if (fuel === 'demand') window._wrDemand = !on;
   if (latestData) { requestAnimationFrame(() => drawWeekCharts(latestData)); }
 }
 
@@ -3793,7 +3795,9 @@ function renderDayAhead(data) {
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
     html += '<button onclick="toggleWeekRenewFuel(\'solar\')" id="wr-solar" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:0.35">☀ Solar</button>';
     html += '<button onclick="toggleWeekRenewFuel(\'wind\')" id="wr-wind" data-on="1" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer">💨 Wind</button>';
-    html += '<button onclick="toggleWeekRenewFuel(\'demand\')" id="wr-demand" data-on="0" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #ffffff;background:transparent;color:#94a3b8;cursor:pointer;opacity:0.35">📊 Demand</button>';
+    const wrDemandOn = window._wrDemand ? '1' : '0';
+    const wrDemandOpacity = window._wrDemand ? '1' : '0.35';
+    html += `<button onclick="toggleWeekRenewFuel('demand')" id="wr-demand" data-on="${wrDemandOn}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #ffffff;background:transparent;color:#94a3b8;cursor:pointer;opacity:${wrDemandOpacity}">📊 Demand</button>`;
     html += '</div>';
     html += '</div>';
   }
