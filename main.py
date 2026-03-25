@@ -579,8 +579,11 @@ async def station_detail(duid: str):
     from scraper import _duid_history, NEM_UNITS
     duid = duid.strip().upper()
     info = NEM_UNITS.get(duid, {})
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now_label = datetime.now(ZoneInfo("Australia/Brisbane")).strftime("%H:%M")
     history = _duid_history.get(duid, {})
-    history_series = [{"interval": k, "mw": v} for k, v in sorted(history.items())]
+    history_series = [{"interval": k, "mw": v} for k, v in sorted(history.items()) if k <= now_label]
     return JSONResponse(content={
         "duid": duid, "station": info.get("station", duid),
         "fuel": info.get("fuel", "Other"), "region": info.get("region", ""),
@@ -599,11 +602,14 @@ async def station_batch(duids: str):
             continue
         info = NEM_UNITS.get(duid, {})
         history = _duid_history.get(duid, {})
+        from datetime import datetime as _dt2
+        from zoneinfo import ZoneInfo as _ZI
+        _now = _dt2.now(_ZI("Australia/Brisbane")).strftime("%H:%M")
         result.append({
             "duid": duid, "station": info.get("station", duid),
             "fuel": info.get("fuel", "Other"), "region": info.get("region", ""),
             "capacity": info.get("capacity"),
-            "history": [{"interval": k, "mw": v} for k, v in sorted(history.items())],
+            "history": [{"interval": k, "mw": v} for k, v in sorted(history.items()) if k <= _now],
             "predispatch": [],
         })
     return JSONResponse(content=result)
@@ -1384,11 +1390,14 @@ async def historical_dispatch_prices(date: str):
 async def origin_history():
     """Return Origin asset history — separate from fast cache to keep /api/data lean."""
     from scraper import _duid_history, ORIGIN_DUIDS
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    now_label = datetime.now(ZoneInfo("Australia/Brisbane")).strftime("%H:%M")
     result = {}
     for duid in ORIGIN_DUIDS:
         history = _duid_history.get(duid, {})
         if history:
-            result[duid] = [{"interval": k, "mw": v} for k, v in sorted(history.items())]
+            result[duid] = [{"interval": k, "mw": v} for k, v in sorted(history.items()) if k <= now_label]
     return JSONResponse(content=result)
 
 
