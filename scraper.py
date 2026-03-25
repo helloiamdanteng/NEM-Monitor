@@ -1675,6 +1675,33 @@ def scrape_all() -> dict:
     _update_ic_history(interconnectors)
     _update_bdu_history(region_summary)
     _update_live_duid_history(scada_vals)   # keep _duid_history current for modal charts
+
+    # Build fuel_mix from live SCADA and update fuel history every 5 min
+    # This keeps the fuel stack charts current without waiting for scrape_gen (15 min)
+    live_fuel_mix: dict = {r: {} for r in NEM_REGIONS}
+    live_pump_load: dict = {}
+    for duid, mw_raw in scada_vals.items():
+        if mw_raw is None:
+            continue
+        info = NEM_UNITS.get(duid, {})
+        region = info.get("region", "")
+        fuel = info.get("fuel", "") or _infer_fuel_from_duid(duid)
+        if region not in NEM_REGIONS:
+            region = _infer_region_from_duid(duid)
+        if region not in NEM_REGIONS:
+            continue
+        mw = -mw_raw if duid in PUMP_LOAD_DUIDS else mw_raw
+        mw_pos = max(mw, 0)
+        live_fuel_mix[region][fuel] = round(live_fuel_mix[region].get(fuel, 0) + mw_pos, 1)
+        if fuel == "Hydro" and mw < -1:
+            live_pump_load[region] = round(live_pump_load.get(region, 0) + mw, 1)
+    # Inject rooftop solar from region_summary
+    for region, rdata in region_summary.items():
+        if region in NEM_REGIONS and "TOTALINTERMITTENTGENERATION" in rdata:
+            rooftop = rdata.get("TOTALINTERMITTENTGENERATION", 0)
+            if rooftop:
+                live_fuel_mix[region]["Rooftop Solar"] = round(float(rooftop), 1)
+    _update_fuel_history(live_fuel_mix, None, live_pump_load)
     # Inject live solar/wind into dispatch history for current interval
     now_label = datetime.now(AEST).strftime("%H:%M")
     for region, rdata in region_summary.items():
