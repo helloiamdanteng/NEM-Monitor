@@ -4549,24 +4549,15 @@ function renderOutages(data) {
             <span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:5px">${u.duid}</span>
             <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${rc};margin-left:4px;vertical-align:middle"></span>
             <span style="font-family:var(--font-mono);font-size:7px;color:${rc}">${(u.region||'').replace('1','')}</span>
-            ${u.avail_source && u.avail_source !== 'MTPASA' ? `<span style="font-family:var(--font-mono);font-size:7px;color:#475569;margin-left:4px;padding:1px 4px;border:1px solid #1e293b;border-radius:4px">${u.avail_source}</span>` : ''}
           </div>
-          <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:${availColor}">
-            ${u.avail_today.toLocaleString()} <span style="font-size:7px;color:#475569">/ ${u.capacity.toLocaleString()} MW</span>
-          </div>
-        </div>
-        <div style="height:3px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:2px">
-          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;min-width:${pct>0?'2px':'0'}"></div>
+          ${retBadge}
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:6px">
-            ${u.pasa_state && u.pasa_state !== 'Unknown' && u.pasa_state !== '' ? `<span style="font-family:var(--font-mono);font-size:7px;padding:1px 5px;border-radius:9px;
-              background:${psCol}22;color:${psCol};border:1px solid ${psCol}55">${u.pasa_state}</span>` : ''}
-            
-            <span style="font-family:var(--font-mono);font-size:7px;color:#334155">src: ${u.avail_source || '?'}</span>
-            ${u.outage_start ? `<span style="font-family:var(--font-mono);font-size:8px;color:#64748b">from ${u.outage_start}</span>` : ''}
+            <span style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text)">${u.avail_today.toLocaleString()} <span style="font-size:7px;color:#475569">/ ${u.capacity.toLocaleString()} MW</span></span>
+            ${u.pasa_state && u.pasa_state !== 'Unknown' && u.pasa_state !== '' ? `<span style="font-family:var(--font-mono);font-size:7px;padding:1px 5px;border-radius:9px;background:${psCol}22;color:${psCol};border:1px solid ${psCol}55">${u.pasa_state}</span>` : ''}
           </div>
-          ${retBadge}
+          <span style="font-family:var(--font-mono);font-size:7px;color:#334155">src: ${u.avail_source || '?'}</span>
         </div>
 
       </div>`;
