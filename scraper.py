@@ -2771,6 +2771,99 @@ def scrape_historical_day(date_str: str) -> dict:
     }
 
 
+def scrape_historical_price_averages() -> dict:
+    """
+    Fetch all weekly TradingIS archive files and compute monthly average prices.
+    Returns { region: { "YYYY-MM": { avg, min, max, count, p90 } } }
+    Cached in _price_averages_cache — refresh once per day.
+    """
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+    from collections import defaultdict
+    import statistics
+
+    TRADING_ARCHIVE_URL = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/TradingIS_Reports/"
+    results: dict = {r: defaultdict(list) for r in NEM_REGIONS}
+
+    try:
+        all_files = _list_hrefs(TRADING_ARCHIVE_URL)
+    except Exception as e:
+        logger.warning(f"scrape_historical_price_averages: listing failed: {e}")
+        return {}
+
+    # Only weekly files: PUBLIC_TRADINGIS_YYYYMMDD_YYYYMMDD.zip
+    import re as _re
+    weekly = sorted([f for f in all_files if _re.search(r'PUBLIC_TRADINGIS_\d{8}_\d{8}', f)])
+    logger.info(f"scrape_historical_price_averages: {len(weekly)} weekly files")
+
+    def _fetch_week(url):
+        """Parse one weekly file and return list of (region, month_str, rrp)."""
+        rows = []
+        try:
+            text = _read_zip(url)
+            if not text:
+                return rows
+            for row in _parse_aemo(text, "PRICE"):
+                region = row.get("REGIONID", "").strip()
+                if region not in NEM_REGIONS:
+                    continue
+                period_str = row.get("PERIODID", "")
+                rrp_str    = row.get("RRP", "")
+                dt_str     = row.get("SETTLEMENTDATE", "")
+                if not dt_str or not rrp_str:
+                    continue
+                try:
+                    rrp = float(rrp_str)
+                    # SETTLEMENTDATE is end-of-interval (30-min trading)
+                    from datetime import datetime as _dt, timedelta as _td
+                    dt = _dt.fromisoformat(dt_str.replace("/", "-")) - _td(minutes=30)
+                    month_str = dt.strftime("%Y-%m")
+                    rows.append((region, month_str, rrp))
+                except (ValueError, TypeError):
+                    continue
+        except Exception as e:
+            logger.debug(f"scrape_historical_price_averages: file error {url}: {e}")
+        return rows
+
+    # Fetch all weekly files in parallel
+    with _TPE(max_workers=8) as ex:
+        all_results = list(ex.map(_fetch_week, weekly))
+
+    # Also include current TradingIS (last 15 days)
+    try:
+        current_files = _list_hrefs(TRADING_IS_URL)
+        current_weekly = sorted([f for f in current_files if "PUBLIC_TRADINGIS" in f.upper()])
+        with _TPE(max_workers=4) as ex:
+            current_results = list(ex.map(_fetch_week, current_weekly[:50]))
+        all_results.extend(current_results)
+    except Exception as e:
+        logger.debug(f"scrape_historical_price_averages: current fetch failed: {e}")
+
+    # Aggregate into monthly buckets
+    for week_rows in all_results:
+        for region, month_str, rrp in week_rows:
+            results[region][month_str].append(rrp)
+
+    # Compute statistics per region per month
+    output = {}
+    for region, months in results.items():
+        output[region] = {}
+        for month, prices in sorted(months.items()):
+            if not prices:
+                continue
+            prices_sorted = sorted(prices)
+            p90_idx = int(len(prices_sorted) * 0.90)
+            output[region][month] = {
+                "avg":   round(statistics.mean(prices), 2),
+                "min":   round(min(prices), 2),
+                "max":   round(max(prices), 2),
+                "p90":   round(prices_sorted[p90_idx], 2),
+                "count": len(prices),
+            }
+
+    logger.info(f"scrape_historical_price_averages: done — {sum(len(v) for v in output.values())} region-months")
+    return output
+
+
 def scrape_mtpasa_outages() -> list:
     """
     Find units that are currently offline/derated OR have upcoming availability changes.
