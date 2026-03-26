@@ -899,6 +899,53 @@ async def trading_window_debug():
         }
     return await loop.run_in_executor(None, _fetch)
 
+@app.get("/api/price-avg-debug")
+async def price_avg_debug():
+    """Debug: check what data one weekly archive file contains."""
+    import asyncio, csv, io
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, TRADING_ARCHIVE, NEM_REGIONS
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        files = sorted(_list_hrefs(TRADING_ARCHIVE))
+        # Test oldest file
+        oldest = files[0]
+        text = _read_zip(oldest)
+        if not text:
+            return {"error": "empty file", "url": oldest}
+
+        # Check tables
+        tables = set()
+        for row in csv.reader(io.StringIO(text)):
+            if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+                tables.add(row[2].strip().upper())
+
+        # Sample PRICE rows
+        price_rows = []
+        for row in _parse_aemo(text, "PRICE"):
+            price_rows.append({
+                "SETTLEMENTDATE": row.get("SETTLEMENTDATE",""),
+                "REGIONID": row.get("REGIONID",""),
+                "PERIODID": row.get("PERIODID",""),
+                "RRP": row.get("RRP",""),
+            })
+            if len(price_rows) >= 5: break
+
+        # Count total rows
+        total = sum(1 for row in _parse_aemo(text, "PRICE"))
+        dates = set()
+        for row in _parse_aemo(text, "PRICE"):
+            dt = row.get("SETTLEMENTDATE","")[:10]
+            if dt: dates.add(dt)
+
+        return {
+            "file": oldest,
+            "tables": sorted(tables),
+            "price_rows_sample": price_rows,
+            "total_price_rows": total,
+            "unique_dates": sorted(dates),
+        }
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/trading-archive-range")
 async def trading_archive_range():
     """Check full date range of TradingIS archive weekly files."""
