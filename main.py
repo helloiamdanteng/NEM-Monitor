@@ -1530,6 +1530,26 @@ async def mtpasa_calendar():
         _mtpasa_cal_cache["data"] = data
     return data or {"error": "Failed to fetch MTPASA data"}
 
+@app.get("/api/historical_day")
+async def historical_day(date: str):
+    """Fetch full day of historical data for D-1 page: prices, demand, fuel mix."""
+    import re
+    if not re.match(r'^\d{8}$', date):
+        return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    from scraper import scrape_historical_day
+    loop = asyncio.get_running_loop()
+    try:
+        data = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_historical_day, date),
+            timeout=120.0
+        )
+        return JSONResponse(content=data)
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"error": "timeout"})
+    except Exception as e:
+        logger.error(f"historical_day error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.get("/api/historical_dispatch_prices")
 async def historical_dispatch_prices(date: str):
     """Fetch 5-min dispatch prices for a given date (YYYYMMDD)."""
