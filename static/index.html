@@ -244,6 +244,9 @@ tr:last-child td { border-bottom:none; }
   <button class="nav-btn" onclick="showPanel('outages')" id="nav-outages">
     <span class="icon">⚠️</span><span class="label">Outages</span>
   </button>
+  <button class="nav-btn" onclick="showPanel('prices-hist')" id="nav-prices-hist">
+    <span class="icon">📊</span><span class="label">Avg Prices</span>
+  </button>
   <button class="nav-btn" onclick="showPanel('coalcal')" id="nav-coalcal">
     <span class="icon">📊</span><span class="label">MTPASA</span>
   </button>
@@ -4094,6 +4097,180 @@ function setDMinus1Region(r) {
   }
 }
 
+function renderPricesHist() {
+  let html = '<div class="section-title">Historical Average Electricity Prices</div>';
+  html += '<div style="font-family:var(--font-mono);font-size:9px;color:#475569;margin-bottom:12px;line-height:1.5">' +
+    'Monthly time-weighted average spot prices ($/MWh) sourced from AEMO TradingIS. ' +
+    'Data available from March 2025. First load may take ~30 seconds while fetching archive files.' +
+    '</div>';
+
+  // View toggle: Monthly / Quarterly
+  const view = window._priceHistView || 'monthly';
+  html += '<div class="region-pills" style="margin-bottom:8px">';
+  for (const [key, label] of [['monthly','Monthly'],['quarterly','Quarterly']]) {
+    const active = view === key ? 'active' : '';
+    html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
+      onclick="setPriceHistView('${key}')">${label}</button>`;
+  }
+  html += '</div>';
+
+  // Region filter
+  const rf = window._priceHistRegion || 'all';
+  html += '<div class="region-pills" style="margin-bottom:12px">';
+  html += `<button class="region-pill ${rf==='all'?'active':''}" style="color:#94a3b8;border-color:#94a3b8"
+    onclick="setPriceHistRegion('all')">All regions</button>`;
+  for (const r of REGIONS) {
+    const col = REGION_COLORS[r];
+    html += `<button class="region-pill ${rf===r?'active':''}" style="color:${col};border-color:${col}"
+      onclick="setPriceHistRegion('${r}')">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div>';
+
+  html += '<div class="chart-card">' +
+    '<div class="chart-title" id="prices-hist-title">Average Monthly Prices ($/MWh)</div>' +
+    '<div id="prices-hist-status" style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px 0"></div>' +
+    '<div class="chart-container" style="height:300px"><canvas id="pricesHistChart"></canvas></div>' +
+    '</div>';
+
+  html += '<div class="chart-card" style="margin-top:8px">' +
+    '<div class="chart-title">P90 Price ($/MWh) — 90th percentile</div>' +
+    '<div class="chart-container" style="height:200px"><canvas id="pricesHistP90Chart"></canvas></div>' +
+    '</div>';
+
+  return html;
+}
+
+async function drawPricesHist() {
+  if (window._priceHistData) {
+    _renderPriceHistCharts(window._priceHistData);
+    return;
+  }
+  const status = document.getElementById('prices-hist-status');
+  if (status) status.textContent = 'Loading archive data… (may take ~30 seconds)';
+  try {
+    const data = await fetch('/api/historical_price_averages').then(r => r.json());
+    if (data.error) { if (status) status.textContent = `Error: ${data.error}`; return; }
+    window._priceHistData = data;
+    if (status) status.textContent = '';
+    _renderPriceHistCharts(data);
+  } catch(e) {
+    if (status) status.textContent = `Error: ${e.message}`;
+  }
+}
+
+function setPriceHistView(v) {
+  window._priceHistView = v;
+  if (latestData) renderPanel('prices-hist', latestData);
+  if (window._priceHistData) setTimeout(() => _renderPriceHistCharts(window._priceHistData), 50);
+}
+
+function setPriceHistRegion(r) {
+  window._priceHistRegion = r;
+  if (latestData) renderPanel('prices-hist', latestData);
+  if (window._priceHistData) setTimeout(() => _renderPriceHistCharts(window._priceHistData), 50);
+}
+
+function _renderPriceHistCharts(data) {
+  destroyChart('pricesHist');
+  destroyChart('pricesHistP90');
+  const ctx1 = document.getElementById('pricesHistChart');
+  const ctx2 = document.getElementById('pricesHistP90Chart');
+  if (!ctx1) return;
+
+  const view = window._priceHistView || 'monthly';
+  const rf   = window._priceHistRegion || 'all';
+  const regions = rf === 'all' ? REGIONS : [rf];
+
+  // Aggregate periods: monthly or quarterly
+  function toPeriod(monthStr) {
+    if (view === 'monthly') return monthStr;
+    const [y, m] = monthStr.split('-').map(Number);
+    const q = Math.ceil(m / 3);
+    return `${y}-Q${q}`;
+  }
+
+  // Collect all periods across all data
+  const allPeriods = new Set();
+  for (const r of regions) {
+    Object.keys(data[r] || {}).forEach(m => allPeriods.add(toPeriod(m)));
+  }
+  const periods = Array.from(allPeriods).sort();
+
+  // Build datasets
+  const datasets = [];
+  for (const r of regions) {
+    const color = REGION_COLORS[r];
+    const monthData = data[r] || {};
+
+    // Aggregate by period
+    const periodAvgs = {}, periodP90s = {};
+    for (const [month, stats] of Object.entries(monthData)) {
+      const p = toPeriod(month);
+      if (!periodAvgs[p]) { periodAvgs[p] = []; periodP90s[p] = []; }
+      // Weight by count
+      for (let i = 0; i < Math.min(stats.count, 10); i++) periodAvgs[p].push(stats.avg);
+      periodP90s[p].push(stats.p90);
+    }
+
+    datasets.push({
+      label: REGION_SHORT[r],
+      data: periods.map(p => {
+        const vals = periodAvgs[p];
+        return vals ? Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 100) / 100 : null;
+      }),
+      borderColor: color, backgroundColor: color + '33',
+      borderWidth: 2, pointRadius: 3, tension: 0.2,
+      fill: regions.length === 1,
+    });
+  }
+
+  const chartOpts = {
+    ...CHART_DEFAULTS,
+    plugins: { ...CHART_DEFAULTS.plugins,
+      legend: { display: regions.length > 1,
+        labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+      tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+        callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` } }
+    },
+    scales: {
+      x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:45,autoSkip:true,maxTicksLimit:18},
+           grid:{color:'#1e2d4544'} },
+      y: { ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
+           grid:{color:'#1e2d45'} }
+    }
+  };
+
+  charts.pricesHist = new Chart(ctx1, { type:'line', data:{labels:periods, datasets}, options:chartOpts });
+
+  // P90 chart
+  if (ctx2) {
+    const p90Datasets = regions.map(r => {
+      const color = REGION_COLORS[r];
+      const monthData = data[r] || {};
+      const periodP90s = {};
+      for (const [month, stats] of Object.entries(monthData)) {
+        const p = toPeriod(month);
+        if (!periodP90s[p]) periodP90s[p] = [];
+        periodP90s[p].push(stats.p90);
+      }
+      return {
+        label: REGION_SHORT[r],
+        data: periods.map(p => {
+          const vals = periodP90s[p];
+          return vals ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*100)/100 : null;
+        }),
+        borderColor: color, backgroundColor: color + '22',
+        borderWidth: 1.5, pointRadius: 2, tension: 0.2, fill: false,
+      };
+    });
+    charts.pricesHistP90 = new Chart(ctx2, {
+      type:'line', data:{labels:periods, datasets:p90Datasets}, options:{...chartOpts,
+        plugins:{...chartOpts.plugins, legend:{display:regions.length>1,
+          labels:{color:'#94a3b8',font:{family:'Space Mono',size:9},boxWidth:10,padding:6}}}}
+    });
+  }
+}
+
 function renderDMinus1(data) {
   const today = new Date();
   const fmtDate = d => d.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short', year:'numeric', timeZone:'Australia/Brisbane'});
@@ -4501,10 +4678,12 @@ function renderPanel(panel, data) {
     else if (panel === 'stations')   html = renderStations(data);
     else if (panel === 'batteries')  html = renderBatteries(data);
     else if (panel === 'dminus1')    { html = renderDMinus1(data); }
+    else if (panel === 'prices-hist') { html = renderPricesHist(); }
 
     else if (panel === 'dayahead')   html = renderDayAhead(data);
     else if (panel === 'about') html = renderAbout(data);
     else if (panel === 'outages') html = renderOutages(data);
+    else if (panel === 'prices-hist') html = renderPricesHist(data);
     else if (panel === 'coalcal') html = renderCoalCalendar(data);
   } catch(e) {
     console.error(`Render error [${panel}]:`, e);
@@ -4520,6 +4699,7 @@ function renderPanel(panel, data) {
       else if (panel === 'dayahead')   { drawDayAheadCharts(data); drawWeekCharts(data); }
       else if (panel === 'batteries')  drawBatteryCharts(data);
       else if (panel === 'dminus1')    drawDMinus1Charts(data);
+      else if (panel === 'prices-hist') drawPricesHist();
     } catch(e) {
       console.error(`Chart error [${panel}]:`, e);
       main.innerHTML += `<div style="color:#e74c3c;font-size:11px;padding:8px">Chart error in ${panel}: ${e.message}</div>`;
