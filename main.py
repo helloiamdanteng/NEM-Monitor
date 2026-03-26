@@ -899,6 +899,29 @@ async def trading_window_debug():
         }
     return await loop.run_in_executor(None, _fetch)
 
+@app.get("/api/trading-archive-range")
+async def trading_archive_range():
+    """Check full date range of TradingIS archive weekly files."""
+    import asyncio
+    from scraper import _list_hrefs, TRADING_ARCHIVE
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        files = sorted(_list_hrefs(TRADING_ARCHIVE))
+        # Extract date ranges from filenames
+        import re
+        ranges = []
+        for f in files:
+            m = re.search(r'(\d{8})_(\d{8})', f)
+            if m:
+                ranges.append({"start": m.group(1), "end": m.group(2), "url": f})
+        return {
+            "total_files": len(files),
+            "oldest": ranges[0] if ranges else None,
+            "newest": ranges[-1] if ranges else None,
+            "all_ranges": [(r["start"], r["end"]) for r in ranges],
+        }
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/trading-archive-debug")
 async def trading_archive_debug():
     """Check how far back TradingIS archive goes."""
