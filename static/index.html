@@ -4084,9 +4084,11 @@ function setDMinus1Region(r) {
   // Update active pill
   document.querySelectorAll('.region-pill').forEach(b => b.classList.remove('active'));
   event && event.target && event.target.classList.add('active');
-  // Redraw from cached data if available, else re-fetch
-  if (window._dMinus1PriceData) {
-    drawDMinus1PriceChart(window._dMinus1Dispatch5m || window._dMinus1PriceData);
+  // Redraw all charts from cached data if available, else re-fetch
+  if (window._dMinus1Data) {
+    drawDMinus1PriceChart(window._dMinus1Data);
+    drawDMinus1DemandChart(window._dMinus1Data);
+    drawDMinus1FuelChart(window._dMinus1Data);
   } else if (window._dMinusSel) {
     dMinusLoadPrices(_dSelToStr(window._dMinusSel));
   }
@@ -4139,11 +4141,21 @@ function renderDMinus1(data) {
   }
   html += '</div>';
 
-  // Price chart card
-  html += `<div class="chart-card">
-    <div class="chart-title" id="dMinus-chart-title">5-min Dispatch Price ($/MWh) — ${selLabel}</div>
-    <div class="chart-container" style="height:260px"><canvas id="dm1PriceChart"></canvas></div>
-  </div>`;
+  // Charts — same layout as P&D + Gen pages
+  html += `
+    <div class="chart-card">
+      <div class="chart-title">5-min Dispatch Price — ${selLabel}</div>
+      <div class="chart-container" style="height:220px"><canvas id="dm1PriceChart"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin-top:8px">
+      <div class="chart-title">Demand + Non-Sched Gen — ${selLabel}</div>
+      <div class="chart-container" style="height:180px"><canvas id="dm1DemandChart"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin-top:8px">
+      <div class="chart-title">Fuel Mix — ${selLabel}</div>
+      <div class="chart-container" style="height:220px"><canvas id="dm1FuelChart"></canvas></div>
+    </div>
+  `;
 
   return html;
 }
@@ -4274,35 +4286,35 @@ async function dMinusLoadPrices(dateStr) {
   const status = document.getElementById('dMinus-status');
   if (status) status.textContent = 'Loading…';
   destroyChart('dm1Price');
-  const ctx = document.getElementById('dm1PriceChart');
-  if (!ctx) return;
+  destroyChart('dm1Demand');
+  destroyChart('dm1Fuel');
   try {
-    const dispatch = await fetch(`/api/historical_dispatch_prices?date=${dateStr}`).then(r => r.json());
-    if (!dispatch || !Object.keys(dispatch).length) {
-      if (status) status.textContent = `No price data for ${dateStr}`;
+    const data = await fetch(`/api/historical_day?date=${dateStr}`).then(r => r.json());
+    if (!data || data.error) {
+      if (status) status.textContent = `No data for ${dateStr}`;
       return;
     }
     if (status) status.textContent = '';
-    window._dMinus1PriceData  = dispatch;
-    window._dMinus1Dispatch5m = dispatch;
-    drawDMinus1PriceChart(dispatch);
+    window._dMinus1Data = data;
+    drawDMinus1PriceChart(data);
+    drawDMinus1DemandChart(data);
+    drawDMinus1FuelChart(data);
   } catch(e) {
     if (status) status.textContent = `Error: ${e.message}`;
   }
 }
 
-function drawDMinus1PriceChart(priceData) {
+function drawDMinus1PriceChart(data) {
   const ctx = document.getElementById('dm1PriceChart');
   if (!ctx) return;
   destroyChart('dm1Price');
-  priceData = priceData || window._dMinus1Dispatch5m || {};
+  data = data || window._dMinus1Data || {};
+  const priceData = data.dispatch_prices_5min || {};
 
-  // Auto-detect resolution: 5-min dispatch or 30-min trading
   const allIntervals = [];
   for (const r of REGIONS) (priceData[r] || []).forEach(p => allIntervals.push(p.interval));
   const has5min = allIntervals.some(t => parseInt(t.split(':')[1]) % 30 !== 0);
   const step = has5min ? 5 : 30;
-
   const slots = [];
   for (let h = 0; h < 24; h++)
     for (let m = 0; m < 60; m += step)
@@ -4318,29 +4330,19 @@ function drawDMinus1PriceChart(priceData) {
       label: REGION_SHORT[r],
       data: slots.map(l => pm[l] ?? null),
       borderColor: color, backgroundColor: color + '18',
-      borderWidth: activeRegions.length === 1 ? 1.5 : 1,
-      pointRadius: step === 30 ? 3 : 0, tension: step === 30 ? 0.2 : 0,
-      spanGaps: step === 30, fill: activeRegions.length === 1,
+      borderWidth: 1.5, pointRadius: step === 30 ? 3 : 0,
+      tension: step === 30 ? 0.2 : 0, spanGaps: step === 30,
+      fill: activeRegions.length === 1,
     });
   }
-
-  // Update title to reflect resolution
-  const titleEl = document.getElementById('dMinus-chart-title');
-  if (titleEl) {
-    const lbl = window._dMinusSel ? _dSelToLabel(window._dMinusSel) : '';
-    titleEl.textContent = `${step}-min ${step===5?'Dispatch':'Trading'} Price ($/MWh) — ${lbl}`;
-  }
-
   charts.dm1Price = new Chart(ctx, {
     type: 'line', data: { labels: slots, datasets },
     options: { ...CHART_DEFAULTS,
       plugins: { ...CHART_DEFAULTS.plugins,
         legend: { display: activeRegions.length > 1,
-          labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 }
-        },
+          labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
         tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw !== null,
-          callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` }
-        }
+          callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` } }
       },
       scales: {
         x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
@@ -4352,11 +4354,135 @@ function drawDMinus1PriceChart(priceData) {
     }
   });
 }
+
+function drawDMinus1DemandChart(data) {
+  const ctx = document.getElementById('dm1DemandChart');
+  if (!ctx) return;
+  destroyChart('dm1Demand');
+  data = data || window._dMinus1Data || {};
+  const opDem = data.op_demand_history || {};
+  const dem   = data.demand_history    || {};
+
+  const slots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      slots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const activeRegions = dMinus1RegionFilter === 'NEM' ? REGIONS : [dMinus1RegionFilter];
+  const datasets = [];
+  for (const r of [...activeRegions].reverse()) {
+    const color = REGION_COLORS[r];
+    const opMap = {}, demMap = {};
+    (opDem[r] || []).forEach(p => { opMap[p.interval] = p.demand; });
+    (dem[r]   || []).forEach(p => { demMap[p.interval] = p.demand; });
+    if (Object.keys(opMap).length) datasets.push({
+      label: REGION_SHORT[r] + ' Op Demand',
+      data: slots.map(l => opMap[l] ?? null),
+      borderColor: color, backgroundColor: color + '33',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+      fill: activeRegions.length === 1 ? 'origin' : false, spanGaps: true,
+    });
+  }
+  if (!datasets.length) return;
+  charts.dm1Demand = new Chart(ctx, {
+    type: 'line', data: { labels: slots, datasets },
+    options: { ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins,
+        legend: { display: activeRegions.length > 1,
+          labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw !== null,
+          callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: ${Math.round(c.raw).toLocaleString()} MW` } }
+      },
+      scales: {
+        x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
+               callback:(v,i) => slots[i]?.endsWith(':00') ? slots[i] : null},
+             grid:{color:'#1e2d4544'} },
+        y: { ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>fmt(v,0)+' MW'},
+             grid:{color:'#1e2d45'} }
+      }
+    }
+  });
+}
+
+function drawDMinus1FuelChart(data) {
+  const ctx = document.getElementById('dm1FuelChart');
+  if (!ctx) return;
+  destroyChart('dm1Fuel');
+  data = data || window._dMinus1Data || {};
+  const fuelHist = data.fuel_history || {};
+
+  const slots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      slots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const activeRegions = dMinus1RegionFilter === 'NEM' ? REGIONS : [dMinus1RegionFilter];
+  // Aggregate fuel mix across active regions
+  const fuelMap = {}; // { HH:MM: { fuel: mw } }
+  for (const r of activeRegions) {
+    (fuelHist[r] || []).forEach(pt => {
+      if (!fuelMap[pt.interval]) fuelMap[pt.interval] = {};
+      Object.entries(pt).forEach(([k, v]) => {
+        if (k === 'interval') return;
+        fuelMap[pt.interval][k] = (fuelMap[pt.interval][k] || 0) + (v || 0);
+      });
+    });
+  }
+
+  const FUEL_ORDER = ['Black Coal','Brown Coal','Gas','Hydro','Wind','Solar','Battery','Rooftop Solar','Liquid','Other'];
+  const FUEL_COLORS_MAP = {
+    'Black Coal':'#334155','Brown Coal':'#78350f','Gas':'#f97316','Hydro':'#38bdf8',
+    'Wind':'#34d399','Solar':'#fbbf24','Battery':'#a78bfa','Rooftop Solar':'#fde68a',
+    'Liquid':'#94a3b8','Other':'#475569','Pump Hydro':'#0ea5e9',
+  };
+
+  // Find all fuels present
+  const fuelsPresent = new Set();
+  Object.values(fuelMap).forEach(snap => Object.keys(snap).forEach(f => fuelsPresent.add(f)));
+  const orderedFuels = FUEL_ORDER.filter(f => fuelsPresent.has(f));
+
+  const datasets = orderedFuels.map(fuel => ({
+    label: fuel,
+    data: slots.map(l => fuelMap[l]?.[fuel] ?? null),
+    borderColor: FUEL_COLORS_MAP[fuel] || '#94a3b8',
+    backgroundColor: (FUEL_COLORS_MAP[fuel] || '#94a3b8') + 'cc',
+    borderWidth: 1, pointRadius: 0, tension: 0.2,
+    fill: 'stack', stack: 'fuel', spanGaps: true,
+  }));
+
+  if (!datasets.length) return;
+  charts.dm1Fuel = new Chart(ctx, {
+    type: 'line', data: { labels: slots, datasets },
+    options: { ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins,
+        legend: { display: true,
+          labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+          filter: i => i.raw !== null && i.raw > 0,
+          callbacks: { label: c => c.raw > 0 ? ` ${c.dataset.label}: ${Math.round(c.raw).toLocaleString()} MW` : null }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
+               callback:(v,i) => slots[i]?.endsWith(':00') ? slots[i] : null},
+             grid:{color:'#1e2d4544'} },
+        y: { stacked: true, ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>fmt(v,0)+' MW'},
+             grid:{color:'#1e2d45'} }
+      }
+    }
+  });
+}
+
+
 function drawDMinus1Charts(data) {
   // Auto-load when first visiting the panel; skip if data already loaded
-  if (window._dMinus1Dispatch5m) {
+  if (window._dMinus1Data) {
     // Already have data — just redraw (e.g. coming back to panel)
-    setTimeout(() => drawDMinus1PriceChart(), 0);
+    setTimeout(() => {
+      drawDMinus1PriceChart(window._dMinus1Data);
+      drawDMinus1DemandChart(window._dMinus1Data);
+      drawDMinus1FuelChart(window._dMinus1Data);
+    }, 0);
     return;
   }
   // First visit — load yesterday (or previously selected date)
