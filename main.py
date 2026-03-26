@@ -899,6 +899,33 @@ async def trading_window_debug():
         }
     return await loop.run_in_executor(None, _fetch)
 
+@app.get("/api/trading-archive-debug")
+async def trading_archive_debug():
+    """Check how far back TradingIS archive goes."""
+    import asyncio
+    from scraper import _list_hrefs, TRADING_ARCHIVE, NEMWEB_BASE
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        results = {}
+        # Check archive root for available months
+        try:
+            dirs = _list_hrefs(TRADING_ARCHIVE)
+            results["archive_months"] = sorted(dirs)[-6:] if dirs else []
+            results["total_months"] = len(dirs)
+        except Exception as e:
+            results["archive_error"] = str(e)
+
+        # Try fetching a specific old month to see if it works
+        for ym in ["202603", "202601", "202501", "202401", "202301"]:
+            url = f"{TRADING_ARCHIVE}{ym}/"
+            try:
+                files = _list_hrefs(url)
+                results[f"month_{ym}"] = {"count": len(files), "sample": sorted(files)[:2]}
+            except Exception as e:
+                results[f"month_{ym}"] = {"error": str(e)}
+        return results
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/mmsdm-debug")
 async def mmsdm_debug():
     """Check MMSDM archive for historical dispatch prices."""
