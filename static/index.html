@@ -4099,21 +4099,10 @@ function setDMinus1Region(r) {
 }
 
 function renderPricesHist() {
-  let html = '<div class="section-title">Historical Average Electricity Prices</div>';
+  let html = '<div class="section-title">Average Daily Spot Prices</div>';
   html += '<div style="font-family:var(--font-mono);font-size:9px;color:#475569;margin-bottom:12px;line-height:1.5">' +
-    'Monthly time-weighted average spot prices ($/MWh) sourced from AEMO TradingIS. ' +
-    'Data available from March 2025. First load may take ~30 seconds while fetching archive files.' +
+    'Daily average 5-min spot prices ($/MWh) — last 15 days from AEMO TradingIS.' +
     '</div>';
-
-  // View toggle: Monthly / Quarterly
-  const view = window._priceHistView || 'monthly';
-  html += '<div class="region-pills" style="margin-bottom:8px">';
-  for (const [key, label] of [['monthly','Monthly'],['quarterly','Quarterly']]) {
-    const active = view === key ? 'active' : '';
-    html += `<button class="region-pill ${active}" style="color:#94a3b8;border-color:#94a3b8"
-      onclick="setPriceHistView('${key}')">${label}</button>`;
-  }
-  html += '</div>';
 
   // Region filter
   const rf = window._priceHistRegion || 'all';
@@ -4128,13 +4117,13 @@ function renderPricesHist() {
   html += '</div>';
 
   html += '<div class="chart-card">' +
-    '<div class="chart-title" id="prices-hist-title">Average Monthly Prices ($/MWh)</div>' +
+    '<div class="chart-title">Daily Average Price ($/MWh)</div>' +
     '<div id="prices-hist-status" style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px 0"></div>' +
-    '<div class="chart-container" style="height:300px"><canvas id="pricesHistChart"></canvas></div>' +
+    '<div class="chart-container" style="height:280px"><canvas id="pricesHistChart"></canvas></div>' +
     '</div>';
 
   html += '<div class="chart-card" style="margin-top:8px">' +
-    '<div class="chart-title">P90 Price ($/MWh) — 90th percentile</div>' +
+    '<div class="chart-title">Daily P90 Price ($/MWh) — 90th percentile spike indicator</div>' +
     '<div class="chart-container" style="height:200px"><canvas id="pricesHistP90Chart"></canvas></div>' +
     '</div>';
 
@@ -4159,12 +4148,6 @@ async function drawPricesHist() {
   }
 }
 
-function setPriceHistView(v) {
-  window._priceHistView = v;
-  if (latestData) renderPanel('prices-hist', latestData);
-  if (window._priceHistData) setTimeout(() => _renderPriceHistCharts(window._priceHistData), 50);
-}
-
 function setPriceHistRegion(r) {
   window._priceHistRegion = r;
   if (latestData) renderPanel('prices-hist', latestData);
@@ -4178,54 +4161,21 @@ function _renderPriceHistCharts(data) {
   const ctx2 = document.getElementById('pricesHistP90Chart');
   if (!ctx1) return;
 
-  const view = window._priceHistView || 'monthly';
-  const rf   = window._priceHistRegion || 'all';
+  const rf = window._priceHistRegion || 'all';
   const regions = rf === 'all' ? REGIONS : [rf];
 
-  // Aggregate periods: monthly or quarterly
-  function toPeriod(monthStr) {
-    if (view === 'monthly') return monthStr;
-    const [y, m] = monthStr.split('-').map(Number);
-    const q = Math.ceil(m / 3);
-    return `${y}-Q${q}`;
-  }
+  // Collect all days across all regions, sorted
+  const allDays = new Set();
+  for (const r of regions) Object.keys(data[r] || {}).forEach(d => allDays.add(d));
+  const days = Array.from(allDays).sort();
 
-  // Collect all periods across all data
-  const allPeriods = new Set();
-  for (const r of regions) {
-    Object.keys(data[r] || {}).forEach(m => allPeriods.add(toPeriod(m)));
-  }
-  const periods = Array.from(allPeriods).sort();
+  // Format day labels: "Mon 24 Mar"
+  const dayLabels = days.map(d => {
+    const dt = new Date(d + 'T00:00:00');
+    return dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+  });
 
-  // Build datasets
-  const datasets = [];
-  for (const r of regions) {
-    const color = REGION_COLORS[r];
-    const monthData = data[r] || {};
-
-    // Aggregate by period
-    const periodAvgs = {}, periodP90s = {};
-    for (const [month, stats] of Object.entries(monthData)) {
-      const p = toPeriod(month);
-      if (!periodAvgs[p]) { periodAvgs[p] = []; periodP90s[p] = []; }
-      // Weight by count
-      for (let i = 0; i < Math.min(stats.count, 10); i++) periodAvgs[p].push(stats.avg);
-      periodP90s[p].push(stats.p90);
-    }
-
-    datasets.push({
-      label: REGION_SHORT[r],
-      data: periods.map(p => {
-        const vals = periodAvgs[p];
-        return vals ? Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 100) / 100 : null;
-      }),
-      borderColor: color, backgroundColor: color + '33',
-      borderWidth: 2, pointRadius: 3, tension: 0.2,
-      fill: regions.length === 1,
-    });
-  }
-
-  const chartOpts = {
+  const sharedOpts = {
     ...CHART_DEFAULTS,
     plugins: { ...CHART_DEFAULTS.plugins,
       legend: { display: regions.length > 1,
@@ -4234,40 +4184,49 @@ function _renderPriceHistCharts(data) {
         callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` } }
     },
     scales: {
-      x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:45,autoSkip:true,maxTicksLimit:18},
+      x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:45,autoSkip:false},
            grid:{color:'#1e2d4544'} },
       y: { ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
-           grid:{color:'#1e2d45'} }
+           grid:{color:'#1e2d45'}, beginAtZero: false }
     }
   };
 
-  charts.pricesHist = new Chart(ctx1, { type:'line', data:{labels:periods, datasets}, options:chartOpts });
+  // Avg price — bar chart
+  const avgDatasets = regions.map(r => {
+    const color = REGION_COLORS[r];
+    const dayData = data[r] || {};
+    return {
+      label: REGION_SHORT[r],
+      data: days.map(d => dayData[d]?.avg ?? null),
+      backgroundColor: color + '99',
+      borderColor: color,
+      borderWidth: 1,
+      borderRadius: 3,
+    };
+  });
 
-  // P90 chart
+  charts.pricesHist = new Chart(ctx1, {
+    type: 'bar',
+    data: { labels: dayLabels, datasets: avgDatasets },
+    options: { ...sharedOpts, scales: { ...sharedOpts.scales, x: { ...sharedOpts.scales.x, stacked: false } } }
+  });
+
+  // P90 — line chart
   if (ctx2) {
     const p90Datasets = regions.map(r => {
       const color = REGION_COLORS[r];
-      const monthData = data[r] || {};
-      const periodP90s = {};
-      for (const [month, stats] of Object.entries(monthData)) {
-        const p = toPeriod(month);
-        if (!periodP90s[p]) periodP90s[p] = [];
-        periodP90s[p].push(stats.p90);
-      }
+      const dayData = data[r] || {};
       return {
         label: REGION_SHORT[r],
-        data: periods.map(p => {
-          const vals = periodP90s[p];
-          return vals ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*100)/100 : null;
-        }),
+        data: days.map(d => dayData[d]?.p90 ?? null),
         borderColor: color, backgroundColor: color + '22',
-        borderWidth: 1.5, pointRadius: 2, tension: 0.2, fill: false,
+        borderWidth: 1.5, pointRadius: 3, tension: 0.2, fill: false,
       };
     });
     charts.pricesHistP90 = new Chart(ctx2, {
-      type:'line', data:{labels:periods, datasets:p90Datasets}, options:{...chartOpts,
-        plugins:{...chartOpts.plugins, legend:{display:regions.length>1,
-          labels:{color:'#94a3b8',font:{family:'Space Mono',size:9},boxWidth:10,padding:6}}}}
+      type: 'line',
+      data: { labels: dayLabels, datasets: p90Datasets },
+      options: sharedOpts,
     });
   }
 }
