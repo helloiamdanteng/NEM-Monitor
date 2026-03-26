@@ -881,23 +881,32 @@ async def tnps1_debug():
 
 @app.get("/api/dispatch-archive-debug")
 async def dispatch_archive_debug():
-    """Check DispatchIS archive URL structure."""
+    """Check DispatchIS archive URL structure and how far back it goes."""
     import asyncio
-    from scraper import _list_hrefs, NEMWEB_BASE
+    from scraper import _list_hrefs, NEMWEB_BASE, DISPATCH_IS_URL
     loop = asyncio.get_running_loop()
     def _fetch():
-        # Check archive root
-        archive_root = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/DispatchIS_Reports/"
+        results = {}
+        # 1. Check CURRENT window
         try:
-            dirs = _list_hrefs(archive_root)
-            # These will be month directories like 202603/
-            return {
-                "archive_root": archive_root,
-                "month_dirs_sample": sorted(dirs)[-5:],
-                "total_dirs": len(dirs),
-            }
+            current = _list_hrefs(DISPATCH_IS_URL)
+            current_dates = sorted(set(f.split("PUBLIC_DISPATCHIS_")[1][:8]
+                for f in current if "PUBLIC_DISPATCHIS_" in f))
+            results["current_dates"] = current_dates
         except Exception as e:
-            return {"error": str(e), "archive_root": archive_root}
+            results["current_error"] = str(e)
+
+        # 2. Check archive - try recent months
+        for ym in ["202603", "202602", "202601", "202512"]:
+            url = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/DispatchIS_Reports/{ym}/"
+            try:
+                files = _list_hrefs(url)
+                dates = sorted(set(f.split("PUBLIC_DISPATCHIS_")[1][:8]
+                    for f in files if "PUBLIC_DISPATCHIS_" in f))
+                results[f"archive_{ym}"] = {"count": len(files), "dates_sample": dates[:3] + dates[-3:]}
+            except Exception as e:
+                results[f"archive_{ym}"] = {"error": str(e)}
+        return results
     return await loop.run_in_executor(None, _fetch)
 
 @app.get("/api/dispatch-price-debug3")
