@@ -879,6 +879,52 @@ async def tnps1_debug():
         }
     return await loop.run_in_executor(None, _fetch)
 
+@app.get("/api/trading-window-debug")
+async def trading_window_debug():
+    """Check how far back TradingIS CURRENT goes."""
+    import asyncio
+    from scraper import _list_hrefs, TRADING_CURRENT
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        files = _list_hrefs(TRADING_CURRENT)
+        dates = sorted(set(
+            f.split("PUBLIC_TRADINGIS_")[1][:8]
+            for f in files if "PUBLIC_TRADINGIS_" in f
+        ))
+        return {
+            "total_files": len(files),
+            "earliest_date": dates[0] if dates else None,
+            "latest_date": dates[-1] if dates else None,
+            "all_dates": dates,
+        }
+    return await loop.run_in_executor(None, _fetch)
+
+@app.get("/api/trading-files-debug")
+async def trading_files_debug():
+    """Check what's in TradingIS CURRENT and what date range it covers."""
+    import asyncio
+    from scraper import _list_hrefs, NEMWEB_BASE
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        url = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
+        files = _list_hrefs(url)
+        # Get date range from filenames
+        dated = sorted([f for f in files if "PUBLIC_TRADING" in f.upper() or "PUBLIC_DISPATCHPRICE" in f.upper()])
+        # Sample file names to see structure
+        sample = dated[:3] + dated[-3:]
+        # Extract unique dates
+        import re
+        dates = sorted(set(re.search(r'_(\d{8})', f).group(1)
+                          for f in dated if re.search(r'_(\d{8})', f)))
+        return {
+            "total": len(files),
+            "sample_files": sample,
+            "date_range": {"first": dates[0] if dates else None, "last": dates[-1] if dates else None},
+            "unique_dates_count": len(dates),
+            "all_prefixes": sorted(set(f.split('/')[-1][:30] for f in files[:20])),
+        }
+    return await loop.run_in_executor(None, _fetch)
+
 @app.get("/api/dispatch-sources-debug")
 async def dispatch_sources_debug():
     """Check alternative sources for historical 5-min dispatch prices."""
