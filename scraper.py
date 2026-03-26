@@ -2773,59 +2773,46 @@ def scrape_historical_day(date_str: str) -> dict:
 
 def scrape_historical_price_averages() -> dict:
     """
-    Compute daily average prices from TradingIS CURRENT (last ~15 days).
+    Compute daily average prices for the last 15 days using scrape_historical_prices.
+    Fetches one file per day (30-min trading prices), computes daily avg/min/max/p90.
     Returns { region: { "YYYY-MM-DD": { avg, min, max, p90, count } } }
     """
     import statistics
     from collections import defaultdict
     from datetime import datetime as _dt, timedelta as _td
+    from concurrent.futures import ThreadPoolExecutor as _TPE
 
-    results: dict = {r: defaultdict(list) for r in NEM_REGIONS}
+    now_aest = datetime.now(AEST)
+    # Last 15 days (excluding today — today may be incomplete)
+    dates = []
+    for i in range(1, 16):
+        d = (now_aest - _td(days=i)).strftime("%Y%m%d")
+        dates.append(d)
 
-    try:
-        all_files = _list_hrefs(TRADING_IS_URL)
-    except Exception as e:
-        logger.warning(f"scrape_historical_price_averages: listing failed: {e}")
-        return {}
+    results: dict = {r: {} for r in NEM_REGIONS}
 
-    # Parse all TradingIS CURRENT files (5-min intervals, last ~15 days)
-    trading_files = sorted([f for f in all_files if "PUBLIC_TRADINGIS" in f.upper()])
-    logger.info(f"scrape_historical_price_averages: {len(trading_files)} files")
-
-    for url in trading_files:
+    def _fetch_day(date_str):
         try:
-            text = _read_zip(url)
-            if not text:
-                continue
-            for row in _parse_aemo(text, "PRICE"):
-                region = row.get("REGIONID", "").strip()
-                if region not in NEM_REGIONS:
-                    continue
-                dt_str = row.get("SETTLEMENTDATE", "")
-                rrp_str = row.get("RRP", "")
-                if not dt_str or not rrp_str:
-                    continue
-                try:
-                    rrp = float(rrp_str)
-                    # SETTLEMENTDATE is end-of-interval — subtract 5 min
-                    dt = _dt.fromisoformat(dt_str.replace("/", "-")) - _td(minutes=5)
-                    day_str = dt.strftime("%Y-%m-%d")
-                    results[region][day_str].append(rrp)
-                except (ValueError, TypeError):
-                    continue
+            day_prices = scrape_historical_prices(date_str)
+            return date_str, day_prices
         except Exception as e:
-            logger.debug(f"scrape_historical_price_averages: file error {url}: {e}")
+            logger.debug(f"scrape_historical_price_averages: {date_str} failed: {e}")
+            return date_str, {}
 
-    # Compute statistics per region per day
-    output = {}
-    for region, days in results.items():
-        output[region] = {}
-        for day, prices in sorted(days.items()):
+    with _TPE(max_workers=5) as ex:
+        all_results = list(ex.map(_fetch_day, dates))
+
+    for date_str, day_prices in all_results:
+        day_label = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+        for region, intervals in day_prices.items():
+            if region not in NEM_REGIONS:
+                continue
+            prices = [pt["rrp"] for pt in intervals if pt.get("rrp") is not None]
             if not prices:
                 continue
             prices_sorted = sorted(prices)
             p90_idx = min(int(len(prices_sorted) * 0.90), len(prices_sorted) - 1)
-            output[region][day] = {
+            results[region][day_label] = {
                 "avg":   round(statistics.mean(prices), 2),
                 "min":   round(min(prices), 2),
                 "max":   round(max(prices), 2),
@@ -2833,8 +2820,8 @@ def scrape_historical_price_averages() -> dict:
                 "count": len(prices),
             }
 
-    logger.info(f"scrape_historical_price_averages: {sum(len(v) for v in output.values())} region-days")
-    return output
+    logger.info(f"scrape_historical_price_averages: {sum(len(v) for v in results.values())} region-days")
+    return results
 
 
 def scrape_mtpasa_outages() -> list:
