@@ -1798,6 +1798,10 @@ async def record_view(request: Request):
     # ── Load current data from repo file ─────────────────────────────────────
     data: dict = {}
     file_sha: str = ""   # needed to update an existing file
+    if not GH_TOKEN:
+        logger.warning("views: GITHUB_TOKEN not set")
+    if not GH_REPO:
+        logger.warning("views: GITHUB_REPO not set")
     if GH_TOKEN and GH_REPO:
         try:
             async with httpx.AsyncClient(timeout=8) as client:
@@ -1805,13 +1809,16 @@ async def record_view(request: Request):
                     f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
                     headers=GH_HEADERS,
                 )
+                logger.info(f"views: GET {GH_PATH} status={r.status_code}")
                 if r.status_code == 200:
                     resp_json = r.json()
                     file_sha  = resp_json.get("sha", "")
                     raw       = base64.b64decode(resp_json["content"]).decode()
                     data      = json.loads(raw)
-        except Exception:
-            pass
+                else:
+                    logger.warning(f"views: GET failed body={r.text[:200]}")
+        except Exception as e:
+            logger.error(f"views: load error: {e}")
 
     # ── Update counts ────────────────────────────────────────────────────────
     data.setdefault("total", 0)
@@ -1849,13 +1856,16 @@ async def record_view(request: Request):
             if file_sha:
                 payload["sha"] = file_sha   # required to update existing file
             async with httpx.AsyncClient(timeout=8) as client:
-                await client.put(
+                r = await client.put(
                     f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
                     headers=GH_HEADERS,
                     json=payload,
                 )
-        except Exception:
-            pass
+                logger.info(f"views: PUT {GH_PATH} status={r.status_code}")
+                if r.status_code not in (200, 201):
+                    logger.warning(f"views: PUT failed body={r.text[:200]}")
+        except Exception as e:
+            logger.error(f"views: write error: {e}")
 
     return {
         "total":        data["total"],
