@@ -2774,8 +2774,8 @@ def scrape_historical_day(date_str: str) -> dict:
 def scrape_historical_price_averages() -> dict:
     """
     Compute daily average prices for the last 30 days using TradingIS weekly
-    archive ZIPs (PUBLIC_TRADINGIS_YYYYMMDD_YYYYMMDD.zip) plus CURRENT files
-    for the most recent days not yet archived.
+    archive ZIPs. Downloads the relevant weekly ZIPs in parallel (5-6 files,
+    ~1.6MB each). Does NOT use CURRENT files to avoid 403 rate-limiting.
     Returns { region: { "YYYY-MM-DD": { avg, min, max, p90, count } } }
     """
     import statistics
@@ -2786,16 +2786,14 @@ def scrape_historical_price_averages() -> dict:
     cutoff   = (now_aest - _td(days=30)).date()
     today    = now_aest.date()
 
-    # ── Step 1: list archive and grab relevant weekly ZIPs ───────────────────
-    texts = []
+    # ── Step 1: list archive and find relevant weekly ZIPs ───────────────────
+    relevant = []
     try:
         all_hrefs = _list_hrefs(TRADING_ARCHIVE)
-        # Filter to ZIPs whose end-date >= cutoff
-        relevant = []
         for href in all_hrefs:
             fname = href.split('/')[-1]
             # Pattern: PUBLIC_TRADINGIS_YYYYMMDD_YYYYMMDD.zip
-            parts = fname.replace('.zip','').split('_')
+            parts = fname.replace('.zip', '').split('_')
             if len(parts) >= 4:
                 try:
                     end_date = datetime.strptime(parts[-1], "%Y%m%d").date()
@@ -2803,46 +2801,33 @@ def scrape_historical_price_averages() -> dict:
                         relevant.append(href)
                 except ValueError:
                     continue
-        logger.info(f"scrape_historical_price_averages: {len(relevant)} archive ZIPs to fetch")
-
-        def _fetch(u):
-            try: return _read_zip(u)
-            except: return ""
-
-        with _TPE(max_workers=6) as ex:
-            texts = [t for t in ex.map(_fetch, relevant) if t]
-        logger.info(f"scrape_historical_price_averages: fetched {len(texts)} archive ZIPs")
+        logger.info(f"scrape_historical_price_averages: {len(relevant)} archive ZIPs relevant")
     except Exception as e:
         logger.warning(f"scrape_historical_price_averages: archive listing failed: {e}")
+        return {r: {} for r in NEM_REGIONS}
 
-    # ── Step 2: also grab CURRENT files for days not yet archived ────────────
-    try:
-        current_hrefs = _list_hrefs(TRADING_CURRENT)
-        # Keep last sequence per timestamp
-        seen: dict = {}
-        for href in current_hrefs:
-            fname = href.split('/')[-1]
-            parts = fname.split('_')
-            if len(parts) >= 3 and len(parts[2]) >= 12:
-                seen[parts[2]] = href
-        current_urls = sorted(seen.values())
-        logger.info(f"scrape_historical_price_averages: {len(current_urls)} CURRENT files")
+    if not relevant:
+        logger.warning("scrape_historical_price_averages: no relevant archive ZIPs found")
+        return {r: {} for r in NEM_REGIONS}
 
-        def _fetch_c(u):
-            try: return _read_zip(u)
-            except: return ""
+    # ── Step 2: download ZIPs in parallel (small pool to avoid rate limiting) ─
+    def _fetch(u):
+        try:
+            return _read_zip(u)
+        except Exception as e:
+            logger.warning(f"scrape_historical_price_averages: fetch failed {u}: {e}")
+            return ""
 
-        with _TPE(max_workers=20) as ex:
-            current_texts = [t for t in ex.map(_fetch_c, current_urls) if t]
-        texts.extend(current_texts)
-    except Exception as e:
-        logger.warning(f"scrape_historical_price_averages: CURRENT fetch failed: {e}")
+    with _TPE(max_workers=3) as ex:
+        texts = [t for t in ex.map(_fetch, relevant) if t]
+
+    logger.info(f"scrape_historical_price_averages: downloaded {len(texts)}/{len(relevant)} ZIPs")
 
     if not texts:
         logger.warning("scrape_historical_price_averages: no data fetched")
         return {r: {} for r in NEM_REGIONS}
 
-    # ── Step 3: parse each text individually and accumulate prices ───────────
+    # ── Step 3: parse each ZIP and accumulate prices ─────────────────────────
     raw: dict = {}  # { (region, "YYYY-MM-DD"): [rrp, ...] }
 
     for text in texts:
@@ -2869,6 +2854,25 @@ def scrape_historical_price_averages() -> dict:
                 continue
 
     logger.info(f"scrape_historical_price_averages: {len(raw)} region-day keys found")
+
+    # ── Step 4: compute stats ────────────────────────────────────────────────
+    results: dict = {r: {} for r in NEM_REGIONS}
+    for (region, day_str), prices in raw.items():
+        if not prices:
+            continue
+        prices_sorted = sorted(prices)
+        p90_idx = min(int(len(prices_sorted) * 0.90), len(prices_sorted) - 1)
+        results[region][day_str] = {
+            "avg":   round(statistics.mean(prices), 2),
+            "min":   round(min(prices), 2),
+            "max":   round(max(prices), 2),
+            "p90":   round(prices_sorted[p90_idx], 2),
+            "count": len(prices),
+        }
+
+    total = sum(len(v) for v in results.values())
+    logger.info(f"scrape_historical_price_averages: {total} region-days computed")
+    return results
 
     # ── Step 4: compute stats ────────────────────────────────────────────────
     results: dict = {r: {} for r in NEM_REGIONS}
