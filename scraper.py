@@ -3098,40 +3098,39 @@ def scrape_mtpasa_outages() -> list:
 
 def scrape_weather() -> dict:
     """
-    Fetch 7-day forecast from BOM JSON API for each NEM region's capital city.
+    Fetch 7-day daily forecast from BOM's api.weather.bom.gov.au using geohashes.
     Returns { region: { name, days: [{day_of_week, date_label, temp_max, temp_min}] } }
-    BOM product codes: IDQ10095 (QLD), IDN10035 (NSW), IDV10450 (VIC), IDS10034 (SA), IDT16710 (TAS)
     """
-    BOM_STATIONS = {
-        "QLD1": {"name": "Brisbane",  "product": "IDQ10095", "fwo": "IDQ10095.json"},
-        "NSW1": {"name": "Sydney",    "product": "IDN10035", "fwo": "IDN10035.json"},
-        "VIC1": {"name": "Melbourne", "product": "IDV10450", "fwo": "IDV10450.json"},
-        "SA1":  {"name": "Adelaide",  "product": "IDS10034", "fwo": "IDS10034.json"},
-        "TAS1": {"name": "Hobart",    "product": "IDT16710", "fwo": "IDT16710.json"},
+    # Geohashes for each capital city (6-char for daily forecasts)
+    BOM_LOCATIONS = {
+        "QLD1": {"name": "Brisbane",  "geohash": "r7hgd"},
+        "NSW1": {"name": "Sydney",    "geohash": "r3gx2"},
+        "VIC1": {"name": "Melbourne", "geohash": "r1r0f"},
+        "SA1":  {"name": "Adelaide",  "geohash": "r1f91"},
+        "TAS1": {"name": "Hobart",    "geohash": "r22tb"},
     }
 
     result = {}
     session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0 (nem-dashboard)"})
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (nem-dashboard weather fetch)",
+        "Accept": "application/json",
+    })
 
-    for region, info in BOM_STATIONS.items():
+    for region, info in BOM_LOCATIONS.items():
         try:
-            url = f"http://www.bom.gov.au/fwo/{info['fwo']}"
+            url = f"https://api.weather.bom.gov.au/v1/locations/{info['geohash']}/forecasts/daily"
             r = session.get(url, timeout=10)
             if r.status_code != 200:
-                logger.warning(f"scrape_weather: {region} status {r.status_code}")
+                logger.warning(f"scrape_weather: {region} status {r.status_code} from {url}")
                 continue
             j = r.json()
-            forecasts = j.get("forecasts", {}).get("weather", [])
-            if not forecasts:
-                # Try alternative structure
-                forecasts = j.get("data", [])
+            entries = j.get("data", [])
             days = []
-            for f in forecasts[:7]:
-                # BOM structure varies — try both formats
-                date_str  = f.get("date", f.get("local_date_time_full", ""))[:10]
-                temp_max  = f.get("air_temperature_maximum", f.get("max", None))
-                temp_min  = f.get("air_temperature_minimum", f.get("min", None))
+            for entry in entries[:7]:
+                date_str = entry.get("date", "")[:10]
+                temp_max = entry.get("temp_max")
+                temp_min = entry.get("temp_min")
                 if temp_max is not None:
                     try: temp_max = round(float(temp_max), 1)
                     except: temp_max = None
@@ -3156,9 +3155,9 @@ def scrape_weather() -> dict:
                     })
             if days:
                 result[region] = {"name": info["name"], "days": days}
-                logger.info(f"scrape_weather: {region} got {len(days)} days")
+                logger.info(f"scrape_weather: {region} ({info['name']}) got {len(days)} days")
             else:
-                logger.warning(f"scrape_weather: {region} no days parsed from {url}")
+                logger.warning(f"scrape_weather: {region} no days parsed — raw: {str(j)[:200]}")
         except Exception as e:
             logger.warning(f"scrape_weather: {region} error: {e}")
 
