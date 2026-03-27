@@ -1717,6 +1717,75 @@ async def origin_history():
     return JSONResponse(content=result)
 
 
+@app.get("/api/price-avg-debug")
+async def price_avg_debug():
+    """Debug endpoint — times each step of scrape_historical_price_averages."""
+    import time
+    from scraper import (TRADING_ARCHIVE, TRADING_CURRENT,
+                         _read_zip, _list_hrefs, AEST)
+    from datetime import datetime, timedelta
+
+    results = {}
+    now_aest = datetime.now(AEST)
+
+    # Step 1: Can we reach the archive directory?
+    t0 = time.time()
+    try:
+        hrefs = await asyncio.get_running_loop().run_in_executor(
+            None, _list_hrefs, TRADING_ARCHIVE)
+        results["archive_listing"] = {
+            "ok": True, "count": len(hrefs),
+            "sample": hrefs[-3:] if hrefs else [],
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["archive_listing"] = {"ok": False, "error": str(e), "ms": round((time.time()-t0)*1000)}
+
+    # Step 2: Try downloading this month's archive ZIP
+    ym = now_aest.strftime("%Y%m")
+    archive_url = f"{TRADING_ARCHIVE}PUBLIC_TRADINGIS_{ym}.zip"
+    t0 = time.time()
+    try:
+        text = await asyncio.get_running_loop().run_in_executor(None, _read_zip, archive_url)
+        results["archive_zip_current_month"] = {
+            "url": archive_url,
+            "ok": bool(text),
+            "kb": len(text)//1024 if text else 0,
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["archive_zip_current_month"] = {"ok": False, "error": str(e), "ms": round((time.time()-t0)*1000)}
+
+    # Step 3: Try last month's archive ZIP
+    last_month = (now_aest.replace(day=1) - timedelta(days=1)).strftime("%Y%m")
+    archive_url_prev = f"{TRADING_ARCHIVE}PUBLIC_TRADINGIS_{last_month}.zip"
+    t0 = time.time()
+    try:
+        text2 = await asyncio.get_running_loop().run_in_executor(None, _read_zip, archive_url_prev)
+        results["archive_zip_last_month"] = {
+            "url": archive_url_prev,
+            "ok": bool(text2),
+            "kb": len(text2)//1024 if text2 else 0,
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["archive_zip_last_month"] = {"ok": False, "error": str(e), "ms": round((time.time()-t0)*1000)}
+
+    # Step 4: CURRENT directory listing
+    t0 = time.time()
+    try:
+        current_hrefs = await asyncio.get_running_loop().run_in_executor(
+            None, _list_hrefs, TRADING_CURRENT)
+        results["current_listing"] = {
+            "ok": True, "count": len(current_hrefs),
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["current_listing"] = {"ok": False, "error": str(e), "ms": round((time.time()-t0)*1000)}
+
+    return JSONResponse(content=results)
+
+
 @app.get("/api/weather-debug")
 async def weather_debug():
     """Test weather scraping directly and return raw result."""
