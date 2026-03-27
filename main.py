@@ -1715,6 +1715,21 @@ async def origin_history():
     return JSONResponse(content=result)
 
 
+@app.get("/api/weather-debug")
+async def weather_debug():
+    """Test weather scraping directly and return raw result."""
+    from scraper import scrape_weather
+    loop = asyncio.get_running_loop()
+    try:
+        data = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_weather),
+            timeout=30.0
+        )
+        return JSONResponse(content={"ok": True, "data": data})
+    except Exception as e:
+        return JSONResponse(content={"ok": False, "error": str(e)})
+
+
 @app.get("/api/pd-debug")
 async def pd_debug():
     """Find where AEMO publishes unit-level dispatch forecasts."""
