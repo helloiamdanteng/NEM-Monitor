@@ -2799,7 +2799,7 @@ def scrape_historical_price_averages() -> dict:
             logger.debug(f"scrape_historical_price_averages: {date_str} failed: {e}")
             return date_str, {}
 
-    with _TPE(max_workers=5) as ex:
+    with _TPE(max_workers=15) as ex:
         all_results = list(ex.map(_fetch_day, dates))
 
     for date_str, day_prices in all_results:
