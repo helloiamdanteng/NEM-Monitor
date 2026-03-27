@@ -3101,13 +3101,13 @@ def scrape_weather() -> dict:
     Fetch 7-day daily forecast using Open-Meteo API (free, no key, uses BOM ACCESS-G model).
     Returns { region: { name, days: [{day_of_week, date_label, temp_max, temp_min}] } }
     """
-    # Capital city coordinates for each NEM region
+    # Exact BOM station coordinates for each NEM region
     LOCATIONS = {
-        "QLD1": {"name": "Brisbane",  "lat": -27.4698, "lon": 153.0251},
-        "NSW1": {"name": "Sydney",    "lat": -33.8688, "lon": 151.2093},
-        "VIC1": {"name": "Melbourne", "lat": -37.8136, "lon": 144.9631},
-        "SA1":  {"name": "Adelaide",  "lat": -34.9285, "lon": 138.6007},
-        "TAS1": {"name": "Hobart",    "lat": -42.8821, "lon": 147.3272},
+        "QLD1": {"name": "Archerfield",       "lat": -27.57,   "lon": 153.01},
+        "NSW1": {"name": "Bankstown",          "lat": -33.92,   "lon": 150.98},
+        "VIC1": {"name": "Melbourne (Olympic Park)", "lat": -37.8136, "lon": 144.9631},
+        "SA1":  {"name": "Adelaide (West Terrace)",  "lat": -34.95,   "lon": 138.52},
+        "TAS1": {"name": "Hobart",             "lat": -42.8821, "lon": 147.3272},
     }
 
     result = {}
