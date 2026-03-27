@@ -3096,9 +3096,78 @@ def scrape_mtpasa_outages() -> list:
     return results
 
 
+def scrape_weather() -> dict:
+    """
+    Fetch 7-day forecast from BOM JSON API for each NEM region's capital city.
+    Returns { region: { name, days: [{day_of_week, date_label, temp_max, temp_min}] } }
+    BOM product codes: IDQ10095 (QLD), IDN10035 (NSW), IDV10450 (VIC), IDS10034 (SA), IDT16710 (TAS)
+    """
+    BOM_STATIONS = {
+        "QLD1": {"name": "Brisbane",  "product": "IDQ10095", "fwo": "IDQ10095.json"},
+        "NSW1": {"name": "Sydney",    "product": "IDN10035", "fwo": "IDN10035.json"},
+        "VIC1": {"name": "Melbourne", "product": "IDV10450", "fwo": "IDV10450.json"},
+        "SA1":  {"name": "Adelaide",  "product": "IDS10034", "fwo": "IDS10034.json"},
+        "TAS1": {"name": "Hobart",    "product": "IDT16710", "fwo": "IDT16710.json"},
+    }
+
+    result = {}
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0 (nem-dashboard)"})
+
+    for region, info in BOM_STATIONS.items():
+        try:
+            url = f"http://www.bom.gov.au/fwo/{info['fwo']}"
+            r = session.get(url, timeout=10)
+            if r.status_code != 200:
+                logger.warning(f"scrape_weather: {region} status {r.status_code}")
+                continue
+            j = r.json()
+            forecasts = j.get("forecasts", {}).get("weather", [])
+            if not forecasts:
+                # Try alternative structure
+                forecasts = j.get("data", [])
+            days = []
+            for f in forecasts[:7]:
+                # BOM structure varies — try both formats
+                date_str  = f.get("date", f.get("local_date_time_full", ""))[:10]
+                temp_max  = f.get("air_temperature_maximum", f.get("max", None))
+                temp_min  = f.get("air_temperature_minimum", f.get("min", None))
+                if temp_max is not None:
+                    try: temp_max = round(float(temp_max), 1)
+                    except: temp_max = None
+                if temp_min is not None:
+                    try: temp_min = round(float(temp_min), 1)
+                    except: temp_min = None
+                if date_str:
+                    try:
+                        from datetime import datetime as _dt
+                        dt = _dt.strptime(date_str, "%Y-%m-%d")
+                        day_of_week = dt.strftime("%a")
+                        date_label  = dt.strftime("%-d %b")
+                    except Exception:
+                        day_of_week = ""
+                        date_label  = date_str
+                    days.append({
+                        "date":        date_str,
+                        "day_of_week": day_of_week,
+                        "date_label":  date_label,
+                        "temp_max":    temp_max,
+                        "temp_min":    temp_min,
+                    })
+            if days:
+                result[region] = {"name": info["name"], "days": days}
+                logger.info(f"scrape_weather: {region} got {len(days)} days")
+            else:
+                logger.warning(f"scrape_weather: {region} no days parsed from {url}")
+        except Exception as e:
+            logger.warning(f"scrape_weather: {region} error: {e}")
+
+    return result
+
+
 def scrape_slow() -> dict:
     """
-    Combined slow scrape: STPASA demand forecast.
+    Combined slow scrape: STPASA demand forecast + BOM weather.
     Called by _run_slow in main.py every 30 minutes.
     """
     logger.info("scrape_slow starting...")
@@ -3108,6 +3177,7 @@ def scrape_slow() -> dict:
         "fuel_colors":   FUEL_COLORS,
         "all_fuels":     ALL_FUELS,
         "fuel_mix_today": {},
+        "weather":       {},
     }
 
     # ST PASA demand forecast
@@ -3115,6 +3185,12 @@ def scrape_slow() -> dict:
         result["stpasa_demand"] = scrape_stpasa_demand()
     except Exception as e:
         logger.warning(f"scrape_slow: stpasa_demand failed: {e}")
+
+    # BOM weather forecast
+    try:
+        result["weather"] = scrape_weather()
+    except Exception as e:
+        logger.warning(f"scrape_slow: weather failed: {e}")
 
     logger.info("scrape_slow done")
     return result
