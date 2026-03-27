@@ -1867,13 +1867,18 @@ async def record_view(request: Request):
         except Exception as e:
             logger.error(f"views: write error: {e}")
 
+    # Build unique_by_month as counts (not raw IP lists) for the frontend
+    unique_by_month_counts = {m: len(ips) for m, ips in data.get("unique_by_month", {}).items()}
+
     return {
-        "total":        data["total"],
-        "today":        data["by_day"].get(today, 0),
-        "this_month":   data["by_month"].get(month, 0),
-        "unique_total": len(data["unique_ips"]),
-        "unique_today": len(data["unique_by_day"].get(today, [])),
-        "unique_month": len(data["unique_by_month"].get(month, [])),
+        "total":            data["total"],
+        "today":            data["by_day"].get(today, 0),
+        "this_month":       data["by_month"].get(month, 0),
+        "unique_total":     len(data["unique_ips"]),
+        "unique_today":     len(data["unique_by_day"].get(today, [])),
+        "unique_month":     len(data["unique_by_month"].get(month, [])),
+        "by_month":         data.get("by_month", {}),
+        "unique_by_month":  unique_by_month_counts,
     }
 
 
