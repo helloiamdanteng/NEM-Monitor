@@ -1790,9 +1790,9 @@ async def station_debug():
     })
 
 
-@app.post("/api/views")
+@app.api_route("/api/views", methods=["GET", "POST"])
 async def record_view(request: Request):
-    import json, hashlib, os
+    import json, hashlib, os, base64
     from datetime import datetime, timezone, timedelta
     import httpx
 
@@ -1805,25 +1805,38 @@ async def record_view(request: Request):
     raw_ip    = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
     ip_hash   = hashlib.sha256(raw_ip.encode()).hexdigest()[:16]
 
-    GIST_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-    GIST_ID    = os.environ.get("VIEWS_GIST_ID", "")
+    GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+    GH_REPO  = os.environ.get("GITHUB_REPO", "")   # e.g. "danielteng/nem-dashboard"
+    GH_PATH  = "data/views.json"
+    GH_HEADERS = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
 
-    # ── Load current data ────────────────────────────────────────────────────
+    # ── Load current data from repo file ─────────────────────────────────────
     data: dict = {}
-    if GIST_TOKEN and GIST_ID:
+    file_sha: str = ""
+    if not GH_TOKEN:
+        logger.warning("views: GITHUB_TOKEN not set")
+    if not GH_REPO:
+        logger.warning("views: GITHUB_REPO not set")
+    if GH_TOKEN and GH_REPO:
         try:
             async with httpx.AsyncClient(timeout=8) as client:
                 r = await client.get(
-                    f"https://api.github.com/gists/{GIST_ID}",
-                    headers={"Authorization": f"token {GIST_TOKEN}",
-                             "Accept": "application/vnd.github.v3+json"}
+                    f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
+                    headers=GH_HEADERS,
                 )
+                logger.info(f"views: GET {GH_PATH} status={r.status_code}")
                 if r.status_code == 200:
-                    files = r.json().get("files", {})
-                    raw   = next(iter(files.values()), {}).get("content", "{}")
-                    data  = json.loads(raw)
-        except Exception:
-            pass
+                    resp_json = r.json()
+                    file_sha  = resp_json.get("sha", "")
+                    raw       = base64.b64decode(resp_json["content"]).decode()
+                    data      = json.loads(raw)
+                else:
+                    logger.warning(f"views: GET failed body={r.text[:200]}")
+        except Exception as e:
+            logger.error(f"views: load error: {e}")
 
     # ── Update counts ────────────────────────────────────────────────────────
     data.setdefault("total", 0)
@@ -1850,26 +1863,40 @@ async def record_view(request: Request):
             data["by_day"].pop(old, None)
             data["unique_by_day"].pop(old, None)
 
-    # ── Persist to Gist ──────────────────────────────────────────────────────
-    if GIST_TOKEN and GIST_ID:
+    # ── Write back to repo file ───────────────────────────────────────────────
+    if GH_TOKEN and GH_REPO:
         try:
+            encoded = base64.b64encode(json.dumps(data, indent=2).encode()).decode()
+            payload = {
+                "message": f"views: {today} total={data['total']}",
+                "content": encoded,
+            }
+            if file_sha:
+                payload["sha"] = file_sha
             async with httpx.AsyncClient(timeout=8) as client:
-                await client.patch(
-                    f"https://api.github.com/gists/{GIST_ID}",
-                    headers={"Authorization": f"token {GIST_TOKEN}",
-                             "Accept": "application/vnd.github.v3+json"},
-                    json={"files": {"views.json": {"content": json.dumps(data)}}}
+                r = await client.put(
+                    f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
+                    headers=GH_HEADERS,
+                    json=payload,
                 )
-        except Exception:
-            pass
+                logger.info(f"views: PUT {GH_PATH} status={r.status_code}")
+                if r.status_code not in (200, 201):
+                    logger.warning(f"views: PUT failed body={r.text[:200]}")
+        except Exception as e:
+            logger.error(f"views: write error: {e}")
+
+    # Build unique_by_month counts for frontend
+    unique_by_month_counts = {m: len(ips) for m, ips in data.get("unique_by_month", {}).items()}
 
     return {
-        "total":        data["total"],
-        "today":        data["by_day"].get(today, 0),
-        "this_month":   data["by_month"].get(month, 0),
-        "unique_total": len(data["unique_ips"]),
-        "unique_today": len(data["unique_by_day"].get(today, [])),
-        "unique_month": len(data["unique_by_month"].get(month, [])),
+        "total":            data["total"],
+        "today":            data["by_day"].get(today, 0),
+        "this_month":       data["by_month"].get(month, 0),
+        "unique_total":     len(data["unique_ips"]),
+        "unique_today":     len(data["unique_by_day"].get(today, [])),
+        "unique_month":     len(data["unique_by_month"].get(month, [])),
+        "by_month":         data.get("by_month", {}),
+        "unique_by_month":  unique_by_month_counts,
     }
 
 
