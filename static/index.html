@@ -4104,7 +4104,7 @@ function renderPricesHist() {
 
   let html = '<div class="section-title">Average Daily Spot Prices</div>';
   html += '<div style="font-family:var(--font-mono);font-size:9px;color:#475569;margin-bottom:12px;line-height:1.5">' +
-    'Daily average 5-min spot prices ($/MWh) — last 7 days from AEMO TradingIS.' +
+    'Daily average 30-min spot prices ($/MWh) — last 30 days from AEMO TradingIS.' +
     '</div>';
 
   // Region toggle pills — multi-select
@@ -4158,7 +4158,7 @@ async function drawPricesHist() {
     return;
   }
   const status = document.getElementById('prices-hist-status');
-  if (status) status.textContent = 'Loading 7 days of price data… (first load takes ~30s)';
+  if (status) status.textContent = 'Loading 30 days of price data…';
   try {
     const data = await fetch('/api/historical_price_averages').then(r => r.json());
     if (data.error) { if (status) status.textContent = `Error: ${data.error}`; return; }
