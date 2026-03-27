@@ -249,7 +249,7 @@ tr:last-child td { border-bottom:none; }
     <span class="icon">📊</span><span class="label">MTPASA</span>
   </button>
   <button class="nav-btn" onclick="showPanel('prices-hist')" id="nav-prices-hist">
-    <span class="icon">📈</span><span class="label">Avg $</span>
+    <span class="icon">📈</span><span class="label">Avg$</span>
   </button>
 </nav>
 
@@ -4643,7 +4643,6 @@ function renderPanel(panel, data) {
     else if (panel === 'dayahead')   html = renderDayAhead(data);
     else if (panel === 'about') { html = renderAbout(data); setTimeout(_renderViewStats, 0); }
     else if (panel === 'outages') html = renderOutages(data);
-    else if (panel === 'prices-hist') html = renderPricesHist(data);
     else if (panel === 'coalcal') html = renderCoalCalendar(data);
   } catch(e) {
     console.error(`Render error [${panel}]:`, e);
@@ -4659,7 +4658,7 @@ function renderPanel(panel, data) {
       else if (panel === 'dayahead')   { drawDayAheadCharts(data); drawWeekCharts(data); }
       else if (panel === 'batteries')  drawBatteryCharts(data);
       else if (panel === 'dminus1')    drawDMinus1Charts(data);
-      else if (panel === 'prices-hist') drawPricesHist();
+      else if (panel === 'prices-hist') { setTimeout(drawPricesHist, 0); }
     } catch(e) {
       console.error(`Chart error [${panel}]:`, e);
       main.innerHTML += `<div style="color:#e74c3c;font-size:11px;padding:8px">Chart error in ${panel}: ${e.message}</div>`;
