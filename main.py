@@ -1786,6 +1786,86 @@ async def price_avg_debug():
     return JSONResponse(content=results)
 
 
+@app.get("/api/price-avg-debug")
+async def price_avg_debug():
+    """Debug endpoint — times each step of scrape_historical_price_averages."""
+    import time, base64
+    from scraper import (TRADING_ARCHIVE, _list_hrefs, _read_zip_all, _parse_aemo,
+                         NEM_REGIONS, AEST)
+    from datetime import datetime, timedelta
+
+    results = {}
+    now_aest = datetime.now(AEST)
+    cutoff   = (now_aest - timedelta(days=30)).date()
+    loop     = asyncio.get_running_loop()
+
+    # Step 1: list archive
+    t0 = time.time()
+    try:
+        hrefs = await loop.run_in_executor(None, _list_hrefs, TRADING_ARCHIVE)
+        relevant = []
+        for href in hrefs:
+            fname = href.split('/')[-1]
+            parts = fname.replace('.zip','').split('_')
+            if len(parts) >= 4:
+                try:
+                    end_date = datetime.strptime(parts[-1], "%Y%m%d").date()
+                    if end_date >= cutoff:
+                        relevant.append(href)
+                except ValueError:
+                    pass
+        results["step1_listing"] = {
+            "total_hrefs": len(hrefs),
+            "relevant": len(relevant),
+            "relevant_files": [h.split('/')[-1] for h in relevant],
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["step1_listing"] = {"error": str(e), "ms": round((time.time()-t0)*1000)}
+        return JSONResponse(content=results)
+
+    if not relevant:
+        results["step2"] = {"error": "no relevant ZIPs"}
+        return JSONResponse(content=results)
+
+    # Step 2: download first ZIP and inspect
+    t0 = time.time()
+    test_url = relevant[-1]  # most recent
+    try:
+        text = await loop.run_in_executor(None, _read_zip_all, test_url)
+        lines = text.split('\n') if text else []
+        # Find I rows (headers) and count D rows
+        i_rows = [l for l in lines[:200] if l.startswith('I,')]
+        d_count = sum(1 for l in lines if l.startswith('D,'))
+        results["step2_zip_download"] = {
+            "url": test_url,
+            "kb": len(text)//1024 if text else 0,
+            "total_lines": len(lines),
+            "d_rows": d_count,
+            "i_rows_sample": i_rows[:5],
+            "first_50_chars": text[:200] if text else "",
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["step2_zip_download"] = {"error": str(e), "ms": round((time.time()-t0)*1000)}
+        return JSONResponse(content=results)
+
+    # Step 3: try parsing it
+    t0 = time.time()
+    try:
+        rows = list(_parse_aemo(text, "TRADING_PRICE")) if text else []
+        sample = rows[:3] if rows else []
+        results["step3_parse"] = {
+            "rows_found": len(rows),
+            "sample": sample,
+            "ms": round((time.time()-t0)*1000)
+        }
+    except Exception as e:
+        results["step3_parse"] = {"error": str(e), "ms": round((time.time()-t0)*1000)}
+
+    return JSONResponse(content=results)
+
+
 @app.get("/api/weather-debug")
 async def weather_debug():
     """Test weather scraping directly and return raw result."""
