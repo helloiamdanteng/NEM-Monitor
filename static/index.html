@@ -4099,35 +4099,57 @@ function setDMinus1Region(r) {
 }
 
 function renderPricesHist() {
+  // Initialise multi-select set if needed
+  if (!window._priceHistActive) window._priceHistActive = new Set(REGIONS);
+
   let html = '<div class="section-title">Average Daily Spot Prices</div>';
   html += '<div style="font-family:var(--font-mono);font-size:9px;color:#475569;margin-bottom:12px;line-height:1.5">' +
     'Daily average 5-min spot prices ($/MWh) — last 7 days from AEMO TradingIS.' +
     '</div>';
 
-  // Region filter
-  const rf = window._priceHistRegion || 'all';
+  // Region toggle pills — multi-select
+  const allOn = REGIONS.every(r => window._priceHistActive.has(r));
   html += '<div class="region-pills" style="margin-bottom:12px">';
-  html += `<button class="region-pill ${rf==='all'?'active':''}" style="color:#94a3b8;border-color:#94a3b8"
-    onclick="setPriceHistRegion('all')">All regions</button>`;
+  html += `<button class="region-pill ${allOn?'active':''}" style="color:#94a3b8;border-color:#94a3b8"
+    onclick="togglePriceHistNEM()">NEM</button>`;
   for (const r of REGIONS) {
     const col = REGION_COLORS[r];
-    html += `<button class="region-pill ${rf===r?'active':''}" style="color:${col};border-color:${col}"
-      onclick="setPriceHistRegion('${r}')">${REGION_SHORT[r]}</button>`;
+    const on  = window._priceHistActive.has(r);
+    html += `<button class="region-pill ${on?'active':''}" style="color:${col};border-color:${col}"
+      onclick="togglePriceHistRegion('${r}')">${REGION_SHORT[r]}</button>`;
   }
   html += '</div>';
 
   html += '<div class="chart-card">' +
     '<div class="chart-title">Daily Average Price ($/MWh)</div>' +
     '<div id="prices-hist-status" style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px 0"></div>' +
-    '<div class="chart-container" style="height:280px"><canvas id="pricesHistChart"></canvas></div>' +
+    '<div class="chart-container" style="height:260px"><canvas id="pricesHistChart"></canvas></div>' +
     '</div>';
 
-  html += '<div class="chart-card" style="margin-top:8px">' +
-    '<div class="chart-title">Daily P90 Price ($/MWh) — 90th percentile spike indicator</div>' +
-    '<div class="chart-container" style="height:200px"><canvas id="pricesHistP90Chart"></canvas></div>' +
-    '</div>';
+  html += '<div id="prices-hist-table" style="margin-top:8px"></div>';
 
   return html;
+}
+
+function togglePriceHistNEM() {
+  const allOn = REGIONS.every(r => window._priceHistActive.has(r));
+  if (allOn) {
+    window._priceHistActive.clear();
+  } else {
+    REGIONS.forEach(r => window._priceHistActive.add(r));
+  }
+  if (latestData) renderPanel('prices-hist', latestData);
+  if (window._priceHistData) setTimeout(() => _renderPriceHistCharts(window._priceHistData), 50);
+}
+
+function togglePriceHistRegion(r) {
+  if (window._priceHistActive.has(r)) {
+    window._priceHistActive.delete(r);
+  } else {
+    window._priceHistActive.add(r);
+  }
+  if (latestData) renderPanel('prices-hist', latestData);
+  if (window._priceHistData) setTimeout(() => _renderPriceHistCharts(window._priceHistData), 50);
 }
 
 async function drawPricesHist() {
@@ -4148,28 +4170,19 @@ async function drawPricesHist() {
   }
 }
 
-function setPriceHistRegion(r) {
-  window._priceHistRegion = r;
-  if (latestData) renderPanel('prices-hist', latestData);
-  if (window._priceHistData) setTimeout(() => _renderPriceHistCharts(window._priceHistData), 50);
-}
-
 function _renderPriceHistCharts(data) {
   destroyChart('pricesHist');
-  destroyChart('pricesHistP90');
   const ctx1 = document.getElementById('pricesHistChart');
-  const ctx2 = document.getElementById('pricesHistP90Chart');
   if (!ctx1) return;
 
-  const rf = window._priceHistRegion || 'all';
-  const regions = rf === 'all' ? REGIONS : [rf];
+  if (!window._priceHistActive) window._priceHistActive = new Set(REGIONS);
+  const regions = REGIONS.filter(r => window._priceHistActive.has(r));
 
-  // Collect all days across all regions, sorted
+  // Collect all days sorted ascending
   const allDays = new Set();
-  for (const r of regions) Object.keys(data[r] || {}).forEach(d => allDays.add(d));
+  for (const r of REGIONS) Object.keys(data[r] || {}).forEach(d => allDays.add(d));
   const days = Array.from(allDays).sort();
 
-  // Format day labels: "Mon 24 Mar"
   const dayLabels = days.map(d => {
     const dt = new Date(d + 'T00:00:00');
     return dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
@@ -4178,7 +4191,7 @@ function _renderPriceHistCharts(data) {
   const sharedOpts = {
     ...CHART_DEFAULTS,
     plugins: { ...CHART_DEFAULTS.plugins,
-      legend: { display: regions.length > 1,
+      legend: { display: true,
         labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
       tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
         callbacks: { label: c => c.raw===null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` } }
@@ -4191,7 +4204,6 @@ function _renderPriceHistCharts(data) {
     }
   };
 
-  // Avg price — bar chart
   const avgDatasets = regions.map(r => {
     const color = REGION_COLORS[r];
     const dayData = data[r] || {};
@@ -4211,24 +4223,46 @@ function _renderPriceHistCharts(data) {
     options: { ...sharedOpts, scales: { ...sharedOpts.scales, x: { ...sharedOpts.scales.x, stacked: false } } }
   });
 
-  // P90 — line chart
-  if (ctx2) {
-    const p90Datasets = regions.map(r => {
-      const color = REGION_COLORS[r];
-      const dayData = data[r] || {};
-      return {
-        label: REGION_SHORT[r],
-        data: days.map(d => dayData[d]?.p90 ?? null),
-        borderColor: color, backgroundColor: color + '22',
-        borderWidth: 1.5, pointRadius: 3, tension: 0.2, fill: false,
-      };
-    });
-    charts.pricesHistP90 = new Chart(ctx2, {
-      type: 'line',
-      data: { labels: dayLabels, datasets: p90Datasets },
-      options: sharedOpts,
-    });
+  // ── Summary table — reverse chronological ────────────────────────────────
+  const tableDiv = document.getElementById('prices-hist-table');
+  if (!tableDiv) return;
+
+  const visRegions = regions.length ? regions : REGIONS;
+  const daysDesc = [...days].reverse();
+
+  let t = '<div class="chart-card" style="padding:12px 14px;overflow-x:auto">';
+  t += '<div class="chart-title" style="margin-bottom:8px">Daily Average Price Summary ($/MWh)</div>';
+  t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
+
+  // Header
+  t += '<tr>';
+  t += '<th style="text-align:left;padding:5px 8px;color:#64748b;border-bottom:1px solid #1e2d45;white-space:nowrap">Date</th>';
+  for (const r of visRegions) {
+    const col = REGION_COLORS[r];
+    t += `<th style="text-align:right;padding:5px 8px;color:${col};border-bottom:1px solid #1e2d45">${REGION_SHORT[r]}</th>`;
   }
+  t += '</tr>';
+
+  // Rows
+  for (const d of daysDesc) {
+    const dt = new Date(d + 'T00:00:00');
+    const label = dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+    t += '<tr>';
+    t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}</td>`;
+    for (const r of visRegions) {
+      const val = data[r]?.[d]?.avg;
+      const col = val !== undefined ? priceClass(val) : '';
+      const colMap = {negative:'#2ed573', low:'#e2e8f0', medium:'#ffd32a', high:'#ff6b35', vhigh:'#ff4757'};
+      const textCol = colMap[col] || '#e2e8f0';
+      t += `<td style="text-align:right;padding:5px 8px;color:${textCol};border-bottom:1px solid #1e2d4533;font-weight:${col==='negative'||col==='vhigh'?'700':'400'}">
+        ${val !== undefined ? '$' + val.toFixed(2) : '—'}
+      </td>`;
+    }
+    t += '</tr>';
+  }
+
+  t += '</table></div>';
+  tableDiv.innerHTML = t;
 }
 
 function renderDMinus1(data) {
