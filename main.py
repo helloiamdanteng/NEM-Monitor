@@ -1772,7 +1772,7 @@ async def station_debug():
     })
 
 
-@app.post("/api/views")
+@app.api_route("/api/views", methods=["GET", "POST"])
 async def record_view(request: Request):
     import json, hashlib, os, base64
     from datetime import datetime, timezone, timedelta
