@@ -1,4 +1,4 @@
-""" 
+"""
 NEMWeb scraper - concurrent fetches, Origin assets, fuel mix via OpenNEM.
 
 AEMO CSV format:
@@ -2783,9 +2783,9 @@ def scrape_historical_price_averages() -> dict:
     from concurrent.futures import ThreadPoolExecutor as _TPE
 
     now_aest = datetime.now(AEST)
-    # Last 15 days (excluding today — today may be incomplete)
+    # Last 7 days (excluding today — today may be incomplete)
     dates = []
-    for i in range(1, 16):
+    for i in range(1, 8):
         d = (now_aest - _td(days=i)).strftime("%Y%m%d")
         dates.append(d)
 
