@@ -1,5 +1,5 @@
 """
-NEMWeb scraper - concurrent fetches, Origin assets, fuel mix via OpenNEM. 
+NEMWeb scraper - concurrent fetches, Origin assets, fuel mix via OpenNEM.
 
 AEMO CSV format:
   C rows = comments
@@ -514,6 +514,26 @@ def _read_zip(url: str) -> str:
                 return f.read().decode("utf-8", errors="replace")
     except Exception as e:
         logger.warning(f"ZIP read failed {url}: {e}")
+        return ""
+
+
+def _read_zip_all(url: str) -> str:
+    """Read ALL CSVs from a ZIP and concatenate — for multi-file archive ZIPs."""
+    r = _get(url, timeout=60)
+    if not r:
+        return ""
+    try:
+        parts = []
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            csvs = sorted(n for n in z.namelist() if n.lower().endswith(".csv"))
+            if not csvs:
+                return ""
+            for name in csvs:
+                with z.open(name) as f:
+                    parts.append(f.read().decode("utf-8", errors="replace"))
+        return "\n".join(parts)
+    except Exception as e:
+        logger.warning(f"ZIP read all failed {url}: {e}")
         return ""
 
 
@@ -2813,7 +2833,7 @@ def scrape_historical_price_averages() -> dict:
     # ── Step 2: download ZIPs in parallel (small pool to avoid rate limiting) ─
     def _fetch(u):
         try:
-            return _read_zip(u)
+            return _read_zip_all(u)
         except Exception as e:
             logger.warning(f"scrape_historical_price_averages: fetch failed {u}: {e}")
             return ""
