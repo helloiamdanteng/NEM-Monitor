@@ -1717,17 +1717,27 @@ async def price_avg_debug():
     t0 = time.time()
     test_url = relevant[-1]
     try:
-        text = await loop.run_in_executor(None, _read_zip_all, test_url)
-        lines = text.split('\n') if text else []
-        i_rows = [l for l in lines[:500] if l.startswith('I,')]
-        d_count = sum(1 for l in lines if l.startswith('D,'))
+        import zipfile as _zf, io as _io
+        from scraper import _get
+        r = await loop.run_in_executor(None, lambda: _get(test_url, timeout=60))
+        if not r:
+            results["step2_zip"] = {"error": "no response", "url": test_url}
+            return JSONResponse(content=results)
+        raw_bytes = len(r.content)
+        # Inspect ZIP contents
+        zip_files = []
+        try:
+            with _zf.ZipFile(_io.BytesIO(r.content)) as z:
+                zip_files = z.namelist()
+        except Exception as ze:
+            results["step2_zip"] = {"error": f"zip open failed: {ze}", "url": test_url, "bytes": raw_bytes}
+            return JSONResponse(content=results)
+
         results["step2_zip"] = {
             "url": test_url,
-            "kb": len(text)//1024 if text else 0,
-            "total_lines": len(lines),
-            "d_rows": d_count,
-            "i_rows": i_rows[:8],
-            "first_200": text[:200] if text else "",
+            "bytes": raw_bytes,
+            "zip_file_count": len(zip_files),
+            "zip_files_sample": zip_files[:10],
             "ms": round((time.time()-t0)*1000)
         }
     except Exception as e:
