@@ -4230,6 +4230,12 @@ function _renderPriceHistCharts(data) {
   const visRegions = regions.length ? regions : REGIONS;
   const daysDesc = [...days].reverse();
 
+  // Detect today in AEST
+  const nowAEST = new Date(new Date().toLocaleString('en-AU', {timeZone:'Australia/Brisbane'}));
+  const todayStr = nowAEST.getFullYear() + '-' +
+    String(nowAEST.getMonth()+1).padStart(2,'0') + '-' +
+    String(nowAEST.getDate()).padStart(2,'0');
+
   let t = '<div class="chart-card" style="padding:12px 14px;overflow-x:auto">';
   t += '<div class="chart-title" style="margin-bottom:8px">Daily Average Price Summary ($/MWh)</div>';
   t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
@@ -4247,8 +4253,11 @@ function _renderPriceHistCharts(data) {
   for (const d of daysDesc) {
     const dt = new Date(d + 'T00:00:00');
     const label = dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+    const isToday = d === todayStr;
     t += '<tr>';
-    t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}</td>`;
+    t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">
+      ${label}${isToday ? ' <span style="color:#64748b;font-size:8px">partial</span>' : ''}
+    </td>`;
     for (const r of visRegions) {
       const val = data[r]?.[d]?.avg;
       const col = val !== undefined ? priceClass(val) : '';
