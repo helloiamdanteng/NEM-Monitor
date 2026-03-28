@@ -2826,16 +2826,15 @@ def scrape_historical_price_averages(days: int = 90) -> dict:
     """
     Compute daily average prices for the last N days (default 90).
 
-    Sources (in priority order per month):
-    1. MMSDM monthly DVD — single flat CSV, available ~5-6 weeks after month end
-       URL: MMSDM/YYYY/MMSDM_YYYYMM/MMSDM_Historical_Data_SQLLoader/DATA/
-            PUBLIC_DVD_TRADINGPRICE_YYYYMM010000.zip
-    2. TradingIS weekly archive — ZIP of ZIPs, available next Sunday after week end
-       URL: REPORTS/ARCHIVE/TradingIS_Reports/PUBLIC_TRADINGIS_YYYYMMDD_YYYYMMDD.zip
+    Sources (in priority order):
+    1. GitHub daily price files — 5-min dispatch prices, written every 5 min
+       data/prices/YYYY-MM-DD.json
+    2. MMSDM monthly DVD — single flat CSV, available ~5-6 weeks after month end
+    3. TradingIS weekly archive — ZIP of ZIPs, available next Sunday after week end
 
     Returns { region: { "YYYY-MM-DD": { avg, min, max, p90, count } } }
     """
-    import statistics
+    import statistics, json, base64, os
     from datetime import timedelta as _td
     from concurrent.futures import ThreadPoolExecutor as _TPE
 
@@ -2843,18 +2842,61 @@ def scrape_historical_price_averages(days: int = 90) -> dict:
     cutoff    = (now_aest - _td(days=days)).date()
     today     = now_aest.date()
 
-    # Work out which months we need
+    raw: dict = {}  # { (region, "YYYY-MM-DD"): [rrp, ...] }
+    days_covered = set()  # dates fully covered by GitHub files
+
+    # ── Source 1: GitHub daily price files ───────────────────────────────────
+    GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+    GH_REPO  = os.environ.get("GITHUB_REPO", "")
+    if GH_TOKEN and GH_REPO:
+        try:
+            import requests as _req
+            GH_HEADERS = {
+                "Authorization": f"token {GH_TOKEN}",
+                "Accept": "application/vnd.github.v3+json",
+            }
+            # Check dates from cutoff to today
+            check_date = cutoff
+            while check_date <= today:
+                date_str = check_date.strftime("%Y-%m-%d")
+                path     = f"data/prices/{date_str}.json"
+                r = _req.get(
+                    f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
+                    headers=GH_HEADERS, timeout=8
+                )
+                if r.status_code == 200:
+                    day_data = json.loads(base64.b64decode(r.json()["content"]).decode())
+                    day_data.pop("date", None)
+                    for region, intervals in day_data.items():
+                        if region not in NEM_REGIONS:
+                            continue
+                        for hhmm, rrp in intervals.items():
+                            key = (region, date_str)
+                            raw.setdefault(key, []).append(float(rrp))
+                    days_covered.add(check_date)
+                if check_date == today:
+                    break
+                # advance
+                check_date = check_date + _td(days=1)
+            logger.info(f"scrape_historical_price_averages: {len(days_covered)} days from GitHub files")
+        except Exception as e:
+            logger.warning(f"scrape_historical_price_averages: GitHub files failed: {e}")
+
+    # Work out which months still need MMSDM/archive coverage
     months_needed = set()
     d = cutoff
     while d < today:
-        months_needed.add((d.year, d.month))
-        # advance to next month
+        if d not in days_covered:
+            months_needed.add((d.year, d.month))
         if d.month == 12:
             d = d.replace(year=d.year+1, month=1, day=1)
         else:
             d = d.replace(month=d.month+1, day=1)
 
-    raw: dict = {}  # { (region, "YYYY-MM-DD"): [rrp, ...] }
+    if not months_needed:
+        logger.info("scrape_historical_price_averages: all days covered by GitHub files")
+    else:
+        logger.info(f"scrape_historical_price_averages: {len(months_needed)} months need MMSDM/archive")
 
     def _parse_text(text: str):
         """Parse AEMO CSV text and accumulate into raw."""
