@@ -1886,6 +1886,186 @@ async def price_avg_debug():
 
 
 
+@app.get("/api/backfill-prices")
+async def backfill_prices(days: int = 90, secret: str = ""):
+    """
+    One-off backfill: fetch TradingIS archive + CURRENT files and write
+    daily price files to GitHub. Runs as a background task.
+    Protect with ?secret=yourtoken to avoid accidental triggers.
+    """
+    import os
+    if secret != os.environ.get("BACKFILL_SECRET", "backfill"):
+        return JSONResponse(status_code=403, content={"error": "wrong secret"})
+
+    async def _run():
+        import json, base64, zipfile as _zf, csv as _csv, io as _io, time as _time, re as _re
+        from datetime import timedelta
+        from scraper import (TRADING_ARCHIVE, NEMWEB_BASE, NEM_REGIONS, AEST,
+                             _list_hrefs, _read_zip_of_zips, _read_zip, _parse_aemo)
+        import httpx
+
+        now_aest = datetime.now(timezone(timedelta(hours=10)))
+        cutoff   = (now_aest - timedelta(days=days)).date()
+        today    = now_aest.date()
+        GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+        GH_REPO  = os.environ.get("GITHUB_REPO", "")
+        GH_HEADERS = {
+            "Authorization": f"token {GH_TOKEN}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+
+        if not GH_TOKEN or not GH_REPO:
+            logger.error("backfill: GitHub not configured")
+            return
+
+        logger.info(f"backfill: starting {cutoff} → {today}")
+        daily: dict = {}
+        loop = asyncio.get_running_loop()
+
+        # ── Phase 1: weekly archive ZIPs ─────────────────────────────────────
+        logger.info("backfill: Phase 1 — listing TradingIS archive")
+        all_hrefs = await loop.run_in_executor(None, _list_hrefs, TRADING_ARCHIVE)
+        relevant = []
+        for href in all_hrefs:
+            fname = href.split('/')[-1]
+            parts = fname.replace('.zip', '').split('_')
+            if len(parts) >= 4:
+                try:
+                    sd = datetime.strptime(parts[-2], "%Y%m%d").date()
+                    ed = datetime.strptime(parts[-1], "%Y%m%d").date()
+                    if ed >= cutoff and sd < today:
+                        relevant.append((sd, ed, href))
+                except ValueError:
+                    pass
+        relevant.sort()
+        logger.info(f"backfill: {len(relevant)} weekly ZIPs to fetch")
+
+        archive_end = cutoff
+        for i, (sd, ed, url) in enumerate(relevant):
+            logger.info(f"backfill: [{i+1}/{len(relevant)}] {url.split('/')[-1]}")
+            text = await loop.run_in_executor(None, _read_zip_of_zips, url)
+            if not text:
+                logger.warning(f"backfill: skip {url.split('/')[-1]} — no data")
+                continue
+            rows = _parse_aemo(text, "TRADING_PRICE")
+            logger.info(f"backfill:   {len(rows)} rows")
+            for row in rows:
+                region = row.get("REGIONID", "").strip()
+                if region not in NEM_REGIONS: continue
+                if row.get("INVALIDFLAG", "0") not in ("0", ""): continue
+                dt_str = row.get("SETTLEMENTDATE", "")
+                rrp_str = row.get("RRP", "")
+                if not dt_str or not rrp_str: continue
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                    dd = dt.date()
+                    if dd < cutoff or dd >= today: continue
+                    daily.setdefault(dt.strftime("%Y-%m-%d"), {}).setdefault(region, {})[dt.strftime("%H:%M")] = round(float(rrp_str), 2)
+                    if dd > archive_end: archive_end = dd
+                except (ValueError, TypeError): continue
+            logger.info(f"backfill:   {len(daily)} days accumulated")
+
+        logger.info(f"backfill: archive covers up to {archive_end}")
+
+        # ── Phase 2: CURRENT files for gap ───────────────────────────────────
+        gap_start = archive_end + timedelta(days=1)
+        gap_end   = today - timedelta(days=1)
+
+        if gap_start <= gap_end:
+            logger.info(f"backfill: Phase 2 — CURRENT files {gap_start} → {gap_end}")
+            TRADING_CURRENT = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
+            current_hrefs = await loop.run_in_executor(None, _list_hrefs, TRADING_CURRENT)
+            seen: dict = {}
+            for href in current_hrefs:
+                fname = href.split('/')[-1]
+                parts = fname.split('_')
+                if len(parts) >= 3 and len(parts[2]) >= 8:
+                    try:
+                        fd = datetime.strptime(parts[2][:8], "%Y%m%d").date()
+                        if gap_start <= fd <= gap_end:
+                            seen[parts[2]] = href
+                    except ValueError: pass
+            gap_urls = sorted(seen.values())
+            logger.info(f"backfill: {len(gap_urls)} CURRENT files for gap")
+
+            ok = fail = 0
+            for j, url in enumerate(gap_urls):
+                try:
+                    def _fetch_one(u=url):
+                        import time as _t
+                        _t.sleep(2)
+                        return _read_zip(u)
+                    text = await loop.run_in_executor(None, _fetch_one)
+                    if text:
+                        rows = _parse_aemo(text, "TRADING_PRICE")
+                        for row in rows:
+                            region = row.get("REGIONID", "").strip()
+                            if region not in NEM_REGIONS: continue
+                            if row.get("INVALIDFLAG", "0") not in ("0", ""): continue
+                            dt_str = row.get("SETTLEMENTDATE", "")
+                            rrp_str = row.get("RRP", "")
+                            if not dt_str or not rrp_str: continue
+                            try:
+                                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                                daily.setdefault(dt.strftime("%Y-%m-%d"), {}).setdefault(row.get("REGIONID","").strip(), {})[dt.strftime("%H:%M")] = round(float(rrp_str), 2)
+                            except (ValueError, TypeError): continue
+                        ok += 1
+                    else:
+                        fail += 1
+                    if j % 50 == 0:
+                        logger.info(f"backfill: CURRENT [{j+1}/{len(gap_urls)}] ok={ok} fail={fail} days={len(daily)}")
+                except Exception as e:
+                    logger.warning(f"backfill: CURRENT error: {e}")
+                    fail += 1
+            logger.info(f"backfill: Phase 2 done ok={ok} fail={fail}")
+
+        # ── Phase 3: upload to GitHub ─────────────────────────────────────────
+        dates = sorted(daily.keys())
+        logger.info(f"backfill: Phase 3 — uploading {len(dates)} files to GitHub")
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            for j, date_str in enumerate(dates):
+                path = f"data/prices/{date_str}.json"
+                day_data = {"date": date_str, **daily[date_str]}
+                try:
+                    # Read existing
+                    r = await client.get(
+                        f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
+                        headers=GH_HEADERS
+                    )
+                    sha = ""
+                    if r.status_code == 200:
+                        rj = r.json()
+                        sha = rj.get("sha", "")
+                        existing = json.loads(base64.b64decode(rj["content"]).decode())
+                        for region, intervals in daily[date_str].items():
+                            existing.setdefault(region, {}).update(intervals)
+                        day_data = existing
+
+                    encoded = base64.b64encode(json.dumps(day_data, separators=(',',':')).encode()).decode()
+                    payload = {"message": f"backfill: {date_str}", "content": encoded}
+                    if sha: payload["sha"] = sha
+                    wr = await client.put(
+                        f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
+                        headers=GH_HEADERS, json=payload
+                    )
+                    status = "ok" if wr.status_code in (200,201) else f"err={wr.status_code}"
+                    if j % 10 == 0:
+                        logger.info(f"backfill: [{j+1}/{len(dates)}] {date_str} {status}")
+                    await asyncio.sleep(0.5)
+                except Exception as e:
+                    logger.warning(f"backfill: upload {date_str} failed: {e}")
+
+        logger.info(f"backfill: COMPLETE — {len(dates)} days uploaded")
+
+    asyncio.create_task(_run())
+    return JSONResponse(content={
+        "status": "backfill started",
+        "days": days,
+        "message": "Watch Render logs for progress. Will take 30-120 minutes."
+    })
+
+
 @app.get("/api/weather-debug")
 async def weather_debug():
     """Test weather scraping directly and return raw result."""
