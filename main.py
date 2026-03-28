@@ -43,6 +43,72 @@ _FAST_EMPTY = {
     "bdu_history": {},
 }
 
+
+async def _append_prices_to_github(prices_5min: dict):
+    """
+    Append latest 5-min dispatch prices to today's daily file in GitHub.
+    File: data/prices/YYYY-MM-DD.json
+    Structure: { "date": "YYYY-MM-DD", "QLD1": {"HH:MM": rrp, ...}, ... }
+    """
+    import json, base64, os
+    from datetime import datetime, timezone, timedelta
+    import httpx
+
+    AEST     = timezone(timedelta(hours=10))
+    today    = datetime.now(AEST).strftime("%Y-%m-%d")
+    GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+    GH_REPO  = os.environ.get("GITHUB_REPO", "")
+    GH_PATH  = f"data/prices/{today}.json"
+    GH_HEADERS = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    if not GH_TOKEN or not GH_REPO:
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Read existing file
+            r = await client.get(
+                f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
+                headers=GH_HEADERS,
+            )
+            if r.status_code == 200:
+                resp_json = r.json()
+                file_sha  = resp_json.get("sha", "")
+                existing  = json.loads(base64.b64decode(resp_json["content"]).decode())
+            else:
+                file_sha = ""
+                existing = {"date": today}
+
+            # Merge new prices in
+            for region, pts in prices_5min.items():
+                if region not in existing:
+                    existing[region] = {}
+                for pt in pts:
+                    existing[region][pt["interval"]] = pt["rrp"]
+
+            # Write back
+            encoded = base64.b64encode(
+                json.dumps(existing, separators=(',', ':')).encode()
+            ).decode()
+            payload = {
+                "message": f"prices: {today}",
+                "content": encoded,
+            }
+            if file_sha:
+                payload["sha"] = file_sha
+            await client.put(
+                f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
+                headers=GH_HEADERS,
+                json=payload,
+            )
+            logger.debug(f"prices: wrote {today}.json")
+    except Exception as e:
+        logger.warning(f"prices: GitHub write failed: {e}")
+
+
 async def _run_fast():
     t0 = time.time()
     try:
@@ -54,6 +120,10 @@ async def _run_fast():
         fast_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
         fast_cache["error"] = None
         logger.info(f"Fast scrape done in {time.time()-t0:.1f}s")
+        # Append prices to GitHub rolling file (fire and forget)
+        prices_5min = data.get("dispatch_prices_5min", {})
+        if prices_5min:
+            asyncio.create_task(_append_prices_to_github(prices_5min))
     except asyncio.TimeoutError:
         logger.error("Fast scrape timed out after 60s")
         fast_cache["error"] = "timeout"
@@ -1586,6 +1656,53 @@ async def mtpasa_calendar():
 
 # Cache for historical price averages — expensive to compute (~53 file fetches)
 _price_avg_cache = {"data": None, "last_updated": None}
+
+@app.get("/api/prices-rolling")
+async def prices_rolling(days: int = 14):
+    """
+    Return daily price files from GitHub for the last N days.
+    Each day: { region: { "HH:MM": rrp } }
+    Returns: { "YYYY-MM-DD": { region: { "HH:MM": rrp } } }
+    """
+    import json, base64, os
+    from datetime import datetime, timezone, timedelta
+    import httpx
+
+    AEST     = timezone(timedelta(hours=10))
+    GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+    GH_REPO  = os.environ.get("GITHUB_REPO", "")
+    GH_HEADERS = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    if not GH_TOKEN or not GH_REPO:
+        return JSONResponse(content={"error": "GitHub not configured"})
+
+    now_aest = datetime.now(AEST)
+    dates = [
+        (now_aest - timedelta(days=i)).strftime("%Y-%m-%d")
+        for i in range(days)
+    ]
+
+    result = {}
+    async with httpx.AsyncClient(timeout=10) as client:
+        for date_str in dates:
+            path = f"data/prices/{date_str}.json"
+            try:
+                r = await client.get(
+                    f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
+                    headers=GH_HEADERS,
+                )
+                if r.status_code == 200:
+                    data = json.loads(base64.b64decode(r.json()["content"]).decode())
+                    data.pop("date", None)
+                    result[date_str] = data
+            except Exception:
+                pass
+
+    return JSONResponse(content=result)
+
 
 @app.get("/api/historical_price_averages")
 async def historical_price_averages(refresh: bool = False):
