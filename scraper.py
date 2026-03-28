@@ -1,4 +1,4 @@
-""" 
+"""
 NEMWeb scraper - concurrent fetches, Origin assets, fuel mix via OpenNEM.
 
 AEMO CSV format:
@@ -534,6 +534,34 @@ def _read_zip_all(url: str) -> str:
         return "\n".join(parts)
     except Exception as e:
         logger.warning(f"ZIP read all failed {url}: {e}")
+        return ""
+
+
+def _read_zip_of_zips(url: str) -> str:
+    """
+    Read a ZIP that contains inner ZIPs (each containing one CSV).
+    Used for TradingIS weekly archive files.
+    """
+    r = _get(url, timeout=60)
+    if not r:
+        return ""
+    try:
+        parts = []
+        with zipfile.ZipFile(io.BytesIO(r.content)) as outer:
+            inner_zips = sorted(n for n in outer.namelist() if n.lower().endswith(".zip"))
+            for name in inner_zips:
+                try:
+                    inner_bytes = outer.read(name)
+                    with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner:
+                        csvs = [n for n in inner.namelist() if n.lower().endswith(".csv")]
+                        if csvs:
+                            with inner.open(csvs[0]) as f:
+                                parts.append(f.read().decode("utf-8", errors="replace"))
+                except Exception:
+                    continue
+        return "\n".join(parts)
+    except Exception as e:
+        logger.warning(f"ZIP of ZIPs read failed {url}: {e}")
         return ""
 
 
@@ -2833,7 +2861,7 @@ def scrape_historical_price_averages() -> dict:
     # ── Step 2: download ZIPs in parallel (small pool to avoid rate limiting) ─
     def _fetch(u):
         try:
-            return _read_zip_all(u)
+            return _read_zip_of_zips(u)
         except Exception as e:
             logger.warning(f"scrape_historical_price_averages: fetch failed {u}: {e}")
             return ""
