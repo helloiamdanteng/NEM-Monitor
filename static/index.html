@@ -4500,7 +4500,7 @@ function _renderGBB(gbb) {
   // ── Demand by sector ──
   html += '<div class="chart-card" style="margin-top:8px">' +
     '<div class="chart-title">Gas Demand by Sector — 14 Days (TJ/day)</div>' +
-    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">LNG export · gas generation · large industrial · actuals to ${latestDate.replace(/\//g,'-')}</div>` +
+    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">LNG export · residential & commercial · large industrial · gas generation · actuals to ${latestDate.replace(/\//g,'-')}</div>` +
     '<div class="chart-container" style="height:240px"><canvas id="gbbDemandSectorChart"></canvas></div>' +
     '</div>';
 
@@ -4566,11 +4566,12 @@ function _renderGBB(gbb) {
     // ── Demand by sector chart ──
     const demSector = gbb.demand_by_sector || {};
     const SECTOR_COLORS = {
-      'LNG Export':           '#e74c3c',
-      'Gas Power Generation': '#f39c12',
-      'Large Industrial':     '#9b59b6',
+      'LNG Export':               '#e74c3c',
+      'Residential & Commercial': '#3498db',
+      'Large Industrial':         '#9b59b6',
+      'Gas Power Generation':     '#f39c12',
     };
-    const SECTOR_ORDER = ['LNG Export', 'Gas Power Generation', 'Large Industrial'];
+    const SECTOR_ORDER = ['LNG Export', 'Residential & Commercial', 'Large Industrial', 'Gas Power Generation'];
     const demCtx = document.getElementById('gbbDemandSectorChart');
     if (demCtx && Object.keys(demSector).length) {
       destroyChart('gbbDemandSector');
