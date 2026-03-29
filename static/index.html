@@ -4496,6 +4496,16 @@ function _renderGBB(gbb) {
     '<div class="chart-container" style="height:240px"><canvas id="gbbStorageChart"></canvas></div>' +
     '</div>';
 
+  // ── State supply/demand history charts ──
+  html += '<div class="chart-card" style="margin-top:8px">' +
+    '<div class="chart-title">East Coast Supply by State — 14 Days (TJ/day)</div>' +
+    '<div class="chart-container" style="height:220px"><canvas id="gbbSupplyHistChart"></canvas></div>' +
+    '</div>';
+  html += '<div class="chart-card" style="margin-top:8px">' +
+    '<div class="chart-title">East Coast Demand by State — 14 Days (TJ/day)</div>' +
+    '<div class="chart-container" style="height:220px"><canvas id="gbbDemandHistChart"></canvas></div>' +
+    '</div>';
+
   el.innerHTML = html;
 
   // Draw storage chart
@@ -4541,6 +4551,51 @@ function _renderGBB(gbb) {
         }
       }
     });
+
+    // ── Supply & demand history charts ──
+    const stateHist = gbb.state_history || {};
+    const STATE_COLORS = { QLD:'#f39c12', NSW:'#3498db', VIC:'#2ed573', SA:'#e74c3c', TAS:'#9b59b6', NT:'#1abc9c' };
+    const allHistDates = [...new Set(
+      Object.values(stateHist).flatMap(pts => pts.map(p => p.gas_date))
+    )].sort();
+    const histLabels = allHistDates.map(d => {
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('en-AU', {day:'numeric', month:'short'});
+    });
+
+    const _drawStateChart = (canvasId, chartKey, field) => {
+      const ctx2 = document.getElementById(canvasId);
+      if (!ctx2 || !allHistDates.length) return;
+      destroyChart(chartKey);
+      const datasets = STATE_ORDER.filter(st => stateHist[st]).map(st => ({
+        label: st,
+        data: allHistDates.map(d => {
+          const pt = (stateHist[st] || []).find(p => p.gas_date === d);
+          return pt ? pt[field] : null;
+        }),
+        borderColor: STATE_COLORS[st],
+        backgroundColor: STATE_COLORS[st] + '33',
+        borderWidth: 1.5, pointRadius: 2, tension: 0.2, fill: true,
+      }));
+      charts[chartKey] = new Chart(ctx2, {
+        type: 'line',
+        data: { labels: histLabels, datasets },
+        options: { ...CHART_DEFAULTS,
+          plugins: { ...CHART_DEFAULTS.plugins,
+            legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+            tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+              callbacks: { label: c => c.raw===null?null:` ${c.dataset.label}: ${c.raw.toFixed(0)} TJ` }
+            }
+          },
+          scales: {
+            x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10}, grid:{color:'#1e2d4544'} },
+            y: { stacked: true, ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>v.toFixed(0)+' TJ'}, grid:{color:'#1e2d45'}, beginAtZero:true }
+          }
+        }
+      });
+    };
+    _drawStateChart('gbbSupplyHistChart', 'gbbSupplyHist', 'supply');
+    _drawStateChart('gbbDemandHistChart', 'gbbDemandHist', 'demand');
   }, 50);
 }
 
