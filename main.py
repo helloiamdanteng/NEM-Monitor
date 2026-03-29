@@ -2316,7 +2316,36 @@ async def gas_debug():
     return JSONResponse(content=result)
 
 
-@app.get("/api/gas-excel-debug")
+@app.get("/api/gbb-debug")
+async def gbb_debug():
+    """Inspect GasBBActualFlowStorageLast31.CSV structure."""
+    import io as _io, csv as _csv
+    from scraper import _get
+    loop = asyncio.get_running_loop()
+
+    def _inspect():
+        url = "https://www.nemweb.com.au/Reports/Current/GBB/GasBBActualFlowStorageLast31.CSV"
+        r = _get(url, timeout=30)
+        if not r:
+            return {"error": "fetch failed"}
+        lines = r.text.splitlines()
+        reader = _csv.DictReader(lines)
+        rows = list(reader)
+        # Show headers + first 5 rows + filter for Iona
+        iona_rows = [row for row in rows if "iona" in (row.get("facility_name") or row.get("FacilityName") or "").lower()
+                     or "iona" in str(row).lower()]
+        return {
+            "total_rows": len(rows),
+            "headers": reader.fieldnames,
+            "first_3_rows": rows[:3],
+            "iona_rows": iona_rows[:10],
+            "unique_facility_types": list({r.get("FacilityType") or r.get("facility_type") for r in rows if r.get("FacilityType") or r.get("facility_type")}),
+        }
+
+    result = await loop.run_in_executor(None, _inspect)
+    return JSONResponse(content=result)
+
+
 async def gas_excel_debug():
     """Inspect AEMO DWGM Excel file structure."""
     import io as _io, openpyxl as _xl
