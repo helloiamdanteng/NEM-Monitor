@@ -2351,7 +2351,7 @@ async def gas_debug():
 
 @app.get("/api/gbb-debug")
 async def gbb_debug():
-    """Investigate PIPE demand locations for residential/commercial split."""
+    """Check Athena dates, TAS demand, and pipeline flows."""
     import csv as _csv
     from scraper import _get
     loop = asyncio.get_running_loop()
@@ -2365,36 +2365,56 @@ async def gbb_debug():
         all_dates = sorted({row["GasDate"] for row in rows})
         latest = all_dates[-1]
 
-        # All PIPE rows on latest date - show demand by location
-        pipe_latest = [row for row in rows
-                       if row["GasDate"] == latest and row["FacilityType"] == "PIPE"]
+        # 1. Athena dates - how many unique gas dates does it appear on?
+        athena_rows = [row for row in rows if row["FacilityName"] == "ATHENA"]
+        athena_dates = sorted({r["GasDate"] for r in athena_rows})
 
-        # Aggregate pipe demand by location name
-        by_location = {}
-        for row in pipe_latest:
-            loc = row["LocationName"]
-            dem = float(row.get("Demand") or 0)
-            sup = float(row.get("Supply") or 0)
-            by_location.setdefault(loc, {"demand": 0.0, "supply": 0.0, "facilities": set()})
-            by_location[loc]["demand"] += dem
-            by_location[loc]["supply"] += sup
-            by_location[loc]["facilities"].add(row["FacilityName"])
+        # 2. Longford dates for comparison
+        longford_dates = sorted({r["GasDate"] for r in rows if r["FacilityName"] == "Longford"})
 
-        # Sort by demand descending
-        sorted_locs = sorted(by_location.items(), key=lambda x: -x[1]["demand"])
-        loc_summary = [
-            {"location": loc, "demand": round(v["demand"],1), "supply": round(v["supply"],1),
-             "facilities": sorted(v["facilities"])}
-            for loc, v in sorted_locs
-        ]
+        # 3. TAS rows on latest date - all facility types
+        tas_latest = [row for row in rows if row["GasDate"] == latest and row["State"] == "TAS"]
+        tas_by_type = {}
+        for row in tas_latest:
+            ft = row["FacilityType"]
+            tas_by_type.setdefault(ft, []).append({
+                "facility": row["FacilityName"],
+                "location": row["LocationName"],
+                "supply": row["Supply"],
+                "demand": row["Demand"],
+            })
 
-        # Also show all unique location names across entire dataset
-        all_locations = sorted({row["LocationName"] for row in rows})
+        # 4. Pipeline flows - inter-state pipelines on latest date
+        # Pipelines that cross state lines have rows in multiple states
+        # Find pipelines appearing in >1 state
+        pipe_states = {}
+        for row in rows:
+            if row["FacilityType"] == "PIPE" and row["GasDate"] == latest:
+                name = row["FacilityName"]
+                pipe_states.setdefault(name, set()).add(row["State"])
+        interstate = {k: sorted(v) for k, v in pipe_states.items() if len(v) > 1}
+
+        # 5. Sample of major pipeline supply values on latest date
+        major_pipes = ["EGP", "MSP", "RBP", "VTS", "MAPS", "TGP", "SWQP"]
+        pipe_latest = {}
+        for row in rows:
+            if row["GasDate"] == latest and row["FacilityType"] == "PIPE" and row["FacilityName"] in major_pipes:
+                name = row["FacilityName"]
+                pipe_latest.setdefault(name, []).append({
+                    "location": row["LocationName"],
+                    "state": row["State"],
+                    "supply": row["Supply"],
+                    "demand": row["Demand"],
+                })
 
         return {
-            "latest_date": latest,
-            "pipe_demand_by_location": loc_summary,
-            "all_location_names": all_locations,
+            "athena_dates": athena_dates,
+            "athena_date_count": len(athena_dates),
+            "longford_dates": longford_dates,
+            "longford_date_count": len(longford_dates),
+            "tas_latest_by_type": tas_by_type,
+            "interstate_pipelines": interstate,
+            "major_pipe_flows_latest": pipe_latest,
         }
 
     result = await loop.run_in_executor(None, _inspect)
