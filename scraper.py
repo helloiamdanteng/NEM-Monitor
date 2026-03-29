@@ -3605,8 +3605,9 @@ def scrape_gas(days: int = 14) -> dict:
 
 def scrape_slow() -> dict:
     """
-    Combined slow scrape: STPASA demand forecast + BOM weather + gas markets.
+    Combined slow scrape: STPASA demand forecast + BOM weather.
     Called by _run_slow in main.py every 30 minutes.
+    Gas data is fetched on-demand via /api/gas endpoint.
     """
     logger.info("scrape_slow starting...")
     result = {
@@ -3616,7 +3617,6 @@ def scrape_slow() -> dict:
         "all_fuels":     ALL_FUELS,
         "fuel_mix_today": {},
         "weather":       {},
-        "gas":           {},
     }
 
     # ST PASA demand forecast
@@ -3630,12 +3630,6 @@ def scrape_slow() -> dict:
         result["weather"] = scrape_weather()
     except Exception as e:
         logger.warning(f"scrape_slow: weather failed: {e}")
-
-    # Gas markets (STTM + VicGas)
-    try:
-        result["gas"] = scrape_gas()
-    except Exception as e:
-        logger.warning(f"scrape_slow: gas failed: {e}")
 
     logger.info("scrape_slow done")
     return result
