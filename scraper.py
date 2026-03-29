@@ -3457,110 +3457,101 @@ def scrape_gas(days: int = 14) -> dict:
             logger.warning(f"scrape_gas: STTM ZIP parse failed: {e}")
         return out
 
-    # ── STTM: fetch CURRENTDAY ZIP + history CSVs ────────────────────────────
-    # CURRENTDAY.ZIP contains today's ex ante prices (int651) and quantities (int652)
-    # int676 (rolling_average_price) has 30-day price history per hub
-    # int678 (net_market_balance) has total withdrawals per hub
+    # ── STTM: fetch CURRENTDAY ZIP only ──────────────────────────────────────
+    # CURRENTDAY.ZIP contains:
+    #   int651 — ex ante market prices (today + last 8 days = 9 days, 3 hubs each)
+    #   int652 — ex ante schedule quantities (today's demand only, flow_direction F)
+    # No daily demand history available from STTM sources.
 
     def _fetch_sttm_current():
         url = f"{STTM_BASE}/CURRENTDAY.ZIP"
         r = _get(url, timeout=30)
         if not r:
             return {}
-        return _parse_sttm_zip(r.content)
+        return r.content
 
-    def _fetch_sttm_csv(filename: str) -> str:
-        url = f"{STTM_BASE}/CURRENTDAY.ZIP"  # all in CURRENTDAY
-        # Actually fetch directly from the file list
-        direct_url = f"{STTM_BASE}/{filename}"
-        r = _get(direct_url, timeout=15)
-        return r.text if r else ""
-
-    # Fetch CURRENTDAY in a thread
-    today_data = {}
+    sttm_bytes = {}
     with _TPE(max_workers=1) as ex:
-        today_data = ex.submit(_fetch_sttm_current).result(timeout=45)
+        sttm_bytes = ex.submit(_fetch_sttm_current).result(timeout=45)
 
-    # Today's prices and demand
-    for hub in STTM_HUBS:
-        if hub in today_data:
-            result["sttm"]["today"][hub] = {
-                "price":      today_data[hub].get("price"),
-                "demand_tj":  today_data[hub].get("demand_tj"),
-                "gas_date":   today_data[hub].get("gas_date"),
-                "facilities": today_data[hub].get("facilities", {}),
-            }
+    if sttm_bytes:
+        try:
+            history_prices = {}  # { "YYYY-MM-DD": { hub: price } }
+            today_qty      = {}  # { hub: demand_tj }
+            today_date_raw = {}  # { hub: gas_date str for today }
 
-    # ── STTM history: parse int676 (rolling average price) from CURRENTDAY ZIP ─
-    # int676 has rolling_average per hub for last 30 days — use as price history
-    # We also use int678 (net_market_balance) for total withdrawals history
-    try:
-        url = f"{STTM_BASE}/CURRENTDAY.ZIP"
-        r = _get(url, timeout=30)
-        if r:
-            history_prices = {}   # { hub: { "YYYY-MM-DD": price } }
-            history_demand = {}   # { hub: { "YYYY-MM-DD": total_withdrawals_tj } }
-            with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            with zipfile.ZipFile(io.BytesIO(sttm_bytes)) as z:
                 names = z.namelist()
 
-                # int676 — rolling average price (one row per hub per day)
-                int676_files = [n for n in names if "int676" in n.lower()]
-                for fname in sorted(int676_files):
+                # int651 — ex ante prices, multiple rows per hub per day
+                # Take the latest schedule_identifier (highest number) per hub per date
+                int651_best = {}  # { (hub, date_raw): (sched_id, price) }
+                for fname in sorted(n for n in names if "int651" in n.lower()):
                     with z.open(fname) as f:
                         reader = csv.DictReader(io.TextIOWrapper(f, errors="replace"))
                         for row in reader:
-                            hub_name  = (row.get("hub_name") or "").strip().title()
-                            gas_date_raw = (row.get("gas_date") or "").strip()
-                            price     = (row.get("rolling_average") or "").strip()
-                            if hub_name and gas_date_raw and price:
-                                try:
-                                    from datetime import datetime as _dt
-                                    gas_date = _dt.strptime(gas_date_raw, "%d %b %Y").strftime("%Y-%m-%d")
-                                    history_prices.setdefault(hub_name, {})[gas_date] = round(float(price), 4)
-                                except (ValueError, TypeError):
-                                    pass
+                            hub      = (row.get("hub_name") or "").strip().title()
+                            date_raw = (row.get("gas_date") or "").strip()
+                            price    = (row.get("ex_ante_market_price") or "").strip()
+                            sched_id = int(row.get("schedule_identifier") or 0)
+                            if hub and date_raw and price:
+                                key = (hub, date_raw)
+                                if key not in int651_best or sched_id > int651_best[key][0]:
+                                    int651_best[key] = (sched_id, price)
 
-                # int678 — net market balance (has total_withdrawals per hub)
-                int678_files = [n for n in names if "int678" in n.lower()]
-                for fname in sorted(int678_files):
+                for (hub, date_raw), (_, price) in int651_best.items():
+                    try:
+                        from datetime import datetime as _dt
+                        gas_date = _dt.strptime(date_raw, "%d %b %Y").strftime("%Y-%m-%d")
+                        history_prices.setdefault(gas_date, {})[hub] = round(float(price), 4)
+                    except (ValueError, TypeError):
+                        pass
+
+                # int652 — today's withdrawals (flow_direction F = from hub)
+                for fname in sorted(n for n in names if "int652" in n.lower()):
                     with z.open(fname) as f:
                         reader = csv.DictReader(io.TextIOWrapper(f, errors="replace"))
                         for row in reader:
-                            hub_name = (row.get("hub_name") or "").strip().title()
-                            # period covers multiple days — use period_end_date
-                            wdr = (row.get("total_withdrawals") or "").strip()
-                            period_end = (row.get("period_end_date") or "").strip()
-                            if hub_name and wdr and period_end:
+                            hub       = (row.get("hub_name") or "").strip().title()
+                            direction = (row.get("flow_direction") or "").strip().upper()
+                            qty       = (row.get("scheduled_qty") or "").strip()
+                            date_raw  = (row.get("gas_date") or "").strip()
+                            if hub and direction == "F" and qty:
                                 try:
-                                    from datetime import datetime as _dt
-                                    gas_date = _dt.strptime(period_end, "%d %b %Y").strftime("%Y-%m-%d")
-                                    history_demand.setdefault(hub_name, {})[gas_date] = round(float(wdr) / 1000, 3)
+                                    today_qty[hub] = today_qty.get(hub, 0.0) + float(qty)
+                                    today_date_raw[hub] = date_raw
                                 except (ValueError, TypeError):
                                     pass
 
-            # Build history list — last 14 days, sorted ascending
-            all_dates = set()
-            for hub_dates in history_prices.values():
-                all_dates.update(hub_dates.keys())
-            sorted_dates = sorted(all_dates)[-days:]
+            # Determine today's date (most recent in int651)
+            from datetime import datetime as _dt
+            sorted_dates = sorted(history_prices.keys())
+            today_iso = sorted_dates[-1] if sorted_dates else None
 
-            for gas_date in sorted_dates:
+            # Populate today
+            if today_iso:
+                for hub in STTM_HUBS:
+                    hub_price = history_prices.get(today_iso, {}).get(hub)
+                    demand_tj = round(today_qty.get(hub, 0) / 1000, 3) if hub in today_qty else None
+                    result["sttm"]["today"][hub] = {
+                        "price":    hub_price,
+                        "demand_tj": demand_tj,
+                        "gas_date": today_iso,
+                    }
+
+            # Populate history (all dates, sorted ascending, last `days` entries)
+            for gas_date in sorted_dates[-days:]:
                 entry = {"gas_date": gas_date}
                 for hub in STTM_HUBS:
-                    price = history_prices.get(hub, {}).get(gas_date)
-                    demand = history_demand.get(hub, {}).get(gas_date)
-                    if price is not None or demand is not None:
-                        entry[hub] = {}
-                        if price is not None:
-                            entry[hub]["price"] = price
-                        if demand is not None:
-                            entry[hub]["demand_tj"] = demand
+                    p = history_prices.get(gas_date, {}).get(hub)
+                    if p is not None:
+                        entry[hub] = {"price": p}
                 if len(entry) > 1:
                     result["sttm"]["history"].append(entry)
 
-            logger.info(f"scrape_gas: STTM history {len(result['sttm']['history'])} days")
-    except Exception as e:
-        logger.warning(f"scrape_gas: STTM history parse failed: {e}")
+            logger.info(f"scrape_gas: STTM history {len(result['sttm']['history'])} days, today={today_iso}")
+        except Exception as e:
+            logger.warning(f"scrape_gas: STTM parse failed: {e}")
 
     # ── VicGas: fetch flat CSVs ───────────────────────────────────────────────
     def _fetch_vicgas_csv(filename: str) -> str:
@@ -3569,27 +3560,30 @@ def scrape_gas(days: int = 14) -> dict:
         return r.text if r else ""
 
     vicgas_files = [
-        "INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV",   # intraday price curve
-        "INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV",  # today price + 14-day history
-        "INT050_V4_SCHED_WITHDRAWALS_1.CSV",        # today withdrawals
+        "INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV",      # intraday indicative price
+        "INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", # 14-day price history
+        "INT050_V4_SCHED_WITHDRAWALS_1.CSV",           # today's withdrawals by zone
     ]
     with _TPE(max_workers=4) as ex:
         vicgas_texts = {f: t for f, t in zip(vicgas_files, ex.map(_fetch_vicgas_csv, vicgas_files))}
 
-    # INT037B — intraday indicative price (columns: GAS_DATE, SCHEDULE_DATETIME, PRICE or similar)
+    # INT037B — intraday indicative price
+    # Columns: demand_type_name, price_value_gst_ex, transmission_group_id, schedule_type_id,
+    #          transmission_id, gas_date, approval_datetime, current_date
     try:
         text = vicgas_texts.get("INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV", "")
         if text:
             reader = csv.DictReader(io.StringIO(text))
             pts = []
             for row in reader:
-                dt_str = (row.get("SCHEDULE_DATETIME") or row.get("DATETIME") or "").strip()
-                price  = (row.get("PRICE") or row.get("INDICATIVE_PRICE") or row.get("MKT_PRICE") or "").strip()
-                if dt_str and price:
+                demand_type = (row.get("demand_type_name") or "").strip()
+                price       = (row.get("price_value_gst_ex") or "").strip()
+                approval    = (row.get("approval_datetime") or "").strip()
+                if demand_type.lower() == "normal" and price and approval:
                     try:
-                        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-                        dt_aest = dt.astimezone(AEST)
-                        pts.append({"time": dt_aest.strftime("%H:%M"), "price": round(float(price), 4)})
+                        from datetime import datetime as _dt
+                        dt = _dt.strptime(approval, "%d %b %Y %H:%M:%S")
+                        pts.append({"time": dt.strftime("%H:%M"), "price": round(float(price), 4)})
                     except (ValueError, TypeError):
                         pass
             result["vicgas"]["intraday"] = sorted(pts, key=lambda x: x["time"])
@@ -3597,49 +3591,45 @@ def scrape_gas(days: int = 14) -> dict:
     except Exception as e:
         logger.warning(f"scrape_gas: INT037B parse failed: {e}")
 
-    # INT041 — today's market and reference prices (columns: gas_date, price_bod_gst_ex, ...)
+    # INT041 — 14-day price history
+    # Columns: gas_date, price_bod_gst_ex, price_10am_gst_ex, ..., imb_wtd_ave_price_gst_ex, current_date
     try:
         text = vicgas_texts.get("INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", "")
         if text:
+            from datetime import datetime as _dt
             reader = csv.DictReader(io.StringIO(text))
-            rows = list(reader)
-            if rows:
-                # Last row = most recent date
-                row = rows[-1]
-                price = (row.get("price_bod_gst_ex") or row.get("imb_wtd_ave_price_gst_ex") or "").strip()
-                if price:
+            hist = []
+            for row in reader:
+                date_raw = (row.get("gas_date") or "").strip()
+                price    = (row.get("price_bod_gst_ex") or "").strip()
+                if date_raw and price:
                     try:
-                        result["vicgas"]["today_price"] = round(float(price), 4)
+                        gas_date = _dt.strptime(date_raw, "%d %b %Y").strftime("%Y-%m-%d")
+                        hist.append({"gas_date": gas_date, "price": round(float(price), 4)})
                     except (ValueError, TypeError):
                         pass
-                # Build 14-day history from this file
-                hist = []
-                for r in rows:
-                    gas_date = (r.get("gas_date") or "").strip()
-                    p = (r.get("price_bod_gst_ex") or r.get("imb_wtd_ave_price_gst_ex") or "").strip()
-                    if gas_date and p:
-                        try:
-                            # Convert "15 Mar 2026" → "2026-03-15"
-                            from datetime import datetime as _dt
-                            parsed = _dt.strptime(gas_date.strip(), "%d %b %Y")
-                            hist.append({"gas_date": parsed.strftime("%Y-%m-%d"), "price": round(float(p), 4)})
-                        except (ValueError, TypeError):
-                            pass
-                hist.sort(key=lambda x: x["gas_date"])
-                result["vicgas"]["history"] = hist[-days:]
-                logger.info(f"scrape_gas: VicGas history {len(result['vicgas']['history'])} days from INT041")
+            hist.sort(key=lambda x: x["gas_date"])
+            result["vicgas"]["history"] = hist[-days:]
+            # Today's price = last row
+            if hist:
+                result["vicgas"]["today_price"] = hist[-1]["price"]
+            logger.info(f"scrape_gas: VicGas history {len(result['vicgas']['history'])} days")
     except Exception as e:
         logger.warning(f"scrape_gas: INT041 parse failed: {e}")
 
-    # INT050 — today's scheduled withdrawals by zone (column: scheduled_qty in GJ)
+    # INT050 — today's scheduled withdrawals by zone (filter to today's date only)
+    # Columns: gas_date, withdrawal_zone_name, scheduled_qty, transmission_id, current_date
     try:
         text = vicgas_texts.get("INT050_V4_SCHED_WITHDRAWALS_1.CSV", "")
         if text:
+            from datetime import datetime as _dt, date as _date
+            today_str = _date.today().strftime("%d %b %Y")  # e.g. "29 Mar 2026"
             reader = csv.DictReader(io.StringIO(text))
             total = 0.0
             for row in reader:
-                qty = (row.get("scheduled_qty") or "").strip()
-                if qty:
+                row_date = (row.get("gas_date") or "").strip()
+                qty      = (row.get("scheduled_qty") or "").strip()
+                if row_date == today_str and qty:
                     try:
                         total += float(qty)
                     except (ValueError, TypeError):
