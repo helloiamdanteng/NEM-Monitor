@@ -4644,18 +4644,25 @@ function _drawGasGenChart(gasGen) {
 }
 
 async function fetchGasData() {
+  // Show loading state
+  const content = document.getElementById('gas-tab-content');
+  if (content && !_gasData) {
+    content.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:16px 0">Loading gas data… (first load ~15s)</div>';
+  }
   try {
     const resp = await fetch('/api/gas');
-    if (resp.status === 202) return; // still loading
-    if (resp.ok) {
-      _gasData = await resp.json();
-      if (currentPanel === 'gas') {
-        if (latestData) renderPanel('gas', latestData);
-        setTimeout(() => _drawGasCharts(_gasTab, _gasData), 50);
-      }
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      if (content) content.innerHTML = `<div style="font-family:var(--font-mono);font-size:10px;color:#e74c3c;padding:16px 0">Error: ${err.error || resp.status}</div>`;
+      return;
+    }
+    _gasData = await resp.json();
+    if (currentPanel === 'gas') {
+      if (latestData) renderPanel('gas', latestData);
+      setTimeout(() => _drawGasCharts(_gasTab, _gasData), 50);
     }
   } catch(e) {
-    console.warn('gas data fetch failed:', e);
+    if (content) content.innerHTML = `<div style="font-family:var(--font-mono);font-size:10px;color:#e74c3c;padding:16px 0">Error: ${e.message}</div>`;
   }
 }
 
