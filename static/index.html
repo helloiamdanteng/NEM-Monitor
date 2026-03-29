@@ -4554,17 +4554,36 @@ function _renderGBB(gbb) {
     // Only show complete actuals or forecast dates — skip partial days entirely
     const _skipDate = d => partialDates.has(d) && !forecastDates.has(d);
     const _dashStyle = d => forecastDates.has(d) ? [4,3] : undefined;
-    const PROD_COLORS = { "QLD (CSG+LNG)":"#f39c12","SA: Moomba":"#e74c3c","VIC: Longford":"#2ed573","VIC: Otway":"#1abc9c","VIC: Orbost":"#3498db","VIC: ATHENA":"#9b59b6","VIC: Lang Lang":"#27ae60","NT":"#64748b" };
-    const PROD_ORDER = ["QLD (CSG+LNG)","SA: Moomba","VIC: Longford","VIC: Otway","VIC: Orbost","VIC: ATHENA","VIC: Lang Lang","NT"];
+    const PROD_COLORS = { "QLD (CSG+LNG)":"#f39c12","SA: Moomba":"#e74c3c","VIC: Longford":"#2ed573","VIC: Otway":"#1abc9c","VIC: Orbost":"#3498db","VIC: ATHENA":"#9b59b6","VIC: Lang Lang":"#27ae60","NT":"#64748b","Storage (net)":"#ffffff" };
+    const PROD_ORDER = ["QLD (CSG+LNG)","SA: Moomba","VIC: Longford","VIC: Otway","VIC: Orbost","VIC: ATHENA","VIC: Lang Lang","NT","Storage (net)"];
     if (Object.keys(prodHist).length) {
       const dates = _allDates(Object.values(prodHist));
-      const hasForecast = dates.some(d => forecastDates.has(d));
-      _makeChart("gbbProductionChart","gbbProduction",
-        PROD_ORDER.filter(k=>prodHist[k]).map(k=>({ label:k.replace("VIC: ","").replace("SA: ",""),
-          data:dates.map(d=>{if(_skipDate(d))return null;const p=(prodHist[k]||[]).find(x=>x.gas_date===d);return p?p.supply_tj:null;}),
-          borderColor:PROD_COLORS[k],backgroundColor:PROD_COLORS[k]+"44",borderWidth:1.5,pointRadius:0,tension:0.2,fill:true,
-          segment:{borderDash:ctx=>_dashStyle(dates[ctx.p0DataIndex])} })),
-        _dateLabels(dates), CHART_OPT(true, v=>v.toFixed(0)+" TJ"));
+      const prodDatasets = PROD_ORDER.filter(k=>prodHist[k]).map(k=>({
+        label: k.replace("VIC: ","").replace("SA: ",""),
+        data: dates.map(d=>{if(_skipDate(d))return null;const p=(prodHist[k]||[]).find(x=>x.gas_date===d);return p?p.supply_tj:null;}),
+        borderColor: PROD_COLORS[k],
+        backgroundColor: k==="Storage (net)" ? "transparent" : PROD_COLORS[k]+"44",
+        borderWidth: k==="Storage (net)" ? 2 : 1.5,
+        pointRadius: k==="Storage (net)" ? 2 : 0,
+        tension: 0.2, fill: k==="Storage (net)" ? false : true,
+        segment: {borderDash: ctx=>_dashStyle(dates[ctx.p0DataIndex])},
+        yAxisID: k==="Storage (net)" ? "y1" : "y",
+      }));
+      const prodCtx = document.getElementById("gbbProductionChart");
+      if (prodCtx) {
+        destroyChart("gbbProduction");
+        charts.gbbProduction = new Chart(prodCtx, {type:"line", data:{labels:_dateLabels(dates), datasets:prodDatasets},
+          options:{ ...CHART_DEFAULTS, plugins:{ ...CHART_DEFAULTS.plugins,
+            legend:{display:true,labels:{color:"#94a3b8",font:{family:"Space Mono",size:9},boxWidth:10,padding:6}},
+            tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:c=>c.raw===null?null:(` ${c.dataset.label}: `+(c.raw>=0?"+":"")+c.raw.toFixed(0)+" TJ")}}},
+            scales:{
+              x:{ticks:{color:"#64748b",font:{family:"Space Mono",size:9},maxRotation:45,autoSkip:true,maxTicksLimit:12},grid:{color:"#1e2d4544"}},
+              y:{stacked:true,ticks:{color:"#94a3b8",font:{family:"Space Mono",size:9},callback:v=>v.toFixed(0)+" TJ"},grid:{color:"#1e2d45"},beginAtZero:true},
+              y1:{position:"right",ticks:{color:"#ffffff88",font:{family:"Space Mono",size:8},callback:v=>(v>=0?"+":"")+v.toFixed(0)+" TJ"},grid:{display:false},title:{display:true,text:"Storage net",color:"#ffffff66",font:{size:8}}}
+            }
+          }
+        });
+      }
     }
 
     // ── Demand by sector chart ──
@@ -4586,7 +4605,7 @@ function _renderGBB(gbb) {
     if (Object.keys(pipeFlows).length) {
       const dates = _allDates(Object.values(pipeFlows));
       _makeChart("gbbPipelineChart","gbbPipeline",
-        Object.entries(pipeFlows).map(([lbl,pts],i)=>({ label:lbl.split(" (")[0],
+        Object.entries(pipeFlows).map(([lbl,pts],i)=>({ label:lbl.replace(/\(|\)/g,"").trim(),
           data:dates.map(d=>{if(_skipDate(d))return null;const p=pts.find(x=>x.gas_date===d);return p?p.flow_tj:null;}),
           borderColor:PIPE_COLORS[i%PIPE_COLORS.length],backgroundColor:"transparent",borderWidth:1.5,pointRadius:0,tension:0.2,
           segment:{borderDash:ctx=>_dashStyle(dates[ctx.p0DataIndex])} })),
