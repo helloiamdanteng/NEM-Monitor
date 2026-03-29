@@ -3420,9 +3420,14 @@ def scrape_gas(days: int = 14) -> dict:
                         for row in reader:
                             hub_name = (row.get("hub_name") or "").strip().title()
                             price    = (row.get("ex_ante_market_price") or "").strip()
-                            gas_date = (row.get("gas_date") or "").strip()
+                            gas_date_raw = (row.get("gas_date") or "").strip()
                             if hub_name and price:
                                 try:
+                                    from datetime import datetime as _dt
+                                    try:
+                                        gas_date = _dt.strptime(gas_date_raw, "%d %b %Y").strftime("%Y-%m-%d")
+                                    except ValueError:
+                                        gas_date = gas_date_raw[:10]  # fallback
                                     out.setdefault(hub_name, {})["price"]    = round(float(price), 4)
                                     out.setdefault(hub_name, {})["gas_date"] = gas_date
                                 except (ValueError, TypeError):
