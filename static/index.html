@@ -4457,6 +4457,8 @@ function _renderGBB(gbb) {
   const storage = gbb.storage || {};
   const stateSum = gbb.state_summary || {};
   const latestDate = gbb.latest_date || '';
+  const forecastDates = new Set(gbb.forecast_dates || []);
+  const partialDates  = new Set(gbb.partial_dates  || []);
   let html = '';
 
   // ── State supply/demand summary table ──
@@ -4498,21 +4500,21 @@ function _renderGBB(gbb) {
   // ── Production by facility ──
   html += '<div class="chart-card" style="margin-top:8px">' +
     '<div class="chart-title">Gas Production by Source — 30 Days (TJ/day)</div>' +
-    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">Actuals to ${latestDate.replace(/\//g,'-')} · dashed = nominations</div>` +
+    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">Actuals to prior complete day · dashed = nominations (D+0 to D+6)</div>` +
     '<div class="chart-container" style="height:240px"><canvas id="gbbProductionChart"></canvas></div>' +
     '</div>';
 
   // ── Demand by sector ──
   html += '<div class="chart-card" style="margin-top:8px">' +
-    '<div class="chart-title">Gas Demand by Sector — 14 Days (TJ/day)</div>' +
-    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">LNG export · residential & commercial · large industrial · gas generation · actuals to ${latestDate.replace(/\//g,'-')}</div>` +
+    '<div class="chart-title">Gas Demand by Sector — 30 Days (TJ/day)</div>' +
+    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">LNG export · residential & commercial · large industrial · gas generation · actuals settle D+1</div>` +
     '<div class="chart-container" style="height:240px"><canvas id="gbbDemandSectorChart"></canvas></div>' +
     '</div>';
 
   // ── Pipeline flows ──
   html += '<div class="chart-card" style="margin-top:8px">' +
     '<div class="chart-title">Key Pipeline Flows — 30 Days (TJ/day)</div>' +
-    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">Actuals to ${latestDate.replace(/\//g,'-')} · dashed = nominations</div>` +
+    `<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin:-4px 0 6px">Actuals to prior complete day · dashed = nominations (D+0 to D+6)</div>` +
     '<div class="chart-container" style="height:240px"><canvas id="gbbPipelineChart"></canvas></div>' +
     '</div>';
 
@@ -4548,6 +4550,10 @@ function _renderGBB(gbb) {
     // ── Production chart ──
     const prodHist = gbb.production_history || {};
     const forecastDates = new Set(gbb.forecast_dates || []);
+    const partialDates  = new Set(gbb.partial_dates  || []);
+    // Only show complete actuals or forecast dates — skip partial days entirely
+    const _skipDate = d => partialDates.has(d) && !forecastDates.has(d);
+    const _dashStyle = d => forecastDates.has(d) ? [4,3] : undefined;
     const PROD_COLORS = { "QLD (CSG+LNG)":"#f39c12","SA: Moomba":"#e74c3c","VIC: Longford":"#2ed573","VIC: Otway":"#1abc9c","VIC: Orbost":"#3498db","VIC: ATHENA":"#9b59b6","VIC: Lang Lang":"#27ae60","NT":"#64748b" };
     const PROD_ORDER = ["QLD (CSG+LNG)","SA: Moomba","VIC: Longford","VIC: Otway","VIC: Orbost","VIC: ATHENA","VIC: Lang Lang","NT"];
     if (Object.keys(prodHist).length) {
@@ -4555,9 +4561,9 @@ function _renderGBB(gbb) {
       const hasForecast = dates.some(d => forecastDates.has(d));
       _makeChart("gbbProductionChart","gbbProduction",
         PROD_ORDER.filter(k=>prodHist[k]).map(k=>({ label:k.replace("VIC: ","").replace("SA: ",""),
-          data:dates.map(d=>{const p=(prodHist[k]||[]).find(x=>x.gas_date===d);return p?p.supply_tj:null;}),
+          data:dates.map(d=>{if(_skipDate(d))return null;const p=(prodHist[k]||[]).find(x=>x.gas_date===d);return p?p.supply_tj:null;}),
           borderColor:PROD_COLORS[k],backgroundColor:PROD_COLORS[k]+"44",borderWidth:1.5,pointRadius:0,tension:0.2,fill:true,
-          segment:{borderDash:ctx=>forecastDates.has(dates[ctx.p0DataIndex])?[4,3]:undefined} })),
+          segment:{borderDash:ctx=>_dashStyle(dates[ctx.p0DataIndex])} })),
         _dateLabels(dates), CHART_OPT(true, v=>v.toFixed(0)+" TJ"));
     }
 
@@ -4569,7 +4575,7 @@ function _renderGBB(gbb) {
       const dates = _allDates(Object.values(demSector));
       _makeChart("gbbDemandSectorChart","gbbDemandSector",
         SECTOR_ORDER.filter(k=>demSector[k]).map(k=>({ label:k,
-          data:dates.map(d=>{const p=(demSector[k]||[]).find(x=>x.gas_date===d);return p?p.demand_tj:null;}),
+          data:dates.map(d=>{if(_skipDate(d))return null;const p=(demSector[k]||[]).find(x=>x.gas_date===d);return p?p.demand_tj:null;}),
           borderColor:SECTOR_COLORS[k],backgroundColor:SECTOR_COLORS[k]+"44",borderWidth:1.5,pointRadius:0,tension:0.2,fill:true })),
         _dateLabels(dates), CHART_OPT(true, v=>v.toFixed(0)+" TJ"));
     }
@@ -4581,9 +4587,9 @@ function _renderGBB(gbb) {
       const dates = _allDates(Object.values(pipeFlows));
       _makeChart("gbbPipelineChart","gbbPipeline",
         Object.entries(pipeFlows).map(([lbl,pts],i)=>({ label:lbl.split(" (")[0],
-          data:dates.map(d=>{const p=pts.find(x=>x.gas_date===d);return p?p.flow_tj:null;}),
+          data:dates.map(d=>{if(_skipDate(d))return null;const p=pts.find(x=>x.gas_date===d);return p?p.flow_tj:null;}),
           borderColor:PIPE_COLORS[i%PIPE_COLORS.length],backgroundColor:"transparent",borderWidth:1.5,pointRadius:0,tension:0.2,
-          segment:{borderDash:ctx=>forecastDates.has(dates[ctx.p0DataIndex])?[4,3]:undefined} })),
+          segment:{borderDash:ctx=>_dashStyle(dates[ctx.p0DataIndex])} })),
         _dateLabels(dates), CHART_OPT(false, v=>v.toFixed(0)+" TJ"));
     }
 
