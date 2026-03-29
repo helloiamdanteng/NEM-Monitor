@@ -3724,6 +3724,86 @@ def scrape_gas(days: int = 14) -> dict:
     return result
 
 
+def scrape_gbb() -> dict:
+    """
+    Scrape GasBBActualFlowStorageLast31.CSV from NEMWeb.
+    Returns storage levels (31-day history) and state supply/demand summary.
+    """
+    url = "https://www.nemweb.com.au/Reports/Current/GBB/GasBBActualFlowStorageLast31.CSV"
+    result = {
+        "storage": {},       # { facility_name: [{gas_date, held_tj, demand_tj, supply_tj}] }
+        "state_summary": {}, # { state: {supply, demand, net} } for latest date
+        "latest_date": None,
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        r = _get(url, timeout=30)
+        if not r:
+            logger.warning("scrape_gbb: fetch failed")
+            return result
+
+        rows = list(csv.DictReader(r.text.splitlines()))
+        all_dates = sorted({row["GasDate"] for row in rows})
+        latest_date = all_dates[-1] if all_dates else None
+        result["latest_date"] = latest_date
+
+        # ── Storage facilities ──────────────────────────────────────────────
+        stor_rows = [row for row in rows if row.get("FacilityType") == "STOR"]
+        storage_hist = {}  # { facility: { date: {held, demand, supply} } }
+        for row in stor_rows:
+            name     = row["FacilityName"]
+            gas_date = row["GasDate"].replace("/", "-")  # → YYYY-MM-DD
+            held     = row.get("HeldInStorage", "")
+            demand   = row.get("Demand", "")
+            supply   = row.get("Supply", "")
+            if not held:
+                continue
+            try:
+                storage_hist.setdefault(name, {})[gas_date] = {
+                    "held_tj":   round(float(held), 1),
+                    "demand_tj": round(float(demand), 1) if demand else 0,
+                    "supply_tj": round(float(supply), 1) if supply else 0,
+                }
+            except (ValueError, TypeError):
+                pass
+
+        # Convert to sorted lists
+        for name, dates in storage_hist.items():
+            result["storage"][name] = [
+                {"gas_date": d, **v}
+                for d, v in sorted(dates.items())
+            ]
+
+        # ── State summary for latest date ───────────────────────────────────
+        latest_rows = [row for row in rows if row["GasDate"] == latest_date]
+        state_agg = {}
+        for row in latest_rows:
+            st = row.get("State", "")
+            if not st:
+                continue
+            state_agg.setdefault(st, {"supply": 0.0, "demand": 0.0})
+            try:
+                state_agg[st]["supply"] += float(row.get("Supply") or 0)
+                state_agg[st]["demand"] += float(row.get("Demand") or 0)
+            except (ValueError, TypeError):
+                pass
+
+        for st, vals in state_agg.items():
+            s, d = round(vals["supply"], 1), round(vals["demand"], 1)
+            result["state_summary"][st] = {
+                "supply": s, "demand": d, "net": round(s - d, 1)
+            }
+
+        logger.info(
+            f"scrape_gbb: {len(rows)} rows, {len(all_dates)} dates, "
+            f"storage={list(result['storage'].keys())}, latest={latest_date}"
+        )
+    except Exception as e:
+        logger.warning(f"scrape_gbb: failed: {e}")
+
+    return result
+
+
 def scrape_slow() -> dict:
     """
     Combined slow scrape: STPASA demand forecast + BOM weather.
