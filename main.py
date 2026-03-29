@@ -2350,6 +2350,7 @@ async def gas_excel_debug():
     return JSONResponse(content=result)
 
 
+@app.get("/api/weather-debug")
 async def weather_debug():
     """Test weather scraping directly and return raw result."""
     from scraper import scrape_weather
