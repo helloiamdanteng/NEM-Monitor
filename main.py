@@ -2351,7 +2351,7 @@ async def gas_debug():
 
 @app.get("/api/gbb-debug")
 async def gbb_debug():
-    """Inspect GasBBActualFlowStorageLast31.CSV - show production facilities."""
+    """Investigate QLD double-counting and date gaps in GBB data."""
     import csv as _csv
     from scraper import _get
     loop = asyncio.get_running_loop()
@@ -2363,25 +2363,47 @@ async def gbb_debug():
             return {"error": "fetch failed"}
         rows = list(_csv.DictReader(r.text.splitlines()))
         all_dates = sorted({row["GasDate"] for row in rows})
-        latest_date = all_dates[-1]
 
-        # All PROD facilities on latest date
-        prod_latest = [row for row in rows
-                       if row.get("FacilityType") == "PROD" and row["GasDate"] == latest_date]
-        prod_latest.sort(key=lambda r: -float(r.get("Supply") or 0))
+        # What dates exist?
+        # QLD rows on latest date - show all location names and facility types
+        latest = all_dates[-1]
+        qld_latest = [row for row in rows if row["GasDate"] == latest and row["State"] == "QLD"]
+        qld_by_type = {}
+        for row in qld_latest:
+            ft = row["FacilityType"]
+            qld_by_type.setdefault(ft, {"supply": 0.0, "demand": 0.0, "rows": []})
+            qld_by_type[ft]["supply"] += float(row.get("Supply") or 0)
+            qld_by_type[ft]["demand"] += float(row.get("Demand") or 0)
+            qld_by_type[ft]["rows"].append({
+                "facility": row["FacilityName"],
+                "location": row["LocationName"],
+                "supply": row["Supply"],
+                "demand": row["Demand"],
+                "transferIn": row["TransferIn"],
+                "transferOut": row["TransferOut"],
+            })
 
-        # All unique facility names by type
-        by_type = {}
-        for row in rows:
-            ft = row.get("FacilityType", "")
-            name = row.get("FacilityName", "")
-            st = row.get("State", "")
-            by_type.setdefault(ft, set()).add(f"{name} ({st})")
+        # Check if today's date (2026/03/29) has any rows
+        today_rows = [row for row in rows if row["GasDate"] == "2026/03/29"]
+        today_by_type = {}
+        for row in today_rows:
+            ft = row["FacilityType"]
+            today_by_type.setdefault(ft, 0)
+            today_by_type[ft] += 1
+
+        # Show PIPE rows for QLD - likely the double count source
+        pipe_qld = [r for r in qld_latest if r["FacilityType"] == "PIPE"]
+        pipe_qld_summary = [{"facility": r["FacilityName"], "location": r["LocationName"],
+                              "supply": r["Supply"], "demand": r["Demand"]} for r in pipe_qld[:20]]
 
         return {
-            "latest_date": latest_date,
-            "prod_facilities_latest": prod_latest[:30],
-            "all_facility_types": {k: sorted(v) for k, v in by_type.items()},
+            "all_dates": all_dates,
+            "latest_date": latest,
+            "today_row_count": len(today_rows),
+            "today_by_type": today_by_type,
+            "qld_totals_by_type": {k: {"supply": round(v["supply"],1), "demand": round(v["demand"],1), "row_count": len(v["rows"])} for k,v in qld_by_type.items()},
+            "qld_pipe_rows_sample": pipe_qld_summary,
+            "qld_lngexport_rows": [r for r in qld_by_type.get("LNGEXPORT", {}).get("rows", [])],
         }
 
     result = await loop.run_in_executor(None, _inspect)
