@@ -2279,17 +2279,45 @@ async def gas_data(refresh: bool = False):
 
 @app.get("/api/gas-debug")
 async def gas_debug():
-    """Force a fresh gas scrape and return raw result for debugging."""
-    from scraper import scrape_gas
+    """Force a fresh gas scrape and inspect raw CSV headers."""
+    import zipfile as _zf, io as _io, csv as _csv
+    from scraper import STTM_BASE, VICGAS_BASE, _get
+
     loop = asyncio.get_running_loop()
-    try:
-        data = await asyncio.wait_for(
-            loop.run_in_executor(None, scrape_gas),
-            timeout=60.0
-        )
-        return JSONResponse(content={"ok": True, "data": data})
-    except Exception as e:
-        return JSONResponse(content={"ok": False, "error": str(e)})
+    result = {}
+
+    # Check STTM CURRENTDAY.ZIP
+    def _inspect_sttm():
+        url = f"{STTM_BASE}/CURRENTDAY.ZIP"
+        r = _get(url, timeout=30)
+        if not r:
+            return {"error": "no response", "url": url}
+        files = {}
+        try:
+            with _zf.ZipFile(_io.BytesIO(r.content)) as z:
+                for name in z.namelist():
+                    if name.lower().endswith('.csv'):
+                        with z.open(name) as f:
+                            reader = _csv.reader(_io.TextIOWrapper(f, errors='replace'))
+                            headers = next(reader, [])
+                            row1 = next(reader, [])
+                            files[name] = {"headers": headers, "row1": row1}
+        except Exception as e:
+            return {"error": str(e), "url": url}
+        return {"url": url, "bytes": len(r.content), "files": files}
+
+    # Check VicGas INT041
+    def _inspect_vicgas():
+        url = f"{VICGAS_BASE}/INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV"
+        r = _get(url, timeout=15)
+        if not r:
+            return {"error": "no response", "url": url}
+        lines = r.text.splitlines()[:10]
+        return {"url": url, "first_10_lines": lines}
+
+    result["sttm"] = await loop.run_in_executor(None, _inspect_sttm)
+    result["vicgas_int041"] = await loop.run_in_executor(None, _inspect_vicgas)
+    return JSONResponse(content=result)
 
 
 @app.get("/api/weather-debug")
