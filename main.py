@@ -2328,18 +2328,36 @@ async def gbb_debug():
         r = _get(url, timeout=30)
         if not r:
             return {"error": "fetch failed"}
-        lines = r.text.splitlines()
-        reader = _csv.DictReader(lines)
-        rows = list(reader)
-        # Show headers + first 5 rows + filter for Iona
-        iona_rows = [row for row in rows if "iona" in (row.get("facility_name") or row.get("FacilityName") or "").lower()
-                     or "iona" in str(row).lower()]
+        rows = list(_csv.DictReader(r.text.splitlines()))
+        # All STOR facilities
+        stor_rows = [row for row in rows if row.get("FacilityType") == "STOR"]
+        # Unique storage facility names
+        stor_names = list({r["FacilityName"] for r in stor_rows})
+        # Latest date rows for each storage facility (HeldInStorage)
+        latest = {}
+        for row in stor_rows:
+            name = row["FacilityName"]
+            if name not in latest or row["GasDate"] > latest[name]["GasDate"]:
+                latest[name] = row
+        # State summary: aggregate Supply+Demand by State for most recent date
+        all_dates = sorted({r["GasDate"] for r in rows})
+        latest_date = all_dates[-1] if all_dates else None
+        state_rows = [r for r in rows if r["GasDate"] == latest_date]
+        state_summary = {}
+        for r in state_rows:
+            st = r["State"]
+            state_summary.setdefault(st, {"supply": 0.0, "demand": 0.0})
+            try: state_summary[st]["supply"] += float(r["Supply"] or 0)
+            except: pass
+            try: state_summary[st]["demand"] += float(r["Demand"] or 0)
+            except: pass
         return {
             "total_rows": len(rows),
-            "headers": reader.fieldnames,
-            "first_3_rows": rows[:3],
-            "iona_rows": iona_rows[:10],
-            "unique_facility_types": list({r.get("FacilityType") or r.get("facility_type") for r in rows if r.get("FacilityType") or r.get("facility_type")}),
+            "date_range": [all_dates[0] if all_dates else None, latest_date],
+            "stor_facility_names": stor_names,
+            "storage_latest": list(latest.values()),
+            "latest_date": latest_date,
+            "state_summary": state_summary,
         }
 
     result = await loop.run_in_executor(None, _inspect)
