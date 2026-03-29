@@ -3409,43 +3409,42 @@ def scrape_gas(days: int = 14) -> dict:
         try:
             with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
                 names = z.namelist()
-                # Find price and quantity CSVs
-                price_csv = next((n for n in names if "EX_ANTE_MARKET_PRICE" in n.upper() or "MARKETPRICE" in n.upper()), None)
-                qty_csv   = next((n for n in names if "EX_ANTE_SCHEDULE_QUANTITY" in n.upper() or "SCHEDULEQUANTITY" in n.upper() or "SCHEDULE_QUANTITY" in n.upper()), None)
+                # int651 = ex ante market price, int652 = ex ante schedule quantity
+                price_csvs = [n for n in names if "int651" in n.lower() and n.endswith(".csv")]
+                qty_csvs   = [n for n in names if "int652" in n.lower() and n.endswith(".csv")]
 
-                # Parse prices
-                if price_csv:
-                    with z.open(price_csv) as f:
+                # Parse prices (one row per hub per schedule run — take latest)
+                for csv_name in sorted(price_csvs):
+                    with z.open(csv_name) as f:
                         reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8", errors="replace"))
                         for row in reader:
-                            hub      = (row.get("HUB_NAME") or row.get("HUB") or "").strip().title()
-                            price    = row.get("PRICE") or row.get("EX_ANTE_PRICE") or row.get("MARKET_PRICE") or ""
-                            gas_date = (row.get("GAS_DATE") or row.get("GASDATE") or "").strip()[:10]
-                            if hub and price:
+                            hub_name = (row.get("hub_name") or "").strip().title()
+                            price    = (row.get("ex_ante_market_price") or "").strip()
+                            gas_date = (row.get("gas_date") or "").strip()
+                            if hub_name and price:
                                 try:
-                                    out.setdefault(hub, {})["price"]    = round(float(price), 4)
-                                    out.setdefault(hub, {})["gas_date"] = gas_date
+                                    out.setdefault(hub_name, {})["price"]    = round(float(price), 4)
+                                    out.setdefault(hub_name, {})["gas_date"] = gas_date
                                 except (ValueError, TypeError):
                                     pass
 
-                # Parse withdrawals (demand)
-                if qty_csv:
-                    with z.open(qty_csv) as f:
+                # Parse withdrawals — flow_direction "F" = from hub (withdrawal/demand)
+                for csv_name in sorted(qty_csvs):
+                    with z.open(csv_name) as f:
                         reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8", errors="replace"))
                         for row in reader:
-                            hub      = (row.get("HUB_NAME") or row.get("HUB") or "").strip().title()
-                            facility = (row.get("FACILITY_NAME") or row.get("FACILITY") or "").strip()
-                            qty      = row.get("SCHEDULE_QUANTITY") or row.get("QUANTITY") or row.get("QTY") or ""
-                            ftype    = row.get("FACILITY_TYPE") or row.get("TYPE") or ""
-                            if not ftype:
-                                ftype = _sttm_facility_type(facility)
-                            if hub and qty:
+                            hub_name = (row.get("hub_name") or "").strip().title()
+                            facility = (row.get("facility_name") or "").strip()
+                            qty      = (row.get("scheduled_qty") or "").strip()
+                            direction = (row.get("flow_direction") or "").strip().upper()
+                            if hub_name and qty and direction == "F":  # F = from hub = withdrawal
                                 try:
                                     tj = round(float(qty) / 1000, 3)  # GJ → TJ
-                                    out.setdefault(hub, {}).setdefault("facilities", {})
-                                    out[hub]["facilities"][facility] = {"type": ftype, "tj": tj}
-                                    out[hub]["demand_tj"] = round(
-                                        out[hub].get("demand_tj", 0) + tj, 3
+                                    ftype = _sttm_facility_type(facility)
+                                    out.setdefault(hub_name, {}).setdefault("facilities", {})
+                                    out[hub_name]["facilities"][facility] = {"type": ftype, "tj": tj}
+                                    out[hub_name]["demand_tj"] = round(
+                                        out[hub_name].get("demand_tj", 0) + tj, 3
                                     )
                                 except (ValueError, TypeError):
                                     pass
@@ -3508,8 +3507,7 @@ def scrape_gas(days: int = 14) -> dict:
 
     vicgas_files = [
         "INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV",   # intraday price curve
-        "INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV",  # today scheduled price
-        "INT042_V4_WEIGHTED_AVERAGE_DAILY_PRICES_1.CSV",  # 14-day history
+        "INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV",  # today price + 14-day history
         "INT050_V4_SCHED_WITHDRAWALS_1.CSV",        # today withdrawals
     ]
     with _TPE(max_workers=4) as ex:
@@ -3536,55 +3534,51 @@ def scrape_gas(days: int = 14) -> dict:
     except Exception as e:
         logger.warning(f"scrape_gas: INT037B parse failed: {e}")
 
-    # INT041 — today's scheduled/reference price
+    # INT041 — today's market and reference prices (columns: gas_date, price_bod_gst_ex, ...)
     try:
         text = vicgas_texts.get("INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", "")
         if text:
             reader = csv.DictReader(io.StringIO(text))
-            for row in reader:
-                price = (row.get("MARKET_PRICE") or row.get("SCHEDULED_PRICE") or row.get("PRICE") or "").strip()
+            rows = list(reader)
+            if rows:
+                # Last row = most recent date
+                row = rows[-1]
+                price = (row.get("price_bod_gst_ex") or row.get("imb_wtd_ave_price_gst_ex") or "").strip()
                 if price:
                     try:
                         result["vicgas"]["today_price"] = round(float(price), 4)
-                        break
                     except (ValueError, TypeError):
                         pass
+                # Build 14-day history from this file
+                hist = []
+                for r in rows:
+                    gas_date = (r.get("gas_date") or "").strip()
+                    p = (r.get("price_bod_gst_ex") or r.get("imb_wtd_ave_price_gst_ex") or "").strip()
+                    if gas_date and p:
+                        try:
+                            # Convert "15 Mar 2026" → "2026-03-15"
+                            from datetime import datetime as _dt
+                            parsed = _dt.strptime(gas_date.strip(), "%d %b %Y")
+                            hist.append({"gas_date": parsed.strftime("%Y-%m-%d"), "price": round(float(p), 4)})
+                        except (ValueError, TypeError):
+                            pass
+                hist.sort(key=lambda x: x["gas_date"])
+                result["vicgas"]["history"] = hist[-days:]
+                logger.info(f"scrape_gas: VicGas history {len(result['vicgas']['history'])} days from INT041")
     except Exception as e:
         logger.warning(f"scrape_gas: INT041 parse failed: {e}")
 
-    # INT042 — historical weighted average daily prices
-    try:
-        text = vicgas_texts.get("INT042_V4_WEIGHTED_AVERAGE_DAILY_PRICES_1.CSV", "")
-        if text:
-            reader = csv.DictReader(io.StringIO(text))
-            hist = []
-            for row in reader:
-                gas_date = (row.get("GAS_DATE") or row.get("GASDATE") or "").strip()[:10]
-                price    = (row.get("WEIGHTED_AVG_PRICE") or row.get("PRICE") or row.get("WAP") or "").strip()
-                demand   = (row.get("TOTAL_SCHEDULED_QUANTITY") or row.get("DEMAND") or row.get("TJ") or "").strip()
-                if gas_date and price:
-                    try:
-                        entry = {"gas_date": gas_date, "price": round(float(price), 4)}
-                        if demand:
-                            entry["demand_tj"] = round(float(demand) / 1000, 3)
-                        hist.append(entry)
-                    except (ValueError, TypeError):
-                        pass
-            # Keep last 14 days sorted ascending
-            hist.sort(key=lambda x: x["gas_date"])
-            result["vicgas"]["history"] = hist[-days:]
-            logger.info(f"scrape_gas: VicGas history {len(result['vicgas']['history'])} days")
-    except Exception as e:
-        logger.warning(f"scrape_gas: INT042 parse failed: {e}")
-
-    # INT050 — today's scheduled withdrawals
+    # INT050 — today's scheduled withdrawals (columns: gas_date, withdrawal_type, scheduled_withdrawal_quantity, ...)
     try:
         text = vicgas_texts.get("INT050_V4_SCHED_WITHDRAWALS_1.CSV", "")
         if text:
             reader = csv.DictReader(io.StringIO(text))
             total = 0.0
             for row in reader:
-                qty = (row.get("SCHEDULED_QUANTITY") or row.get("QUANTITY") or row.get("QTY") or "").strip()
+                # Try various column names
+                qty = (row.get("scheduled_withdrawal_quantity") or
+                       row.get("scheduled_quantity") or
+                       row.get("quantity") or "").strip()
                 if qty:
                     try:
                         total += float(qty)
