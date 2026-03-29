@@ -2351,8 +2351,8 @@ async def gas_debug():
 
 @app.get("/api/gbb-debug")
 async def gbb_debug():
-    """Inspect GasBBActualFlowStorageLast31.CSV structure."""
-    import io as _io, csv as _csv
+    """Inspect GasBBActualFlowStorageLast31.CSV - show production facilities."""
+    import csv as _csv
     from scraper import _get
     loop = asyncio.get_running_loop()
 
@@ -2362,35 +2362,26 @@ async def gbb_debug():
         if not r:
             return {"error": "fetch failed"}
         rows = list(_csv.DictReader(r.text.splitlines()))
-        # All STOR facilities
-        stor_rows = [row for row in rows if row.get("FacilityType") == "STOR"]
-        # Unique storage facility names
-        stor_names = list({r["FacilityName"] for r in stor_rows})
-        # Latest date rows for each storage facility (HeldInStorage)
-        latest = {}
-        for row in stor_rows:
-            name = row["FacilityName"]
-            if name not in latest or row["GasDate"] > latest[name]["GasDate"]:
-                latest[name] = row
-        # State summary: aggregate Supply+Demand by State for most recent date
-        all_dates = sorted({r["GasDate"] for r in rows})
-        latest_date = all_dates[-1] if all_dates else None
-        state_rows = [r for r in rows if r["GasDate"] == latest_date]
-        state_summary = {}
-        for r in state_rows:
-            st = r["State"]
-            state_summary.setdefault(st, {"supply": 0.0, "demand": 0.0})
-            try: state_summary[st]["supply"] += float(r["Supply"] or 0)
-            except: pass
-            try: state_summary[st]["demand"] += float(r["Demand"] or 0)
-            except: pass
+        all_dates = sorted({row["GasDate"] for row in rows})
+        latest_date = all_dates[-1]
+
+        # All PROD facilities on latest date
+        prod_latest = [row for row in rows
+                       if row.get("FacilityType") == "PROD" and row["GasDate"] == latest_date]
+        prod_latest.sort(key=lambda r: -float(r.get("Supply") or 0))
+
+        # All unique facility names by type
+        by_type = {}
+        for row in rows:
+            ft = row.get("FacilityType", "")
+            name = row.get("FacilityName", "")
+            st = row.get("State", "")
+            by_type.setdefault(ft, set()).add(f"{name} ({st})")
+
         return {
-            "total_rows": len(rows),
-            "date_range": [all_dates[0] if all_dates else None, latest_date],
-            "stor_facility_names": stor_names,
-            "storage_latest": list(latest.values()),
             "latest_date": latest_date,
-            "state_summary": state_summary,
+            "prod_facilities_latest": prod_latest[:30],
+            "all_facility_types": {k: sorted(v) for k, v in by_type.items()},
         }
 
     result = await loop.run_in_executor(None, _inspect)
