@@ -3775,16 +3775,22 @@ def scrape_gbb() -> dict:
             ]
 
         # ── State summary for latest date ───────────────────────────────────
+        # Exclude PIPE rows — they double-count transit flows (both ends of pipeline)
+        SUPPLY_TYPES = {"PROD", "STOR"}
+        DEMAND_TYPES = {"LNGEXPORT", "BBGPG", "BBLARGE", "STOR"}
         latest_rows = [row for row in rows if row["GasDate"] == latest_date]
         state_agg = {}
         for row in latest_rows:
             st = row.get("State", "")
+            ft = row.get("FacilityType", "")
             if not st:
                 continue
             state_agg.setdefault(st, {"supply": 0.0, "demand": 0.0})
             try:
-                state_agg[st]["supply"] += float(row.get("Supply") or 0)
-                state_agg[st]["demand"] += float(row.get("Demand") or 0)
+                if ft in SUPPLY_TYPES:
+                    state_agg[st]["supply"] += float(row.get("Supply") or 0)
+                if ft in DEMAND_TYPES:
+                    state_agg[st]["demand"] += float(row.get("Demand") or 0)
             except (ValueError, TypeError):
                 pass
 
@@ -3794,8 +3800,9 @@ def scrape_gbb() -> dict:
                 "supply": s, "demand": d, "net": round(s - d, 1)
             }
 
-        # ── Demand by sector: GPG, LNG Export, Large Industrial, Residential ─
-        sector_hist = {}  # { sector: { date: demand_tj } }
+        # ── Demand by sector: GPG, LNG Export, Large Industrial ─────────────
+        # Exclude PIPE — double-counts transit. No reliable "residential" figure available.
+        sector_hist = {}
         for row in rows:
             ft     = row.get("FacilityType", "")
             gd     = row.get("GasDate", "").replace("/", "-")
@@ -3808,8 +3815,6 @@ def scrape_gbb() -> dict:
                 key = "LNG Export"
             elif ft == "BBLARGE":
                 key = "Large Industrial"
-            elif ft == "PIPE":
-                key = "Residential & Commercial"
             else:
                 continue
             sector_hist.setdefault(key, {}).setdefault(gd, 0.0)
