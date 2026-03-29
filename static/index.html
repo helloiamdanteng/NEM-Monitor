@@ -4506,6 +4506,12 @@ function _renderGBB(gbb) {
     '<div class="chart-container" style="height:220px"><canvas id="gbbDemandHistChart"></canvas></div>' +
     '</div>';
 
+  // ── Production by facility ──
+  html += '<div class="chart-card" style="margin-top:8px">' +
+    '<div class="chart-title">Gas Production by Source — 14 Days (TJ/day)</div>' +
+    '<div class="chart-container" style="height:240px"><canvas id="gbbProductionChart"></canvas></div>' +
+    '</div>';
+
   el.innerHTML = html;
 
   // Draw storage chart
@@ -4596,6 +4602,58 @@ function _renderGBB(gbb) {
     };
     _drawStateChart('gbbSupplyHistChart', 'gbbSupplyHist', 'supply');
     _drawStateChart('gbbDemandHistChart', 'gbbDemandHist', 'demand');
+
+    // ── Production by source ──
+    const prodHist = gbb.production_history || {};
+    const PROD_COLORS = {
+      'QLD (CSG+LNG)':  '#f39c12',
+      'SA: Moomba':     '#e74c3c',
+      'VIC: Longford':  '#2ed573',
+      'VIC: Otway':     '#1abc9c',
+      'VIC: Orbost':    '#3498db',
+      'VIC: ATHENA':    '#9b59b6',
+      'VIC: Lang Lang': '#27ae60',
+      'NT':             '#64748b',
+    };
+    const prodCtx = document.getElementById('gbbProductionChart');
+    if (prodCtx && Object.keys(prodHist).length) {
+      destroyChart('gbbProduction');
+      const allProdDates = [...new Set(
+        Object.values(prodHist).flatMap(pts => pts.map(p => p.gas_date))
+      )].sort();
+      const prodLabels = allProdDates.map(d => {
+        const dt = new Date(d + 'T00:00:00');
+        return dt.toLocaleDateString('en-AU', {day:'numeric', month:'short'});
+      });
+      // Order: QLD first (biggest), then VIC facilities, SA, NT
+      const PROD_ORDER = ['QLD (CSG+LNG)', 'SA: Moomba', 'VIC: Longford', 'VIC: Otway', 'VIC: Orbost', 'VIC: ATHENA', 'VIC: Lang Lang', 'NT'];
+      const prodDatasets = PROD_ORDER.filter(k => prodHist[k]).map(key => ({
+        label: key.replace('VIC: ', '').replace('SA: ', ''),
+        data: allProdDates.map(d => {
+          const pt = (prodHist[key] || []).find(p => p.gas_date === d);
+          return pt ? pt.supply_tj : null;
+        }),
+        borderColor: PROD_COLORS[key] || '#64748b',
+        backgroundColor: (PROD_COLORS[key] || '#64748b') + '44',
+        borderWidth: 1.5, pointRadius: 2, tension: 0.2, fill: true,
+      }));
+      charts.gbbProduction = new Chart(prodCtx, {
+        type: 'line',
+        data: { labels: prodLabels, datasets: prodDatasets },
+        options: { ...CHART_DEFAULTS,
+          plugins: { ...CHART_DEFAULTS.plugins,
+            legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+            tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+              callbacks: { label: c => c.raw===null?null:` ${c.dataset.label}: ${c.raw.toFixed(0)} TJ` }
+            }
+          },
+          scales: {
+            x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10}, grid:{color:'#1e2d4544'} },
+            y: { stacked: true, ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>v.toFixed(0)+' TJ'}, grid:{color:'#1e2d45'}, beginAtZero:true }
+          }
+        }
+      });
+    }
   }, 50);
 }
 
