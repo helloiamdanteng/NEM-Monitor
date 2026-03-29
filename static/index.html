@@ -4538,7 +4538,7 @@ function _renderGBB(gbb) {
     const CHART_OPT = (stacked, yFmt, maxTicks=12) => ({ ...CHART_DEFAULTS,
       plugins: { ...CHART_DEFAULTS.plugins,
         legend: { display: true, labels: { color:"#94a3b8", font:{family:"Space Mono",size:9}, boxWidth:10, padding:6 } },
-        tooltip: { ...CHART_DEFAULTS.plugins.tooltip, callbacks: { label: c => c.raw===null?null: } }
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip, callbacks: { label: c => c.raw===null?null:(` ${c.dataset.label}: `+yFmt(c.raw)) } }
       },
       scales: {
         x: { ticks:{color:"#64748b",font:{family:"Space Mono",size:9},maxRotation:45,autoSkip:true,maxTicksLimit:maxTicks}, grid:{color:"#1e2d4544"} },
