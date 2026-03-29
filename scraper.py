@@ -3655,75 +3655,61 @@ def scrape_gas(days: int = 14) -> dict:
         logger.warning(f"scrape_gas: INT050 parse failed: {e}")
 
     # ── VicGas demand history: AEMO DWGM Prices and Demand Excel ────────────
-    # Sheet 2 has daily DWGM demand + GPG demand going back to 2007, updated monthly
+    # Demand sheet columns: Gas_Date, System Demand, GPG, Total Demand (already in TJ)
     try:
         import openpyxl
         excel_url = "https://www.aemo.com.au/-/media/files/gas/dwgm/dwgm-prices-and-demand.xlsx"
         r = _get(excel_url, timeout=60)
         if r and len(r.content) > 10000:
             wb = openpyxl.load_workbook(io.BytesIO(r.content), read_only=True, data_only=True)
-            demand_sheet = wb.worksheets[1] if len(wb.worksheets) > 1 else None
+            demand_sheet = next((ws for ws in wb.worksheets if ws.title == "Demand"), None)
             if demand_sheet:
-                rows = list(demand_sheet.iter_rows(values_only=True))
-                # Find header row containing "date"
-                header_idx = 0
-                for i, row in enumerate(rows[:10]):
-                    if any("date" in str(v).lower() for v in row if v):
-                        header_idx = i
-                        break
-                headers = [str(v).lower().strip() if v else "" for v in rows[header_idx]]
-                date_col   = next((i for i, h in enumerate(headers) if "date" in h), None)
-                demand_col = next((i for i, h in enumerate(headers)
-                                   if any(k in h for k in ("total", "withdrawals", "demand"))
-                                   and "gpg" not in h and i != date_col), None)
-                gpg_col    = next((i for i, h in enumerate(headers) if "gpg" in h), None)
-                logger.info(f"scrape_gas: DWGM Excel headers={headers[:6]}, date_col={date_col}, demand_col={demand_col}")
+                from datetime import datetime as _dt, date as _date
+                demand_hist = []
+                header_done = False
+                date_col = demand_col = gpg_col = None
+                for row in demand_sheet.iter_rows(values_only=True):
+                    if not header_done:
+                        # Header row
+                        headers = [str(v).lower().strip() if v else "" for v in row]
+                        date_col   = next((i for i, h in enumerate(headers) if "date" in h), None)
+                        demand_col = next((i for i, h in enumerate(headers) if "system demand" in h), None)
+                        gpg_col    = next((i for i, h in enumerate(headers) if "gpg" in h), None)
+                        header_done = True
+                        continue
+                    if date_col is None or demand_col is None:
+                        continue
+                    dv  = row[date_col]
+                    dem = row[demand_col]
+                    if not dv or not dem:
+                        continue
+                    try:
+                        gas_date = dv.strftime("%Y-%m-%d") if hasattr(dv, "strftime") else str(dv)[:10]
+                        entry = {"gas_date": gas_date, "demand_tj": round(float(dem), 3)}
+                        if gpg_col is not None and row[gpg_col]:
+                            entry["gpg_tj"] = round(float(row[gpg_col]), 3)
+                        demand_hist.append(entry)
+                    except (ValueError, TypeError):
+                        pass
+                wb.close()
 
-                if date_col is not None and demand_col is not None:
-                    from datetime import datetime as _dt, date as _date
-                    demand_hist = []
-                    for row in rows[header_idx + 1:]:
-                        if not row or not row[date_col] or not row[demand_col]:
-                            continue
-                        try:
-                            dv = row[date_col]
-                            if hasattr(dv, "strftime"):
-                                gas_date = dv.strftime("%Y-%m-%d")
-                            else:
-                                for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d %b %Y"):
-                                    try:
-                                        gas_date = _dt.strptime(str(dv).strip(), fmt).strftime("%Y-%m-%d")
-                                        break
-                                    except ValueError:
-                                        continue
-                                else:
-                                    continue
-                            entry = {"gas_date": gas_date,
-                                     "demand_tj": round(float(row[demand_col]) / 1000, 3)}
-                            if gpg_col is not None and row[gpg_col]:
-                                entry["gpg_tj"] = round(float(row[gpg_col]) / 1000, 3)
-                            demand_hist.append(entry)
-                        except (ValueError, TypeError):
-                            pass
+                # Last `days` entries are already in date order (file is chronological)
+                demand_by_date = {d["gas_date"]: d for d in demand_hist[-days:]}
 
-                    demand_hist.sort(key=lambda x: x["gas_date"])
-                    demand_by_date = {d["gas_date"]: d for d in demand_hist[-days:]}
+                # Merge into vicgas history price entries
+                for entry in result["vicgas"]["history"]:
+                    d = entry["gas_date"]
+                    if d in demand_by_date:
+                        entry["demand_tj"] = demand_by_date[d]["demand_tj"]
+                        if "gpg_tj" in demand_by_date[d]:
+                            entry["gpg_tj"] = demand_by_date[d]["gpg_tj"]
 
-                    # Merge demand into vicgas price history entries
-                    for entry in result["vicgas"]["history"]:
-                        d = entry["gas_date"]
-                        if d in demand_by_date:
-                            entry["demand_tj"] = demand_by_date[d]["demand_tj"]
-                            if "gpg_tj" in demand_by_date[d]:
-                                entry["gpg_tj"] = demand_by_date[d]["gpg_tj"]
+                # Today's demand fallback (INT050 is more current)
+                today_iso = _date.today().strftime("%Y-%m-%d")
+                if result["vicgas"]["today_demand_tj"] is None and today_iso in demand_by_date:
+                    result["vicgas"]["today_demand_tj"] = demand_by_date[today_iso]["demand_tj"]
 
-                    # Today's demand override (INT050 is more current, only use Excel if INT050 missed)
-                    today_iso = _date.today().strftime("%Y-%m-%d")
-                    if result["vicgas"]["today_demand_tj"] is None and today_iso in demand_by_date:
-                        result["vicgas"]["today_demand_tj"] = demand_by_date[today_iso]["demand_tj"]
-
-                    logger.info(f"scrape_gas: DWGM Excel {len(demand_hist)} days, merged into VicGas history")
-            wb.close()
+                logger.info(f"scrape_gas: DWGM Excel {len(demand_hist)} total days, last={demand_hist[-1]['gas_date'] if demand_hist else 'none'}")
         else:
             logger.warning("scrape_gas: DWGM Excel fetch failed or empty")
     except Exception as e:
