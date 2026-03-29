@@ -317,7 +317,7 @@ async def _run_slow():
         loop = asyncio.get_running_loop()
         data = await asyncio.wait_for(
             loop.run_in_executor(None, scrape_slow),
-            timeout=180  # MTPASA(45s) + BOM(15s) + STPASA + margin
+            timeout=240  # MTPASA(45s) + BOM(15s) + STPASA + gas(30s) + margin
         )
         slow_cache["data"] = data
         slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
@@ -338,6 +338,7 @@ async def _run_slow():
                 "fuel_colors": {},
                 "all_fuels": [],
                 "weather": {},
+                "gas": {},
             }
             slow_cache["last_updated"] = datetime.now(timezone.utc).isoformat()
 
@@ -2241,15 +2242,39 @@ async def backfill_prices(days: int = 90, secret: str = ""):
     })
 
 
+# Cache for gas data — refreshed on demand, valid for 6 hours
+_gas_cache = {"data": None, "last_updated": None}
+
 @app.get("/api/gas")
-async def gas_data():
-    """Return gas market data from slow cache."""
-    if slow_cache["data"] is None:
-        return JSONResponse(status_code=202, content={"loading": True})
-    gas = slow_cache["data"].get("gas", {})
-    if not gas:
-        return JSONResponse(status_code=202, content={"loading": True, "message": "Gas data not yet scraped"})
-    return JSONResponse(content=gas)
+async def gas_data(refresh: bool = False):
+    """Return gas market data. Fetched on demand, cached for 6 hours."""
+    from scraper import scrape_gas
+    from datetime import timezone, timedelta
+
+    # Serve cache if fresh
+    if not refresh and _gas_cache["data"] and _gas_cache["last_updated"]:
+        age = datetime.now(timezone.utc) - _gas_cache["last_updated"]
+        if age < timedelta(hours=6):
+            return JSONResponse(content=_gas_cache["data"])
+
+    loop = asyncio.get_running_loop()
+    try:
+        data = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_gas),
+            timeout=60.0
+        )
+        _gas_cache["data"] = data
+        _gas_cache["last_updated"] = datetime.now(timezone.utc)
+        return JSONResponse(content=data)
+    except asyncio.TimeoutError:
+        if _gas_cache["data"]:
+            return JSONResponse(content=_gas_cache["data"])
+        return JSONResponse(status_code=504, content={"error": "timeout"})
+    except Exception as e:
+        logger.error(f"gas_data error: {e}")
+        if _gas_cache["data"]:
+            return JSONResponse(content=_gas_cache["data"])
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/gas-debug")
