@@ -2351,50 +2351,42 @@ async def gas_debug():
 
 @app.get("/api/gbb-debug")
 async def gbb_debug():
-    """Inspect GasBBNominationAndForecastNext7.CSV structure."""
+    """Show actuals coverage for last 3 dates and nomination dates."""
     import csv as _csv
     from scraper import _get
     loop = asyncio.get_running_loop()
 
     def _inspect():
-        url = "https://www.nemweb.com.au/Reports/Current/GBB/GasBBNominationAndForecastNext7.CSV"
+        url = "https://www.nemweb.com.au/Reports/Current/GBB/GasBBActualFlowStorageLast31.CSV"
         r = _get(url, timeout=30)
         if not r:
             return {"error": "fetch failed"}
         rows = list(_csv.DictReader(r.text.splitlines()))
-        all_dates = sorted({row.get("GasDate","") for row in rows})
-        headers = list(rows[0].keys()) if rows else []
-        ftypes = sorted({r.get("FacilityType","") for r in rows})
-        states = sorted({r.get("State","") for r in rows})
-        # Show first 5 rows
-        sample = rows[:5]
-        # Aggregate supply/demand by date+state for key facility types
-        by_date = {}
-        for row in rows:
-            gd = row.get("GasDate","")
-            st = row.get("State","")
-            ft = row.get("FacilityType","")
-            try:
-                sup = float(row.get("Supply") or 0)
-                dem = float(row.get("Demand") or 0)
-            except: sup = dem = 0
-            by_date.setdefault(gd, {}).setdefault(st, {"supply":0.0,"demand":0.0})
-            if ft in ("PROD","STOR"):
-                by_date[gd][st]["supply"] += sup
-            if ft in ("LNGEXPORT","BBGPG","BBLARGE"):
-                by_date[gd][st]["demand"] += dem
-        return {
-            "total_rows": len(rows),
-            "headers": headers,
-            "sample_rows": sample,
-            "all_dates": all_dates,
-            "facility_types": ftypes,
-            "states": states,
-            "by_date_state": {d: {s: {"supply":round(v["supply"],1),"demand":round(v["demand"],1)} for s,v in sv.items()} for d,sv in sorted(by_date.items())},
-        }
+        all_dates = sorted({row["GasDate"] for row in rows})
+        out = {"all_dates_count": len(all_dates), "last_3_dates": all_dates[-3:]}
+        for date in all_dates[-3:]:
+            date_rows = [ro for ro in rows if ro["GasDate"] == date]
+            by_type = {}
+            for row in date_rows:
+                ft = row["FacilityType"]
+                by_type.setdefault(ft, {"count":0,"supply":0.0,"demand":0.0})
+                by_type[ft]["count"] += 1
+                try:
+                    by_type[ft]["supply"] += float(row.get("Supply") or 0)
+                    by_type[ft]["demand"] += float(row.get("Demand") or 0)
+                except: pass
+            out[date] = {k:{"count":v["count"],"supply":round(v["supply"],1),"demand":round(v["demand"],1)} for k,v in by_type.items()}
+        nom_r = _get("https://www.nemweb.com.au/Reports/Current/GBB/GasBBNominationAndForecastNext7.CSV", timeout=20)
+        if nom_r:
+            nom_rows = list(_csv.DictReader(nom_r.text.splitlines()))
+            nom_dates = sorted({row.get("Gasdate","") for row in nom_rows if row.get("Gasdate","")})
+            out["nomination_dates"] = nom_dates
+        return out
 
     result = await loop.run_in_executor(None, _inspect)
     return JSONResponse(content=result)
+
+
 
 
 
