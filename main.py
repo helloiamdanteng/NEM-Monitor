@@ -2316,8 +2316,40 @@ async def gas_debug():
     return JSONResponse(content=result)
 
 
+@app.get("/api/gas-excel-debug")
+async def gas_excel_debug():
+    """Inspect AEMO DWGM Excel file structure."""
+    import io as _io, openpyxl as _xl
+    from scraper import _get
+    loop = asyncio.get_running_loop()
 
-@app.get("/api/weather-debug")
+    def _inspect():
+        url = "https://www.aemo.com.au/-/media/files/gas/dwgm/dwgm-prices-and-demand.xlsx"
+        r = _get(url, timeout=60)
+        if not r:
+            return {"error": "fetch failed"}
+        out = {"bytes": len(r.content), "sheets": {}}
+        try:
+            wb = _xl.load_workbook(_io.BytesIO(r.content), read_only=True, data_only=True)
+            out["sheet_names"] = wb.sheetnames
+            for i, ws in enumerate(wb.worksheets[:3]):
+                rows = list(ws.iter_rows(min_row=1, max_row=5, values_only=True))
+                out["sheets"][ws.title] = {"first_5_rows": [list(r) for r in rows]}
+            # Show last 5 rows of sheet 2 (demand)
+            if len(wb.worksheets) > 1:
+                ws2 = wb.worksheets[1]
+                all_rows = list(ws2.iter_rows(values_only=True))
+                out["demand_sheet_last5"] = [list(r) for r in all_rows[-5:]]
+                out["demand_sheet_total_rows"] = len(all_rows)
+            wb.close()
+        except Exception as e:
+            out["error"] = str(e)
+        return out
+
+    result = await loop.run_in_executor(None, _inspect)
+    return JSONResponse(content=result)
+
+
 async def weather_debug():
     """Test weather scraping directly and return raw result."""
     from scraper import scrape_weather
