@@ -4561,7 +4561,7 @@ function _renderGBB(gbb) {
         label: k.replace("VIC: ","").replace("SA: ",""),
         data: chartDates.map(d=>{const p=(prodHist[k]||[]).find(x=>x.gas_date===d);return p?p.supply_tj:null;}),
         borderColor: PROD_COLORS[k],
-        backgroundColor: k==="Storage (net)" ? PROD_COLORS[k]+"33" : PROD_COLORS[k]+"44",
+        backgroundColor: k==="Storage (net)" ? PROD_COLORS[k]+"22" : PROD_COLORS[k]+"99",
         borderWidth: k==="Storage (net)" ? 2 : 1.5,
         pointRadius: k==="Storage (net)" ? 2 : 0,
         tension: 0.2, fill: k==="Storage (net)" ? "origin" : true,
@@ -4590,21 +4590,59 @@ function _renderGBB(gbb) {
       _makeChart("gbbDemandSectorChart","gbbDemandSector",
         SECTOR_ORDER.filter(k=>demSector[k]).map(k=>({ label:k,
           data:chartDates.map(d=>{const p=(demSector[k]||[]).find(x=>x.gas_date===d);return p?p.demand_tj:null;}),
-          borderColor:SECTOR_COLORS[k],backgroundColor:SECTOR_COLORS[k]+"44",borderWidth:1.5,pointRadius:0,tension:0.2,fill:true,
+          borderColor:SECTOR_COLORS[k],backgroundColor:SECTOR_COLORS[k]+"99",borderWidth:1.5,pointRadius:0,tension:0.2,fill:true,
           segment:{borderDash:ctx=>_dashStyle(chartDates[ctx.p0DataIndex])} })),
         _dateLabels(chartDates), CHART_OPT(true, v=>v.toFixed(0)+" TJ"));
     }
 
-    // ── Pipeline flows chart ──
+    // ── Pipeline flows chart — bold selected, dim others ──
     const pipeFlows = gbb.pipeline_flows || {};
     const PIPE_COLORS = ["#2ed573","#f39c12","#3498db","#e74c3c","#9b59b6","#1abc9c","#e67e22","#64748b"];
     if (Object.keys(pipeFlows).length && chartDates.length) {
-      _makeChart("gbbPipelineChart","gbbPipeline",
-        Object.entries(pipeFlows).map(([lbl,pts],i)=>({ label:lbl.replace(/\(|\)/g,"").trim(),
-          data:chartDates.map(d=>{const p=pts.find(x=>x.gas_date===d);return p?p.flow_tj:null;}),
-          borderColor:PIPE_COLORS[i%PIPE_COLORS.length],backgroundColor:"transparent",borderWidth:1.5,pointRadius:0,tension:0.2,
-          segment:{borderDash:ctx=>_dashStyle(chartDates[ctx.p0DataIndex])} })),
-        _dateLabels(chartDates), CHART_OPT(false, v=>v.toFixed(0)+" TJ"));
+      const pipeEntries = Object.entries(pipeFlows);
+      const pipeDatasets = pipeEntries.map(([lbl,pts],i)=>({
+        label: lbl.replace(/\(|\)/g,"").trim(),
+        data: chartDates.map(d=>{const p=pts.find(x=>x.gas_date===d);return p?p.flow_tj:null;}),
+        borderColor: PIPE_COLORS[i%PIPE_COLORS.length],
+        backgroundColor: "transparent",
+        borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+        segment:{borderDash:ctx=>_dashStyle(chartDates[ctx.p0DataIndex])},
+      }));
+      const pipeCtx = document.getElementById("gbbPipelineChart");
+      if (pipeCtx) {
+        destroyChart("gbbPipeline");
+        let _selectedPipe = null;
+        const _applyPipeStyle = () => {
+          const c = charts.gbbPipeline;
+          if (!c) return;
+          c.data.datasets.forEach((ds, i) => {
+            const isSel = _selectedPipe === null || ds.label === _selectedPipe;
+            ds.borderWidth = isSel ? 3 : 1;
+            ds.borderColor = isSel ? PIPE_COLORS[i%PIPE_COLORS.length]
+              : PIPE_COLORS[i%PIPE_COLORS.length] + "44";
+          });
+          c.update("none");
+        };
+        charts.gbbPipeline = new Chart(pipeCtx, {type:"line",
+          data:{labels:_dateLabels(chartDates), datasets:pipeDatasets},
+          options:{ ...CHART_DEFAULTS,
+            plugins:{ ...CHART_DEFAULTS.plugins,
+              legend:{display:true,labels:{color:"#94a3b8",font:{family:"Space Mono",size:9},boxWidth:10,padding:6},
+                onClick:(e, item, legend) => {
+                  const lbl = item.text;
+                  _selectedPipe = (_selectedPipe === lbl) ? null : lbl;
+                  _applyPipeStyle();
+                }
+              },
+              tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:c=>c.raw===null?null:(` ${c.dataset.label}: `+c.raw.toFixed(0)+" TJ")}}
+            },
+            scales:{
+              x:{ticks:{color:"#64748b",font:{family:"Space Mono",size:9},maxRotation:45,autoSkip:true,maxTicksLimit:12},grid:{color:"#1e2d4544"}},
+              y:{ticks:{color:"#94a3b8",font:{family:"Space Mono",size:9},callback:v=>v.toFixed(0)+" TJ"},grid:{color:"#1e2d45"},beginAtZero:true}
+            }
+          }
+        });
+      }
     }
 
     // ── Storage levels chart ──
