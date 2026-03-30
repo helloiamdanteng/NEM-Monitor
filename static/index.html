@@ -4233,37 +4233,45 @@ function _renderPriceHistCharts(data) {
   const visRegions = regions.length ? regions : REGIONS;
   const daysDesc = [...days].reverse();
 
-  // Detect today in AEST
-  const nowAEST = new Date(new Date().toLocaleString('en-AU', {timeZone:'Australia/Brisbane'}));
-  const todayStr = nowAEST.getFullYear() + '-' +
-    String(nowAEST.getMonth()+1).padStart(2,'0') + '-' +
-    String(nowAEST.getDate()).padStart(2,'0');
+  // AEST = UTC+10 (no DST in Brisbane)
+  const nowUTC = new Date();
+  const aestMs = nowUTC.getTime() + 10 * 3600 * 1000;
+  const aestDate = new Date(aestMs);
+  const todayStr = aestDate.getUTCFullYear() + '-' +
+    String(aestDate.getUTCMonth()+1).padStart(2,'0') + '-' +
+    String(aestDate.getUTCDate()).padStart(2,'0');
 
   // Quarter start: Q1=Jan, Q2=Apr, Q3=Jul, Q4=Oct
-  const qMonth = Math.floor(nowAEST.getMonth() / 3) * 3;
-  const qStartStr = nowAEST.getFullYear() + '-' +
-    String(qMonth + 1).padStart(2,'0') + '-01';
-  const mStartStr = nowAEST.getFullYear() + '-' +
-    String(nowAEST.getMonth()+1).padStart(2,'0') + '-01';
+  const aestMonth = aestDate.getUTCMonth();
+  const aestYear  = aestDate.getUTCFullYear();
+  const qMonth    = Math.floor(aestMonth / 3) * 3;
+  const qStartStr = aestYear + '-' + String(qMonth + 1).padStart(2,'0') + '-01';
+  const mStartStr = aestYear + '-' + String(aestMonth + 1).padStart(2,'0') + '-01';
+
+  // Quarter/month labels
+  const qLabels = ['Q1','Q2','Q3','Q4'];
+  const qLabel  = qLabels[Math.floor(aestMonth/3)] + ' ' + aestYear;
+  const mLabel  = aestDate.toLocaleDateString('en-AU', {timeZone:'UTC', month:'short', year:'numeric'});
 
   // Compute aggregated stats for a set of days
   const _agg = (daySet) => {
     const out = {};
     for (const r of visRegions) {
       const rd = data[r] || {};
-      const pts = daySet.filter(d => rd[d]).map(d => rd[d]);
+      const pts = daySet.filter(d => rd[d] && rd[d].count > 0).map(d => rd[d]);
       if (!pts.length) { out[r] = null; continue; }
-      // Weighted average by interval count
-      const totCount = pts.reduce((s,p) => s + p.count, 0);
+      const totCount = pts.reduce((s,p) => s + (p.count||0), 0);
+      if (!totCount) { out[r] = null; continue; }
+      const capPts = pts.filter(p => (p.cap_count||0) > 0);
+      const totCap = capPts.reduce((s,p) => s + p.cap_count, 0);
       out[r] = {
         avg:        Math.round(pts.reduce((s,p) => s + p.avg * p.count, 0) / totCount * 100) / 100,
-        energy_avg: Math.round(pts.reduce((s,p) => s + p.energy_avg * p.count, 0) / totCount * 100) / 100,
-        cap_avg:    (() => {
-          const capPts = pts.filter(p => p.cap_count > 0);
-          if (!capPts.length) return 0;
-          const totCap = capPts.reduce((s,p) => s + p.cap_count, 0);
-          return Math.round(capPts.reduce((s,p) => s + p.cap_avg * p.cap_count, 0) / totCap * 100) / 100;
-        })(),
+        energy_avg: pts[0].energy_avg !== undefined
+          ? Math.round(pts.reduce((s,p) => s + (p.energy_avg||p.avg) * p.count, 0) / totCount * 100) / 100
+          : null,
+        cap_avg:    totCap > 0
+          ? Math.round(capPts.reduce((s,p) => s + p.cap_avg * p.cap_count, 0) / totCap * 100) / 100
+          : 0,
       };
     }
     return out;
@@ -4314,18 +4322,10 @@ function _renderPriceHistCharts(data) {
     return s;
   };
 
-  // Quarter label e.g. "Q1 2026"
-  const qLabels = ['Q1','Q2','Q3','Q4'];
-  const qLabel  = qLabels[Math.floor(nowAEST.getMonth()/3)] + ' ' + nowAEST.getFullYear();
-  const mLabel  = nowAEST.toLocaleDateString('en-AU',{month:'short',year:'numeric'});
-
   let t = '<div class="chart-card" style="padding:12px 14px;margin-bottom:8px;overflow-x:auto">';
   t += '<div class="chart-title" style="margin-bottom:10px">Pool Price Summary ($/MWh)</div>';
   t += '<table style="width:100%;border-collapse:collapse">';
-
-  // Header
-  t += '<tr>';
-  t += '<th style="text-align:left;padding:5px 8px;color:#64748b;font-family:var(--font-mono);font-size:9px;border-bottom:1px solid #334155"></th>';
+  t += '<tr><th style="text-align:left;padding:5px 8px;color:#64748b;font-family:var(--font-mono);font-size:9px;border-bottom:1px solid #334155"></th>';
   for (const r of visRegions) {
     const col = REGION_COLORS[r];
     t += `<th style="text-align:right;padding:5px 8px;color:${col};font-family:var(--font-mono);font-size:10px;border-bottom:1px solid #334155">${REGION_SHORT[r]}</th>`;
@@ -4344,8 +4344,6 @@ function _renderPriceHistCharts(data) {
   t += '<div class="chart-card" style="padding:12px 14px;overflow-x:auto">';
   t += '<div class="chart-title" style="margin-bottom:8px">Daily Average ($/MWh)</div>';
   t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
-
-  // Header
   t += '<tr>';
   t += '<th style="text-align:left;padding:5px 8px;color:#64748b;border-bottom:1px solid #1e2d45;white-space:nowrap">Date</th>';
   for (const r of visRegions) {
@@ -4353,28 +4351,21 @@ function _renderPriceHistCharts(data) {
     t += `<th style="text-align:right;padding:5px 8px;color:${col};border-bottom:1px solid #1e2d45">${REGION_SHORT[r]}</th>`;
   }
   t += '</tr>';
-
-  // Rows
   for (const d of daysDesc) {
     const dt = new Date(d + 'T00:00:00');
     const label = dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
     const isToday = d === todayStr;
     t += '<tr>';
-    t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">
-      ${label}${isToday ? ' <span style="color:#64748b;font-size:8px">partial</span>' : ''}
-    </td>`;
+    t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}${isToday?' <span style="color:#64748b;font-size:8px">partial</span>':''}</td>`;
     for (const r of visRegions) {
       const val = data[r]?.[d]?.avg;
       const col = val !== undefined ? priceClass(val) : '';
       const colMap = {negative:'#2ed573', low:'#e2e8f0', medium:'#ffd32a', high:'#ff6b35', vhigh:'#ff4757'};
       const textCol = colMap[col] || '#e2e8f0';
-      t += `<td style="text-align:right;padding:5px 8px;color:${textCol};border-bottom:1px solid #1e2d4533;font-weight:${col==='negative'||col==='vhigh'?'700':'400'}">
-        ${val !== undefined ? '$' + val.toFixed(2) : '—'}
-      </td>`;
+      t += `<td style="text-align:right;padding:5px 8px;color:${textCol};border-bottom:1px solid #1e2d4533;font-weight:${col==='negative'||col==='vhigh'?'700':'400'}">${val !== undefined ? '$'+val.toFixed(2) : '—'}</td>`;
     }
     t += '</tr>';
   }
-
   t += '</table></div>';
   tableDiv.innerHTML = t;
 }
