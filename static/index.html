@@ -4277,6 +4277,61 @@ function _renderPriceHistCharts(data, liveData) {
     return s;
   };
 
+  // Cap min: cap payout averaged over the FULL month/quarter period,
+  // with future periods assumed to pay zero (uses total intervals in period, not just actuals)
+  // Assumes 48 x 30-min intervals per day
+  const _capMin = (daySet, periodStartStr, periodEndStr) => {
+    const out = {};
+    // Total days in the full period (actuals + future)
+    const allPeriodDays = [];
+    const sd = new Date(periodStartStr + 'T00:00:00');
+    const ed = new Date(periodEndStr   + 'T00:00:00');
+    for (let dt = new Date(sd); dt <= ed; dt.setDate(dt.getDate()+1))
+      allPeriodDays.push(dt.toISOString().slice(0,10));
+    const totalIntervalsInPeriod = allPeriodDays.length * 48; // 48 x 30-min per day
+
+    for (const r of allRegions) {
+      const rd = data[r] || {};
+      let sumCap = 0;
+      for (const d of daySet) {
+        const dp = rd[d];
+        if (!dp || !dp.count) continue;
+        const effW = dp.count > 100 ? dp.count / 6 : dp.count;
+        sumCap += dp.cap_avg * effW;
+      }
+      // PD for today (future intervals within the period)
+      for (const p of (pdByRegion[r] || [])) sumCap += Math.max(0, p - CAP);
+      // Divide by TOTAL intervals in period (future assumed zero)
+      out[r] = totalIntervalsInPeriod > 0
+        ? { cap_min: Math.round(sumCap / totalIntervalsInPeriod * 100) / 100 }
+        : null;
+    }
+    return out;
+  };
+
+  // Period end strings for month and quarter
+  const lastDayOfMonth = new Date(aestYear, aestMonth + 1, 0);
+  const mEndStr = lastDayOfMonth.getUTCFullYear
+    ? lastDayOfMonth.toISOString().slice(0,10)
+    : `${aestYear}-${String(aestMonth+1).padStart(2,'0')}-${String(lastDayOfMonth.getDate()).padStart(2,'0')}`;
+  const qEndMonth = qMonth + 2; // last month of quarter (0-indexed)
+  const lastDayOfQ = new Date(aestYear, qEndMonth + 1, 0);
+  const qEndStr = `${aestYear}-${String(qEndMonth+1).padStart(2,'0')}-${String(lastDayOfQ.getDate()).padStart(2,'0')}`;
+
+  const _buildSectionWithCapMin = (label, aggData, capMinData) => {
+    let s = _buildSection(label, aggData);
+    // Replace last </tr> with nothing, then add cap min row before closing
+    // Actually just append cap min row
+    s += '<tr>';
+    s += '<td style="padding:2px 8px 8px;color:#475569;font-family:var(--font-mono);font-size:10px">Cap min</td>';
+    for (const r of allRegions) {
+      const v = capMinData[r]?.cap_min ?? null;
+      s += `<td style="text-align:right;padding:2px 8px 8px;font-family:var(--font-mono);font-size:10px;color:var(--text)">${v === null ? '—' : '$'+v.toFixed(2)}</td>`;
+    }
+    s += '</tr>';
+    return s;
+  };
+
   let t = '<div class="chart-card" style="padding:12px 14px;margin-bottom:8px;overflow-x:auto">';
   t += '<div class="chart-title" style="margin-bottom:10px">Pool Price Summary ($/MWh)</div>';
   t += '<table style="width:100%;border-collapse:collapse">';
@@ -4288,48 +4343,44 @@ function _renderPriceHistCharts(data, liveData) {
   t += '</tr>';
 
   t += _buildSection(`Today — ${todayStr}`, _agg(todayDays));
-  t += _buildSection(`Month — ${mLabel}`, _agg(mtdDays));
-  t += _buildSection(`Quarter — ${qLabel}`, _agg(qtdDays));
+  t += _buildSectionWithCapMin(`Month — ${mLabel}`, _agg(mtdDays),
+    _capMin(mtdDays, mStartStr, mEndStr));
+  t += _buildSectionWithCapMin(`Quarter — ${qLabel}`, _agg(qtdDays),
+    _capMin(qtdDays, qStartStr, qEndStr));
 
   t += '</table>';
-  t += '<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-top:8px">Flat avg = simple average $/MWh · Energy avg = avg with each interval capped at $300 · Cap est = avg of max(0, price−$300) across all intervals · Today includes predispatch for remaining periods</div>';
+  t += '<div style="font-family:var(--font-mono);font-size:8px;color:#475569;margin-top:8px">Flat avg = simple $/MWh · Energy avg = avg(min(p,$300)) · Cap est = avg(max(0,p−$300)) actuals+PD · Cap min = cap payout avg over full period (future=0) · Today includes predispatch</div>';
   t += '</div>';
-  tableDiv.innerHTML = t;
 
-  // Daily breakdown table — rendered below chart in separate div
-  const dailyDiv = document.getElementById('prices-hist-daily-table') || (() => {
-    const d = document.createElement('div');
-    d.id = 'prices-hist-daily-table';
-    tableDiv.parentNode.insertBefore(d, tableDiv.nextSibling.nextSibling);
-    return d;
-  })();
-  let dt = '<div class="chart-card" style="padding:12px 14px;overflow-x:auto;margin-top:8px">';
-  dt += '<div class="chart-title" style="margin-bottom:8px">Daily Average ($/MWh)</div>';
-  dt += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
-  dt += '<tr>';
-  dt += '<th style="text-align:left;padding:5px 8px;color:#64748b;border-bottom:1px solid #1e2d45;white-space:nowrap">Date</th>';
-  for (const r of visRegions) {
+  // Daily breakdown table
+  t += '<div class="chart-card" style="padding:12px 14px;margin-top:8px;overflow-x:auto">';
+  t += '<div class="chart-title" style="margin-bottom:8px">Daily Average ($/MWh)</div>';
+  t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
+  t += '<tr>';
+  t += '<th style="text-align:left;padding:5px 8px;color:#64748b;border-bottom:1px solid #1e2d45;white-space:nowrap">Date</th>';
+  for (const r of allRegions) {
     const col = REGION_COLORS[r];
-    dt += `<th style="text-align:right;padding:5px 8px;color:${col};border-bottom:1px solid #1e2d45">${REGION_SHORT[r]}</th>`;
+    t += `<th style="text-align:right;padding:5px 8px;color:${col};border-bottom:1px solid #1e2d45">${REGION_SHORT[r]}</th>`;
   }
-  dt += '</tr>';
+  t += '</tr>';
   for (const d of daysDesc) {
     const ddt = new Date(d + 'T00:00:00');
     const label = ddt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
     const isToday = d === todayStr;
-    dt += '<tr>';
-    dt += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}${isToday?' <span style="color:#64748b;font-size:8px">partial</span>':''}</td>`;
-    for (const r of visRegions) {
+    t += '<tr>';
+    t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}${isToday?' <span style="color:#64748b;font-size:8px">partial</span>':''}</td>`;
+    for (const r of allRegions) {
       const val = data[r]?.[d]?.avg;
       const col = val !== undefined ? priceClass(val) : '';
       const colMap = {negative:'#2ed573', low:'#e2e8f0', medium:'#ffd32a', high:'#ff6b35', vhigh:'#ff4757'};
       const textCol = colMap[col] || '#e2e8f0';
-      dt += `<td style="text-align:right;padding:5px 8px;color:${textCol};border-bottom:1px solid #1e2d4533;font-weight:${col==='negative'||col==='vhigh'?'700':'400'}">${val !== undefined ? '$'+val.toFixed(2) : '—'}</td>`;
+      t += `<td style="text-align:right;padding:5px 8px;color:${textCol};border-bottom:1px solid #1e2d4533;font-weight:${col==='negative'||col==='vhigh'?'700':'400'}">${val !== undefined ? '$'+val.toFixed(2) : '—'}</td>`;
     }
-    dt += '</tr>';
+    t += '</tr>';
   }
-  dt += '</table></div>';
-  dailyDiv.innerHTML = dt;
+  t += '</table></div>';
+
+  tableDiv.innerHTML = t;
 }
 
 // ── Gas Page ──────────────────────────────────────────────────────────────────
