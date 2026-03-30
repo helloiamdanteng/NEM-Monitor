@@ -241,15 +241,15 @@ tr:last-child td { border-bottom:none; }
   <button class="nav-btn" onclick="showPanel('dayahead')" id="nav-dayahead">
     <span class="icon">📅</span><span class="label">D+</span>
   </button>
+  <button class="nav-btn" onclick="showPanel('prices-hist')" id="nav-prices-hist">
+    <span class="icon">📈</span><span class="label">Avg$</span>
+  </button>
   <button class="nav-btn" onclick="showPanel('outages')" id="nav-outages">
     <span class="icon">⚠️</span><span class="label">Outages</span>
   </button>
 
   <button class="nav-btn" onclick="showPanel('coalcal')" id="nav-coalcal">
     <span class="icon">📊</span><span class="label">MTPASA</span>
-  </button>
-  <button class="nav-btn" onclick="showPanel('prices-hist')" id="nav-prices-hist">
-    <span class="icon">📈</span><span class="label">Avg$</span>
   </button>
   <button class="nav-btn" onclick="showPanel('gas')" id="nav-gas">
     <span class="icon">🔥</span><span class="label">Gas</span>
@@ -4105,10 +4105,7 @@ function renderPricesHist() {
   // Initialise multi-select set if needed
   if (!window._priceHistActive) window._priceHistActive = new Set(REGIONS);
 
-  let html = '<div class="section-title">Average Daily Spot Prices</div>';
-  html += '<div style="font-family:var(--font-mono);font-size:9px;color:#475569;margin-bottom:12px;line-height:1.5">' +
-    'Daily average 30-min spot prices ($/MWh) — last 90 days from AEMO TradingIS.' +
-    '</div>';
+  let html = '<div class="section-title">Average Pool Prices</div>';
 
   // Region toggle pills — multi-select
   const allOn = REGIONS.every(r => window._priceHistActive.has(r));
@@ -4123,13 +4120,15 @@ function renderPricesHist() {
   }
   html += '</div>';
 
+  // Summary table rendered here (populated by _renderPriceHistCharts)
+  html += '<div id="prices-hist-table" style="margin-bottom:8px"></div>';
+
+  // Chart below
   html += '<div class="chart-card">' +
-    '<div class="chart-title">Daily Average Price ($/MWh)</div>' +
+    '<div class="chart-title">Daily Average Price — Last 14 Days ($/MWh)</div>' +
     '<div id="prices-hist-status" style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px 0"></div>' +
     '<div class="chart-container" style="height:260px"><canvas id="pricesHistChart"></canvas></div>' +
     '</div>';
-
-  html += '<div id="prices-hist-table" style="margin-top:8px"></div>';
 
   return html;
 }
@@ -4186,7 +4185,9 @@ function _renderPriceHistCharts(data) {
   for (const r of REGIONS) Object.keys(data[r] || {}).forEach(d => allDays.add(d));
   const days = Array.from(allDays).sort();
 
-  const dayLabels = days.map(d => {
+  // Chart uses last 14 days only; table uses all days
+  const chartDays = days.slice(-14);
+  const chartLabels = chartDays.map(d => {
     const dt = new Date(d + 'T00:00:00');
     return dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
   });
@@ -4212,7 +4213,7 @@ function _renderPriceHistCharts(data) {
     const dayData = data[r] || {};
     return {
       label: REGION_SHORT[r],
-      data: days.map(d => dayData[d]?.avg ?? null),
+      data: chartDays.map(d => dayData[d]?.avg ?? null),
       backgroundColor: color + '99',
       borderColor: color,
       borderWidth: 1,
@@ -4222,7 +4223,7 @@ function _renderPriceHistCharts(data) {
 
   charts.pricesHist = new Chart(ctx1, {
     type: 'bar',
-    data: { labels: dayLabels, datasets: avgDatasets },
+    data: { labels: chartLabels, datasets: avgDatasets },
     options: { ...sharedOpts, scales: { ...sharedOpts.scales, x: { ...sharedOpts.scales.x, stacked: false } } }
   });
 
