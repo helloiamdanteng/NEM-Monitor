@@ -3819,20 +3819,27 @@ def scrape_gbb() -> dict:
             try:
                 sup = float(row.get("Supply") or 0)
                 dem = float(row.get("Demand") or 0)
-                # Supply: production receipted + storage withdrawals (demand field = gas released to market)
-                # Note: STOR "Demand" = withdrawals from storage = supply to market
-                #       STOR "Supply" = injections into storage = NOT supply to market
-                if ft == "PROD":
-                    state_agg[st]["supply"] += sup
-                elif ft == "STOR":
-                    state_agg[st]["supply"] += dem   # withdrawals from storage = market supply
-                elif ft == "PIPE" and loc in TERMINAL_SUPPLY_LOCS and sup > 0:
-                    state_agg[st]["supply"] += sup
-                # Demand: end-use only
-                if ft in DEMAND_TYPES:
-                    state_agg[st]["demand"] += dem
-                elif ft == "PIPE" and loc in RESI_LOCATIONS:
-                    state_agg[st]["demand"] += dem
+                # GBB methodology (per their footnote):
+                # VIC: supply = PIPE supply receipted into VTS; demand = PIPE demand at end-user locs
+                # Other states: supply = PROD + STOR withdrawals; demand = LNGEXPORT/BBGPG/BBLARGE + PIPE at city locs
+                if st == "VIC":
+                    if ft == "PIPE" and sup > 0:
+                        state_agg[st]["supply"] += sup
+                    if ft in DEMAND_TYPES:
+                        state_agg[st]["demand"] += dem
+                    elif ft == "PIPE" and loc in RESI_LOCATIONS:
+                        state_agg[st]["demand"] += dem
+                else:
+                    if ft == "PROD":
+                        state_agg[st]["supply"] += sup
+                    elif ft == "STOR":
+                        state_agg[st]["supply"] += dem  # STOR demand = withdrawals = supply to market
+                    elif ft == "PIPE" and loc in TERMINAL_SUPPLY_LOCS and sup > 0:
+                        state_agg[st]["supply"] += sup
+                    if ft in DEMAND_TYPES:
+                        state_agg[st]["demand"] += dem
+                    elif ft == "PIPE" and loc in RESI_LOCATIONS:
+                        state_agg[st]["demand"] += dem
             except (ValueError, TypeError):
                 pass
 
