@@ -229,9 +229,6 @@ tr:last-child td { border-bottom:none; }
   <button class="nav-btn" onclick="showPanel('generation')" id="nav-generation">
     <span class="icon">🏭</span><span class="label">Gen</span>
   </button>
-  <button class="nav-btn" onclick="showPanel('stations')" id="nav-stations">
-    <span class="icon">🏭</span><span class="label">DUIDs</span>
-  </button>
   <button class="nav-btn" onclick="showPanel('batteries')" id="nav-batteries">
     <span class="icon">🔋</span><span class="label">Batt</span>
   </button>
@@ -887,8 +884,6 @@ function renderGeneration(data) {
   html += `<div style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:#94a3b8"><div style="width:18px;height:2px;background:#ffffff;border-radius:1px"></div>Demand + Non-Sched</div>`;
   html += '</div>';
 
-  // Current snapshot breakdown
-  html += '<div id="fuelBreakdown" style="margin-top:8px"></div>';
 
   // Interconnector chart
   html += '<div class="section-title" style="margin-top:16px">Interconnector Flows — Today</div>';
