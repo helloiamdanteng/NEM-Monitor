@@ -372,7 +372,9 @@ async function triggerRescrape() {
 function showPanel(name) {
   currentPanel = name;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('nav-' + name);
+  // stations is now embedded in generation — highlight the gen button
+  const navName = name === 'stations' ? 'generation' : name;
+  const btn = document.getElementById('nav-' + navName);
   if (btn) {
     btn.classList.add('active');
     // Scroll nav bar so selected button is centred (clamped to scroll bounds)
@@ -905,6 +907,10 @@ function renderGeneration(data) {
   });
   html += '</div></div>';
 
+  // ── Generation DUIDs section ─────────────────────────────────────────────────
+  html += '<div id="stations-section" style="margin-top:4px">';
+  html += renderStations(data);
+  html += '</div>';
 
   return html;
 }
@@ -2643,7 +2649,7 @@ let stationsHideSmall    = false;
 
 function toggleAllStationRegions() {
   stationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
-  if (genData) renderPanel('stations', latestData);
+  if (genData) renderPanel('generation', latestData);
 }
 
 function toggleStationRegion(region) {
@@ -2653,17 +2659,17 @@ function toggleStationRegion(region) {
   } else {
     stationsRegionFilter = new Set([region]);
   }
-  if (genData) renderPanel('stations', latestData);
+  if (genData) renderPanel('generation', latestData);
 }
 
 function toggleStationsHideOffline() {
   stationsHideOffline = !stationsHideOffline;
-  if (genData) renderPanel('stations', latestData);
+  if (genData) renderPanel('generation', latestData);
 }
 
 function toggleStationsHideSmall() {
   stationsHideSmall = !stationsHideSmall;
-  if (genData) renderPanel('stations', latestData);
+  if (genData) renderPanel('generation', latestData);
 }
 
 
@@ -5199,9 +5205,9 @@ function renderPanel(panel, data) {
   try {
     if (panel === 'prices')          html = renderPrices(data);
     else if (panel === 'generation') html = renderGeneration(data);
+    else if (panel === 'stations')   { html = renderGeneration(data); }
     else if (panel === 'demand')     html = renderDemand(data);
     else if (panel === 'origin')     html = renderOrigin(data);
-    else if (panel === 'stations')   html = renderStations(data);
     else if (panel === 'batteries')  html = renderBatteries(data);
     else if (panel === 'dminus1')    { html = renderDMinus1(data); }
     else if (panel === 'prices-hist') { html = renderPricesHist(); }
@@ -5220,6 +5226,7 @@ function renderPanel(panel, data) {
     try {
       if (panel === 'prices')          { drawPriceChart(data); drawDemandChart(data); drawRenewablesChart(data); setTimeout(()=>drawPriceSensitivityChart(data),50); }
       else if (panel === 'generation') { drawGenChart(data); drawIcChart(data); }
+      else if (panel === 'stations')   { drawGenChart(data); drawIcChart(data); setTimeout(()=>{ const el=document.getElementById('stations-section'); if(el) el.scrollIntoView({behavior:'smooth'}); },100); }
       else if (panel === 'demand')     drawDemandChart(data);
 
       else if (panel === 'dayahead')   { drawDayAheadCharts(data); drawWeekCharts(data); }
@@ -5671,7 +5678,7 @@ async function fetchGenData() {
       }
       if (resp.ok) {
         genData = await resp.json();
-        if (currentPanel === 'gen' || currentPanel === 'stations') renderPanel(currentPanel, latestData);
+        if (currentPanel === 'gen' || currentPanel === 'stations' || currentPanel === 'generation') renderPanel(currentPanel, latestData);
         await new Promise(r => setTimeout(r, REFRESH_INTERVAL));
         _genPollActive = false;
         fetchGenData();
