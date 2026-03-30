@@ -4230,7 +4230,8 @@ function _renderPriceHistCharts(data, liveData) {
   const tableDiv = document.getElementById('prices-hist-table');
   if (!tableDiv) return;
 
-  const visRegions = regions.length ? regions : REGIONS;
+  const allRegions = REGIONS;         // summary table always shows all regions
+  const visRegions = regions.length ? regions : REGIONS;  // chart + daily table respect filter
   const daysDesc = [...days].reverse();
 
   // Build today's predispatch intervals (future periods for today only)
@@ -4286,7 +4287,7 @@ function _renderPriceHistCharts(data, liveData) {
   // Distinguish by count: if count > 100 for a day → 5-min data, else 30-min
   const _agg = (daySet) => {
     const out = {};
-    for (const r of visRegions) {
+    for (const r of allRegions) {
       const rd = data[r] || {};
       const entries = [];
       for (const d of daySet) {
@@ -4323,11 +4324,11 @@ function _renderPriceHistCharts(data, liveData) {
   };
 
   const _buildSection = (label, aggData) => {
-    let s = `<tr><td colspan="${visRegions.length + 1}" style="padding:8px 8px 4px;font-family:var(--font-mono);font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;border-top:1px solid #1e2d45">${label}</td></tr>`;
+    let s = `<tr><td colspan="${allRegions.length + 1}" style="padding:8px 8px 4px;font-family:var(--font-mono);font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;border-top:1px solid #1e2d45">${label}</td></tr>`;
     // Flat avg row
     s += '<tr>';
     s += '<td style="padding:4px 8px;color:#94a3b8;font-family:var(--font-mono);font-size:10px">Flat avg</td>';
-    for (const r of visRegions) {
+    for (const r of allRegions) {
       const v = aggData[r]?.avg ?? null;
       s += `<td style="text-align:right;padding:4px 8px;font-family:var(--font-mono);font-size:10px;font-weight:700;color:${_priceCol(v)}">${_fmtPrice(v)}</td>`;
     }
@@ -4335,7 +4336,7 @@ function _renderPriceHistCharts(data, liveData) {
     // Energy avg (capped at $300)
     s += '<tr>';
     s += '<td style="padding:4px 8px;color:#475569;font-family:var(--font-mono);font-size:10px">Energy avg</td>';
-    for (const r of visRegions) {
+    for (const r of allRegions) {
       const v = aggData[r]?.energy_avg ?? null;
       s += `<td style="text-align:right;padding:4px 8px;font-family:var(--font-mono);font-size:10px;color:${_priceCol(v)}">${_fmtPrice(v)}</td>`;
     }
@@ -4343,7 +4344,7 @@ function _renderPriceHistCharts(data, liveData) {
     // Cap est (avg of max(0,p-300) across ALL intervals)
     s += '<tr>';
     s += '<td style="padding:4px 8px 8px;color:#475569;font-family:var(--font-mono);font-size:10px">Cap est</td>';
-    for (const r of visRegions) {
+    for (const r of allRegions) {
       const v = aggData[r]?.cap_avg ?? null;
       const disp = v === null ? '—' : `$${v.toFixed(2)}`;
       const col = v && v > 0 ? '#ff6b35' : '#475569';
@@ -4357,7 +4358,7 @@ function _renderPriceHistCharts(data, liveData) {
   t += '<div class="chart-title" style="margin-bottom:10px">Pool Price Summary ($/MWh)</div>';
   t += '<table style="width:100%;border-collapse:collapse">';
   t += '<tr><th style="text-align:left;padding:5px 8px;color:#64748b;font-family:var(--font-mono);font-size:9px;border-bottom:1px solid #334155"></th>';
-  for (const r of visRegions) {
+  for (const r of allRegions) {
     const col = REGION_COLORS[r];
     t += `<th style="text-align:right;padding:5px 8px;color:${col};font-family:var(--font-mono);font-size:10px;border-bottom:1px solid #334155">${REGION_SHORT[r]}</th>`;
   }
