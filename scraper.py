@@ -3938,14 +3938,17 @@ def scrape_gbb() -> dict:
         for row in rows:
             if row.get("FacilityType") != "PIPE":
                 continue
-            name   = row.get("FacilityName", "")
-            gd     = row.get("GasDate", "").replace("/", "-")
-            supply = float(row.get("Supply") or 0)
-            if name not in PIPELINES or not gd or supply == 0:
+            name       = row.get("FacilityName", "")
+            gd         = row.get("GasDate", "").replace("/", "-")
+            supply     = float(row.get("Supply") or 0)
+            transfer_in = float(row.get("TransferIn") or 0)
+            # Use Supply if available, else TransferIn at the source hub
+            flow = supply if supply > 0 else transfer_in
+            if name not in PIPELINES or not gd or flow == 0:
                 continue
             label = f"{name} ({PIPELINES[name]})"
             pipe_hist.setdefault(label, {}).setdefault(gd, 0.0)
-            pipe_hist[label][gd] = round(pipe_hist[label][gd] + supply, 1)
+            pipe_hist[label][gd] = round(pipe_hist[label][gd] + flow, 1)
 
         result["pipeline_flows"] = {}
         for label, dates in pipe_hist.items():
