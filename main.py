@@ -2038,7 +2038,47 @@ async def historical_day_fuel(date: str):
         logger.error(f"historical_day_fuel error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-@app.get("/api/historical_day_debug")
+@app.get("/api/dminus_debug")
+async def dminus_debug(date: str):
+    """Inspect one TradingIS file for a date to see actual table names and columns."""
+    import re as _re
+    if not _re.match(r'^\d{8}$', date):
+        return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    from scraper import TRADING_IS_URL, _list_hrefs, _read_zip, _parse_aemo
+    loop = asyncio.get_running_loop()
+    def _check():
+        try:
+            all_files = _list_hrefs(TRADING_IS_URL)
+            urls = sorted([f for f in all_files if date in f and "PUBLIC_TRADINGIS" in f.upper()])
+            if not urls:
+                return {"error": f"no TradingIS files for {date}"}
+            # Fetch just the first file
+            text = _read_zip(urls[0])
+            if not text:
+                return {"error": "empty file"}
+            # Find all table names in the CSV
+            tables = set()
+            for line in text.splitlines():
+                if line.startswith('D,'):
+                    parts = line.split(',')
+                    if len(parts) > 2:
+                        tables.add(parts[1].strip())
+            # Try parsing each relevant table
+            result = {"file": urls[0].split('/')[-1], "tables_found": sorted(tables)}
+            for tbl in ["TRADING_REGIONSUM", "TRADING_PRICE", "TRADINGPRICE"]:
+                rows = _parse_aemo(text, tbl)
+                if rows:
+                    result[f"{tbl}_sample"] = {
+                        "count": len(rows),
+                        "first_keys": list(rows[0].keys()) if rows else []
+                    }
+            return result
+        except Exception as e:
+            return {"error": str(e)}
+    data = await loop.run_in_executor(None, _check)
+    return JSONResponse(content=data)
+
+
 async def historical_day_debug(date: str):
     """Check what data sources are available for a given date."""
     import re
