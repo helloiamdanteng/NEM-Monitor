@@ -2764,6 +2764,119 @@ function closeStationModal() {
   if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
 }
 
+async function openDayPriceModal(dateStr) {
+  // dateStr = YYYY-MM-DD
+  const capOn = window._todCapPrices || false;
+  const CAP   = 300;
+  const selRegion = window._priceHistRegion || 'NSW1';
+  const ddt   = new Date(dateStr + 'T00:00:00');
+  const label = ddt.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+
+  document.getElementById('stationModalTitle').textContent = label;
+  document.getElementById('stationModalSub').textContent   = `${selRegion.replace('1','')} · 5-min dispatch prices${capOn ? ' · capped at $300' : ''}`;
+  document.getElementById('stationModalStats').innerHTML   = '<span style="color:#64748b">Loading…</span>';
+  document.getElementById('stationModal').classList.add('open');
+  if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
+
+  let dayData;
+  try {
+    dayData = await fetch(`/api/historical_day_prices?date=${dateStr}`).then(r => r.json());
+  } catch(e) {
+    document.getElementById('stationModalStats').innerHTML = `<span style="color:#e74c3c">Error: ${e.message}</span>`;
+    return;
+  }
+  if (dayData.error) {
+    document.getElementById('stationModalStats').innerHTML = `<span style="color:#64748b">${dayData.error}</span>`;
+    return;
+  }
+
+  // Build 5-min spine
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const datasets = [];
+  for (const r of REGIONS) {
+    const intervals = dayData[r];
+    if (!intervals) continue;
+    // intervals is { HH:MM: price } object
+    const priceMap = {};
+    if (Array.isArray(intervals)) {
+      intervals.forEach(p => { if (p.interval) priceMap[p.interval] = p.rrp ?? p.price ?? p; });
+    } else {
+      Object.entries(intervals).forEach(([hhmm, p]) => { priceMap[hhmm] = p; });
+    }
+    const color = REGION_COLORS[r];
+    const isSelected = r === selRegion;
+    datasets.push({
+      label: REGION_SHORT[r],
+      data: allSlots.map(l => {
+        const v = priceMap[l];
+        if (v === undefined || v === null) return null;
+        return capOn ? Math.min(v, CAP) : v;
+      }),
+      borderColor: isSelected ? color : color + '55',
+      backgroundColor: 'transparent',
+      borderWidth: isSelected ? 2 : 1,
+      pointRadius: 0, tension: 0.2, spanGaps: true, fill: false,
+    });
+  }
+
+  if (!datasets.length) {
+    document.getElementById('stationModalStats').innerHTML = '<span style="color:#64748b">No data available</span>';
+    return;
+  }
+
+  try {
+    const _existing = Chart.getChart('stationModalChart');
+    if (_existing) _existing.destroy();
+    if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
+    const ctx = document.getElementById('stationModalChart');
+    _stationModalChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: allSlots, datasets },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+          tooltip: {
+            backgroundColor:'#1e293b', titleColor:'#94a3b8', bodyColor:'#e2e8f0',
+            borderColor:'#334155', borderWidth:1,
+            callbacks: {
+              title: items => items[0]?.label || '',
+              label: c => c.raw === null ? null : ` ${c.dataset.label}: $${Number(c.raw).toFixed(2)}/MWh`,
+            }
+          }
+        },
+        scales: {
+          x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
+                 callback(v,i){ const l=this.getLabelForValue(i); return l&&l.endsWith(':00')?l:null; }},
+               grid:{color:'#1e293b'} },
+          y: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
+               grid:{color:'#1e293b'},
+               title:{display:true,text:'$/MWh',color:'#64748b',font:{family:'Space Mono',size:9}} }
+        }
+      }
+    });
+
+    // Stats — avg, min, max for selected region
+    const allPrices = datasets.find(d => d.label === REGION_SHORT[selRegion])?.data.filter(v => v !== null) || [];
+    const avg = allPrices.length ? (allPrices.reduce((s,v)=>s+v,0)/allPrices.length).toFixed(2) : '—';
+    const min = allPrices.length ? Math.min(...allPrices).toFixed(2) : '—';
+    const max = allPrices.length ? Math.max(...allPrices).toFixed(2) : '—';
+    document.getElementById('stationModalStats').innerHTML =
+      `<span>${REGION_SHORT[selRegion]} · Avg: <b style="color:${REGION_COLORS[selRegion]}">$${avg}</b></span>` +
+      `<span>Min: <b>$${min}</b></span><span>Max: <b>$${max}</b></span>` +
+      (capOn ? `<span style="color:#64748b;font-size:9px">Prices capped at $300</span>` : '');
+  } catch(e) {
+    document.getElementById('stationModalStats').innerHTML = `<span style="color:#e74c3c">Chart error: ${e.message}</span>`;
+  }
+}
+
+
+
 async function openStationModal(regIdx, registry) {
   const reg = (registry || _stationRegistry)[regIdx];
   if (!reg) return;
@@ -4513,7 +4626,7 @@ function _renderPriceHistCharts(data, liveData) {
     const label  = ddt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
     const isToday = d === todayStr;
     const dp     = data[selRegion]?.[d];
-    t += '<tr>';
+    t += `<tr style="cursor:pointer" onclick="openDayPriceModal('${d}')" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background=''">`;
     t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}${isToday?' <span style="color:#64748b;font-size:8px">partial</span>':''}</td>`;
     for (const col of TOD_COLS) {
       const cnt = col.key === 'avg' ? dp?.count : dp?.tod_count?.[col.key];
