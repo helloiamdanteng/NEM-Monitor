@@ -1867,7 +1867,7 @@ function drawIcChart(data) {
 
     // Actual: solid, normal weight
     datasets.push({
-      label: id, icId: id, isActual: true,
+      label: id, icId: id, isActual: true, _baseColor: color,
       data: allSlots.map(l => hm[l] !== undefined ? hm[l] : null),
       borderColor: color, backgroundColor: 'transparent',
       borderWidth: 1.5, pointRadius: 0, tension: 0.3,
@@ -1878,7 +1878,7 @@ function drawIcChart(data) {
     const lastActVal = lastActSlot ? hm[lastActSlot] : null;
     const lastActIdx = lastActSlot ? allSlots.indexOf(lastActSlot) : -1;
     datasets.push({
-      label: id + ' PD', icId: id, isActual: false,
+      label: id + ' PD', icId: id, isActual: false, _baseColor: color + '66',
       data: allSlots.map((l, i) => {
         if (i === lastActIdx) return lastActVal;
         if (i > lastActIdx && pm[l] !== undefined) return pm[l];
@@ -1925,10 +1925,11 @@ function toggleIcHighlight(id) {
   const alreadySelected = btn && btn.dataset.active === '1';
 
   if (alreadySelected) {
-    // Clicking selected IC again → reset all to normal weight
+    // Reset all to full colour and normal weight
     chart.data.datasets.forEach((ds, i) => {
       if (!ds.icId) return;
       ds.borderWidth = ds.isActual ? 1.5 : 1;
+      ds.borderColor = ds._baseColor;
       chart.getDatasetMeta(i).hidden = false;
     });
     allIds.forEach(icId => {
@@ -1936,14 +1937,16 @@ function toggleIcHighlight(id) {
       if (b) { b.dataset.active = '0'; b.style.opacity = '1'; b.style.fontWeight = '400'; b.style.borderWidth = '1px'; }
     });
   } else {
-    // Select this IC: bold it, keep all others visible but thin/faded
+    // Bold selected, fade unselected to colour+"44"
     chart.data.datasets.forEach((ds, i) => {
       if (!ds.icId) return;
-      chart.getDatasetMeta(i).hidden = false;  // always keep visible
+      chart.getDatasetMeta(i).hidden = false;
       if (ds.icId === id) {
         ds.borderWidth = ds.isActual ? 3.5 : 2;
+        ds.borderColor = ds._baseColor;
       } else {
-        ds.borderWidth = ds.isActual ? 0.8 : 0.5;
+        ds.borderWidth = ds.isActual ? 1 : 0.5;
+        ds.borderColor = (ds._baseColor || '#ffffff') + '44';
       }
     });
     allIds.forEach(icId => {
@@ -1952,7 +1955,7 @@ function toggleIcHighlight(id) {
       if (icId === id) {
         b.dataset.active = '1'; b.style.opacity = '1'; b.style.fontWeight = '700'; b.style.borderWidth = '2px';
       } else {
-        b.dataset.active = '0'; b.style.opacity = '0.45'; b.style.fontWeight = '400'; b.style.borderWidth = '1px';
+        b.dataset.active = '0'; b.style.opacity = '0.3'; b.style.fontWeight = '400'; b.style.borderWidth = '1px';
       }
     });
   }
