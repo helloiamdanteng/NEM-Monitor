@@ -1998,6 +1998,37 @@ async def historical_day(date: str):
         logger.error(f"historical_day error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.get("/api/historical_day_debug")
+async def historical_day_debug(date: str):
+    """Quick debug: just check what files exist for a date, don't fetch them all."""
+    import re
+    if not re.match(r'^\d{8}$', date):
+        return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    from scraper import DISPATCH_IS_URL, TRADING_IS_URL, SCADA_URL, _list_hrefs
+    loop = asyncio.get_running_loop()
+    def _check():
+        result = {}
+        try:
+            dispatch_files = _list_hrefs(DISPATCH_IS_URL)
+            result["dispatch_files"] = len([f for f in dispatch_files if date in f])
+            result["dispatch_sample"] = [f.split('/')[-1] for f in dispatch_files if date in f][:3]
+        except Exception as e:
+            result["dispatch_error"] = str(e)
+        try:
+            trading_files = _list_hrefs(TRADING_IS_URL)
+            result["trading_files"] = len([f for f in trading_files if date in f])
+            result["trading_sample"] = [f.split('/')[-1] for f in trading_files if date in f][:3]
+        except Exception as e:
+            result["trading_error"] = str(e)
+        try:
+            scada_files = _list_hrefs(SCADA_URL)
+            result["scada_files"] = len([f for f in scada_files if date in f])
+        except Exception as e:
+            result["scada_error"] = str(e)
+        return result
+    data = await loop.run_in_executor(None, _check)
+    return JSONResponse(content=data)
+
 @app.get("/api/historical_dispatch_prices")
 async def historical_dispatch_prices(date: str):
     """Fetch 5-min dispatch prices for a given date (YYYYMMDD)."""
