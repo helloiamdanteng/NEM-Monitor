@@ -4372,12 +4372,16 @@ function _renderPriceHistCharts(data, liveData) {
 
   // State selector buttons
   t += '<div class="chart-card" style="padding:12px 14px;margin-top:8px;overflow-x:auto">';
+
+  const selRegion = window._priceHistRegion;
+  const selCol    = REGION_COLORS[selRegion] || '#94a3b8';
+
   t += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
   t += '<div class="chart-title" style="margin-bottom:0">Daily Average by Time of Day ($/MWh)</div>';
 
   // Check if tod data is present in first available day
   const _firstDay = daysDesc[0];
-  const _hasTod = _firstDay && data[selRegion || 'NSW1']?.[_firstDay]?.tod;
+  const _hasTod = _firstDay && data[selRegion]?.[_firstDay]?.tod;
   if (!_hasTod) {
     t += `<button onclick="fetch('/api/historical_price_averages?refresh=true').then(r=>r.json()).then(d=>{window._priceHistData=d;_renderPriceHistCharts(d,window._liveDataRef);})"
       style="font-family:var(--font-mono);font-size:9px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid #f39c12;background:#f39c1222;color:#f39c12">
@@ -4394,9 +4398,6 @@ function _renderPriceHistCharts(data, liveData) {
       font-weight:${active?'700':'400'}">${REGION_SHORT[r]}</button>`;
   }
   t += '</div>';
-
-  const selRegion = window._priceHistRegion;
-  const selCol    = REGION_COLORS[selRegion] || '#94a3b8';
 
   t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
   t += '<tr>';
