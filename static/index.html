@@ -992,6 +992,40 @@ function _dm1RedrawPortfolio() {
   if (window._dm1StationMap && window._dMinus1Data) {
     _drawDm1PortfolioChart(window._dm1StationMap, window._dMinus1Data.dispatch_prices_5min || {});
   }
+  // Update state pill buttons
+  const allStates = Object.keys(ORIGIN_STATE_LABELS);
+  const isNEM = allStates.every(r => originStateFilter.has(r));
+  document.querySelectorAll('[onclick="toggleOriginState(\'NEM\')"]').forEach(b => b.classList.toggle('active', isNEM));
+  for (const r of allStates) {
+    document.querySelectorAll(`[onclick="toggleOriginState('${r}')"]`).forEach(b => b.classList.toggle('active', originStateFilter.has(r)));
+  }
+  // Update price buttons
+  const allOff = originPriceFilter.size === 0;
+  document.querySelectorAll('[onclick="toggleOriginPriceOff()"]').forEach(b => {
+    b.style.background = allOff ? '#47556933' : 'transparent';
+    b.style.color = allOff ? '#94a3b8' : '#475569';
+  });
+  for (const r of REGIONS) {
+    document.querySelectorAll(`[onclick="toggleOriginPrice('${r}')"]`).forEach(b => {
+      const col = ORIGIN_STATE_COLORS[r] || REGION_COLORS[r]; const on = originPriceFilter.has(r);
+      b.style.borderColor = on ? col : '#475569';
+      b.style.background  = on ? col+'33' : 'transparent';
+      b.style.color       = on ? col : '#475569';
+    });
+  }
+  // Update WHITE button
+  document.querySelectorAll('[onclick="toggleOriginPriceWhite()"]').forEach(b => {
+    b.style.borderColor = originPriceWhite ? '#ffffff' : '#475569';
+    b.style.background  = originPriceWhite ? '#ffffff22' : 'transparent';
+    b.style.color       = originPriceWhite ? '#ffffff' : '#475569';
+  });
+  // Update Select Multiple button
+  document.querySelectorAll('[onclick="toggleOriginMultiSelect()"]').forEach(b => {
+    b.style.borderColor = originMultiSelect ? '#94a3b8' : '#334155';
+    b.style.background  = originMultiSelect ? '#94a3b822' : 'transparent';
+    b.style.color       = originMultiSelect ? '#94a3b8' : '#475569';
+    b.textContent       = (originMultiSelect ? '✓ ' : '') + 'Select Multiple';
+  });
 }
 
 function toggleOriginPrice(r) {
