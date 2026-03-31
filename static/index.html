@@ -4405,6 +4405,7 @@ function _renderPriceHistCharts(data, liveData) {
   </div>`;
 
   // TOD chart
+  t += '<div id="todLegend" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px"></div>';
   t += '<div class="chart-container" style="height:240px;margin-bottom:12px"><canvas id="todChart"></canvas></div>';
 
   t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
@@ -4457,29 +4458,49 @@ function _renderPriceHistCharts(data, liveData) {
         const dp = data[selRegion]?.[d];
         const isToday = d === todayStr;
         const cnt = col.key === 'avg' ? dp?.count : dp?.tod_count?.[col.key];
-        const minCounts = {avg:0, overnight:20, morning:14, midday:20, evening:14, late_evening:14};
         const enoughData = !isToday || col.key === 'avg' || (cnt !== undefined && cnt >= minCounts[col.key]);
         if (!enoughData) return null;
         if (col.key === 'avg') return capOn ? (dp?.energy_avg ?? null) : (dp?.avg ?? null);
         return capOn ? (dp?.tod_energy?.[col.key] ?? null) : (dp?.tod?.[col.key] ?? null);
       });
       return {
-        label: col.label,
+        label: col.label, _key: col.key, _baseColor: col.color,
         data: dp_data,
-        borderColor: col.color,
-        backgroundColor: 'transparent',
+        borderColor: col.color, backgroundColor: 'transparent',
         borderWidth: col.key === 'avg' ? 2 : 1.5,
-        pointRadius: 0,
-        tension: 0.3,
-        spanGaps: false,
+        pointRadius: 0, tension: 0.3, spanGaps: false,
       };
     });
+
+    let _selectedTod = null;
+    const _applyTodStyle = () => {
+      const c = charts.tod;
+      if (!c) return;
+      c.data.datasets.forEach((ds, i) => {
+        const isSel = _selectedTod === null || ds._key === _selectedTod;
+        ds.borderWidth = isSel ? (ds._key === 'avg' ? 3 : 2.5) : 1;
+        ds.borderColor = isSel ? ds._baseColor : ds._baseColor + '33';
+      });
+      // Update button styles
+      const container = document.getElementById('todLegend');
+      if (container) container.querySelectorAll('button').forEach(btn => {
+        const key = btn.dataset.key;
+        const col = btn.dataset.color;
+        const isSel = _selectedTod === null || key === _selectedTod;
+        btn.style.background    = isSel ? col+'22' : 'transparent';
+        btn.style.borderColor   = isSel ? col : col+'44';
+        btn.style.color         = isSel ? col : col+'44';
+        btn.style.fontWeight    = (isSel && _selectedTod !== null) ? '700' : '400';
+      });
+      c.update('none');
+    };
+
     charts.tod = new Chart(todCtx, {
       type: 'line',
       data: { labels: todLabels, datasets: todDatasets },
       options: { ...CHART_DEFAULTS,
         plugins: { ...CHART_DEFAULTS.plugins,
-          legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+          legend: { display: false },
           tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
             callbacks: { label: c => c.raw === null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` }
           }
@@ -4490,6 +4511,24 @@ function _renderPriceHistCharts(data, liveData) {
         }
       }
     });
+
+    // Build button legend
+    const todLegend = document.getElementById('todLegend');
+    if (todLegend) {
+      todLegend.innerHTML = '';
+      TOD_COLS.forEach(col => {
+        const btn = document.createElement('button');
+        btn.dataset.key   = col.key;
+        btn.dataset.color = col.color;
+        btn.style.cssText = `font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid ${col.color};background:${col.color}22;color:${col.color};transition:all 0.15s;white-space:nowrap`;
+        btn.textContent = col.label;
+        btn.onclick = () => {
+          _selectedTod = (_selectedTod === col.key) ? null : col.key;
+          _applyTodStyle();
+        };
+        todLegend.appendChild(btn);
+      });
+    }
   }
 
   // Store liveData ref for re-render on region switch
