@@ -5161,9 +5161,9 @@ function dMinusBuildCalendar() {
     const isSel   = _dCmp(cell, sel) === 0;
     const isFuture = _dCmp(cell, today) > 0;
     const isToday = _dCmp(cell, today) === 0;
-    // Grey out dates older than 56 days (TradingIS archive ~8 weeks)
+    // Grey out dates older than 13 days (TradingIS CURRENT window) or today/future
     const cellDate = new Date(y, m-1, d);
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 56);
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 13);
     const isTooOld = cellDate < cutoff;
     const isDisabled = isFuture || isTooOld;
     const bg      = isSel ? '#3b82f6' : isToday ? '#475569' : 'transparent';
@@ -5350,11 +5350,12 @@ function drawDMinus1PriceChart(data) {
   const priceData = data.dispatch_prices_5min || {};
   const hist30    = data.historical_prices    || {};
 
-  // Detect granularity
-  const allIntervals = [];
-  for (const r of REGIONS) (priceData[r] || []).forEach(p => allIntervals.push(p.interval));
-  const has5min = allIntervals.some(t => parseInt(t.split(':')[1]) % 30 !== 0);
-  const step = has5min ? 5 : 30;
+  // Use resolution hint from API, fall back to detection
+  const step = data.resolution_minutes || (() => {
+    const allIntervals = [];
+    for (const r of REGIONS) (priceData[r] || []).forEach(p => allIntervals.push(p.interval));
+    return allIntervals.some(t => parseInt(t.split(':')[1]) % 30 !== 0) ? 5 : 30;
+  })();
   const slots = [];
   for (let h = 0; h < 24; h++)
     for (let m = 0; m < 60; m += step)
