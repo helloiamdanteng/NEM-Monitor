@@ -3025,6 +3025,7 @@ def scrape_historical_price_averages(days: int = 90) -> dict:
             "cap_avg":    round(statistics.mean(max(0.0, p - CAP) for p in prices), 2),
             "tod":        {band: _band_avg(tod[band]) for band in TOD_BANDS},
             "tod_count":  {band: len(tod[band]) for band in TOD_BANDS},
+            "tod_energy": {band: _band_avg([min(p, CAP) for p in tod[band]]) for band in TOD_BANDS},
         }
 
     total = sum(len(v) for v in results.values())
