@@ -4397,13 +4397,6 @@ function _renderPriceHistCharts(data, liveData) {
   }
   t += '</tr>';
 
-  // For today, only show bands that have fully completed
-  // Band end times in HHMM for comparison
-  const TOD_BAND_END = {
-    avg: '24:00', overnight: '06:00', morning: '10:00',
-    midday: '16:00', evening: '20:00', late_evening: '24:00'
-  };
-
   for (const d of daysDesc) {
     const ddt   = new Date(d + 'T00:00:00');
     const label = ddt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
@@ -4412,10 +4405,7 @@ function _renderPriceHistCharts(data, liveData) {
     t += '<tr>';
     t += `<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1e2d4533;white-space:nowrap">${label}${isToday?' <span style="color:#64748b;font-size:8px">partial</span>':''}</td>`;
     for (const col of TOD_COLS) {
-      // For today, suppress bands that haven't finished yet
-      const bandEndTime = TOD_BAND_END[col.key] || '24:00';
-      const bandComplete = !isToday || nowTimeStr >= bandEndTime;
-      const val = bandComplete ? (col.key === 'avg' ? dp?.avg : dp?.tod?.[col.key]) : null;
+      const val = col.key === 'avg' ? dp?.avg : dp?.tod?.[col.key];
       const hasVal = val !== undefined && val !== null;
       const pc  = hasVal ? priceClass(val) : '';
       const colMap = {negative:'#2ed573', low:'#e2e8f0', medium:'#ffd32a', high:'#ff6b35', vhigh:'#ff4757'};
