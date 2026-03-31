@@ -2318,6 +2318,36 @@ async def origin_history():
     return JSONResponse(content=result)
 
 
+@app.get("/api/historical_day_prices")
+async def historical_day_prices(date: str):
+    """Return raw 5-min interval prices for a date from GitHub files. date=YYYY-MM-DD"""
+    import re as _re, base64, json as _json, os
+    if not _re.match(r'^\d{4}-\d{2}-\d{2}$', date):
+        return JSONResponse(status_code=400, content={"error": "date must be YYYY-MM-DD"})
+    loop = asyncio.get_running_loop()
+    def _fetch():
+        import requests as _req
+        GH_TOKEN = os.environ.get("GITHUB_TOKEN","")
+        GH_REPO  = os.environ.get("GITHUB_REPO","")
+        if not GH_TOKEN or not GH_REPO:
+            return {"error": "GitHub not configured"}
+        headers = {"Authorization": f"token {GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+        path = f"data/prices/{date}.json"
+        r = _req.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=headers, timeout=10)
+        if r.status_code == 404:
+            return {"error": "no data for this date"}
+        if r.status_code != 200:
+            return {"error": f"GitHub error {r.status_code}"}
+        day_data = _json.loads(base64.b64decode(r.json()["content"]).decode())
+        day_data.pop("date", None)
+        return day_data
+    try:
+        data = await asyncio.wait_for(loop.run_in_executor(None, _fetch), timeout=15.0)
+        return JSONResponse(content=data)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.get("/api/price-avg-debug")
 async def price_avg_debug():
     """Debug endpoint — tests each step of scrape_historical_price_averages."""
