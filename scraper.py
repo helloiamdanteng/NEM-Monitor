@@ -2881,6 +2881,7 @@ def scrape_historical_day_fast(date_str: str) -> dict:
     prices:    dict = {r: {} for r in NEM_REGIONS}
     demand:    dict = {r: {} for r in NEM_REGIONS}
     op_demand: dict = {r: {} for r in NEM_REGIONS}
+    ic_flows:  dict = {}  # { ic_id: { HH:MM: mw } }
 
     def _fetch(url):
         try: return _read_zip(url)
@@ -2918,10 +2919,22 @@ def scrape_historical_day_fast(date_str: str) -> dict:
                         if dem_str: demand[region][label]    = round(float(dem_str), 1)
                         if op_str:  op_demand[region][label] = round(float(op_str),  1)
                     except (ValueError, TypeError): continue
+                for row in _parse_aemo(text, "DISPATCH_INTERCONNECTORRES"):
+                    if row.get("INTERVENTION","0").strip() != "0": continue
+                    ic_id = row.get("INTERCONNECTORID","").strip()
+                    if not ic_id: continue
+                    dt_str2 = row.get("SETTLEMENTDATE",""); flow_str = row.get("MWFLOW","")
+                    if not dt_str2 or not flow_str: continue
+                    try:
+                        dt = datetime.fromisoformat(dt_str2.replace("/","-")) - _td(minutes=5)
+                        if dt.date() != req_date: continue
+                        if ic_id not in ic_flows: ic_flows[ic_id] = {}
+                        ic_flows[ic_id][dt.strftime("%H:%M")] = round(float(flow_str), 1)
+                    except (ValueError, TypeError): continue
     except Exception as e:
         logger.warning(f"scrape_historical_day_fast: DispatchIS failed: {e}")
 
-    logger.info(f"scrape_historical_day_fast {date_str}: prices={sum(len(v) for v in prices.values())} demand={sum(len(v) for v in op_demand.values())}")
+    logger.info(f"scrape_historical_day_fast {date_str}: prices={sum(len(v) for v in prices.values())} demand={sum(len(v) for v in op_demand.values())} ic={len(ic_flows)}")
 
     def _to_series(d):
         return {r:[{"interval":k,"demand":v} for k,v in sorted(s.items())] for r,s in d.items() if s}
@@ -2933,6 +2946,7 @@ def scrape_historical_day_fast(date_str: str) -> dict:
         "demand_history":       _to_series(demand),
         "op_demand_history":    _to_series(op_demand),
         "fuel_history":         {},
+        "ic_history":           {ic:[{"interval":k,"flow":v} for k,v in sorted(h.items())] for ic,h in ic_flows.items() if h},
     }
 
 def scrape_historical_day_fuel(date_str: str) -> dict:
