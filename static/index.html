@@ -292,7 +292,7 @@ let dm1BattWhitePrices = true;
 
 // D-1 station view state (independent of gen page)
 let dm1StationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
-let dm1StationsFuelFilter   = new Set(STATIONS_FUEL_ORDER);
+let dm1StationsFuelFilter   = new Set(); // populated after STATIONS_FUEL_ORDER is defined below
 let dm1StationsHideOffline  = true;
 let dm1StationsHideSmall    = false;
 const _dm1StationRegistry   = {};
@@ -2703,6 +2703,7 @@ let stationsHideOffline  = true;
 let stationsHideSmall    = false;
 const STATIONS_FUEL_ORDER = ['Brown Coal','Black Coal','Gas','Hydro','Battery','Wind','Solar','Rooftop Solar','Liquid','Other'];
 let stationsFuelFilter   = new Set(STATIONS_FUEL_ORDER);
+STATIONS_FUEL_ORDER.forEach(f => dm1StationsFuelFilter.add(f)); // now safe to populate
 
 function toggleAllStationRegions() {
   stationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
