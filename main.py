@@ -1941,10 +1941,10 @@ async def price_cache_inspect():
 
 @app.get("/api/price-tod-test")
 async def price_tod_test():
-    """Run a minimal scrape for 2 days and show raw interval data + TOD result."""
-    import os, json, base64, statistics
+    """Show raw intervals for today and yesterday to check midnight boundary."""
+    import os, json, base64
     from datetime import datetime, timedelta, timezone
-    from scraper import AEST, NEM_REGIONS
+    from scraper import AEST
     import httpx
 
     GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
@@ -1953,46 +1953,29 @@ async def price_tod_test():
         return JSONResponse(content={"error": "no GitHub credentials"})
 
     now_aest = datetime.now(AEST)
-    test_date = (now_aest - timedelta(days=2)).strftime("%Y-%m-%d")
-    path = f"data/prices/{test_date}.json"
     headers = {"Authorization": f"token {GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
 
+    result = {}
     async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=headers)
-        if r.status_code != 200:
-            return JSONResponse(content={"error": f"GitHub {r.status_code}", "path": path})
-        day_data = json.loads(base64.b64decode(r.json()["content"]).decode())
+        for offset in [0, 1]:  # today and yesterday
+            date_str = (now_aest - timedelta(days=offset)).strftime("%Y-%m-%d")
+            path = f"data/prices/{date_str}.json"
+            r = await client.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=headers)
+            if r.status_code == 200:
+                day_data = json.loads(base64.b64decode(r.json()["content"]).decode())
+                nsw = day_data.get("NSW1", {})
+                all_keys = sorted(nsw.keys())
+                result[date_str] = {
+                    "total": len(all_keys),
+                    "first_5": all_keys[:5],
+                    "last_5": all_keys[-5:],
+                    # Show all late evening intervals (>= 20:00)
+                    "late_evening": {k: nsw[k] for k in all_keys if k >= "20:00"},
+                }
+            else:
+                result[date_str] = {"error": r.status_code}
 
-    nsw = day_data.get("NSW1", {})
-    sample_keys = sorted(nsw.keys())[:5]
-    all_keys = sorted(nsw.keys())
-
-    # Run TOD bucketing
-    TOD_BANDS = {
-        "overnight":    ("00:00", "06:00"),
-        "morning":      ("06:00", "10:00"),
-        "midday":       ("10:00", "16:00"),
-        "evening":      ("16:00", "20:00"),
-        "late_evening": ("20:00", "24:00"),
-    }
-    tod = {k: [] for k in TOD_BANDS}
-    for hhmm, p in nsw.items():
-        for band, (start, end) in TOD_BANDS.items():
-            if start <= hhmm < end or (end == "24:00" and hhmm >= start):
-                tod[band].append(float(p))
-                break
-
-    return JSONResponse(content={
-        "date": test_date,
-        "total_intervals": len(nsw),
-        "sample_keys": sample_keys,
-        "tod_counts": {k: len(v) for k, v in tod.items()},
-        "tod_avgs": {k: round(statistics.mean(v), 2) if v else None for k, v in tod.items()},
-        "unmatched": sum(1 for h in all_keys if not any(
-            s <= h < e or (e == "24:00" and h >= s)
-            for s, e in TOD_BANDS.values()
-        )),
-    })
+    return JSONResponse(content=result)
 
 
 async def historical_day(date: str):
