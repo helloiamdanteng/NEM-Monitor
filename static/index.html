@@ -5258,7 +5258,7 @@ function renderDMinus1(data) {
 
   // ── Station view ─────────────────────────────────────────────────────────────
   html += '<div id="dm1-stations-section" style="margin-top:16px">';
-  html += renderDm1Stations(data);
+  try { html += renderDm1Stations(data); } catch(e) { console.error('renderDm1Stations error:', e); html += `<div style="font-family:var(--font-mono);font-size:10px;color:#e74c3c;padding:8px">Station view error: ${e.message}</div>`; }
   html += '</div>';
 
   // Store yesterday's date string for the chart loader
