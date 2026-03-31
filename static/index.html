@@ -4360,19 +4360,20 @@ function _renderPriceHistCharts(data, liveData) {
 
   // Daily breakdown table
   if (!window._priceHistRegion) window._priceHistRegion = 'NSW1';
-  if (window._todCapPrices === undefined) window._todCapPrices = false;
+  if (window._todCapPrices === undefined) window._todCapPrices = true;
 
   const TOD_COLS = [
-    {key:'avg',         label:'All Day',   sub:''},
-    {key:'overnight',   label:'Overnight', sub:'12am–6am'},
-    {key:'morning',     label:'Morn Peak', sub:'6am–10am'},
-    {key:'midday',      label:'Midday',    sub:'10am–4pm'},
-    {key:'evening',     label:'Eve Peak',  sub:'4pm–8pm'},
-    {key:'late_evening',label:'Late Eve',  sub:'8pm–12am'},
+    {key:'avg',         label:'All Day',   sub:'',          color:'#ffffff'},
+    {key:'overnight',   label:'Overnight', sub:'12am–6am',  color:'#3498db'},
+    {key:'morning',     label:'Morn Peak', sub:'6am–10am',  color:'#f39c12'},
+    {key:'midday',      label:'Midday',    sub:'10am–4pm',  color:'#2ed573'},
+    {key:'evening',     label:'Eve Peak',  sub:'4pm–8pm',   color:'#e74c3c'},
+    {key:'late_evening',label:'Late Eve',  sub:'8pm–12am',  color:'#9b59b6'},
   ];
 
   // Limit to 60 days
   const todDays = daysDesc.slice(0, 60);
+  const todDaysAsc = [...todDays].reverse();
 
   t += '<div class="chart-card" style="padding:12px 14px;margin-top:8px;overflow-x:auto">';
   t += '<div class="chart-title" style="margin-bottom:8px">Daily Average by Time of Day ($/MWh)</div>';
@@ -4392,16 +4393,19 @@ function _renderPriceHistCharts(data, liveData) {
   }
   t += '</div>';
 
-  // Cap prices button
+  // Cap prices button — always white
   const capOn = window._todCapPrices;
-  t += `<div style="margin-bottom:10px">
+  t += `<div style="margin-bottom:12px">
     <button onclick="window._todCapPrices=!window._todCapPrices;_renderPriceHistCharts(window._priceHistData,window._liveDataRef)"
       style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;cursor:pointer;
-      border:1px solid ${capOn?selCol:'#475569'};background:${capOn?selCol+'33':'transparent'};
-      color:${capOn?selCol:'#64748b'}">
+      border:1px solid ${capOn?'#ffffff':'#475569'};background:${capOn?'#ffffff22':'transparent'};
+      color:${capOn?'#ffffff':'#64748b'}">
       ${capOn?'✓ ':''} Cap prices at $300
     </button>
   </div>`;
+
+  // TOD chart
+  t += '<div class="chart-container" style="height:240px;margin-bottom:12px"><canvas id="todChart"></canvas></div>';
 
   t += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px">';
   t += '<tr>';
@@ -4439,6 +4443,55 @@ function _renderPriceHistCharts(data, liveData) {
   t += '</table></div>';
 
   tableDiv.innerHTML = t;
+
+  // Draw TOD chart
+  const todCtx = document.getElementById('todChart');
+  if (todCtx) {
+    destroyChart('tod');
+    const todLabels = todDaysAsc.map(d => {
+      const dt = new Date(d + 'T00:00:00');
+      return dt.toLocaleDateString('en-AU', {day:'numeric', month:'short'});
+    });
+    const todDatasets = TOD_COLS.map(col => {
+      const dp_data = todDaysAsc.map(d => {
+        const dp = data[selRegion]?.[d];
+        const isToday = d === todayStr;
+        const cnt = col.key === 'avg' ? dp?.count : dp?.tod_count?.[col.key];
+        const minCounts = {avg:0, overnight:20, morning:14, midday:20, evening:14, late_evening:14};
+        const enoughData = !isToday || col.key === 'avg' || (cnt !== undefined && cnt >= minCounts[col.key]);
+        if (!enoughData) return null;
+        if (col.key === 'avg') return capOn ? (dp?.energy_avg ?? null) : (dp?.avg ?? null);
+        return capOn ? (dp?.tod_energy?.[col.key] ?? null) : (dp?.tod?.[col.key] ?? null);
+      });
+      return {
+        label: col.label,
+        data: dp_data,
+        borderColor: col.color,
+        backgroundColor: 'transparent',
+        borderWidth: col.key === 'avg' ? 2 : 1.5,
+        pointRadius: 0,
+        tension: 0.3,
+        spanGaps: false,
+      };
+    });
+    charts.tod = new Chart(todCtx, {
+      type: 'line',
+      data: { labels: todLabels, datasets: todDatasets },
+      options: { ...CHART_DEFAULTS,
+        plugins: { ...CHART_DEFAULTS.plugins,
+          legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+          tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: { label: c => c.raw === null ? null : ` ${c.dataset.label}: $${c.raw.toFixed(2)}/MWh` }
+          }
+        },
+        scales: {
+          x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:45,autoSkip:true,maxTicksLimit:12}, grid:{color:'#1e2d4544'} },
+          y: { ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)}, grid:{color:'#1e2d45'}, beginAtZero:false }
+        }
+      }
+    });
+  }
+
   // Store liveData ref for re-render on region switch
   window._liveDataRef = liveData;
 }
