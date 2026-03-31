@@ -5396,7 +5396,7 @@ function drawDMinus1PriceChart(data) {
       borderColor: color, backgroundColor: color + '18',
       borderWidth: pm[slots[0]]?.thick ? 2 : 1.5,
       pointRadius: step === 30 ? 3 : 0,
-      tension: step === 30 ? 0.2 : 0, spanGaps: step === 30,
+      tension: step === 30 ? 0.2 : 0, spanGaps: true,
     });
   }
 
@@ -5507,14 +5507,14 @@ function drawDMinus1RenewChart(data) {
       data: slots.map(l => solarLookup[l] ?? null),
       borderColor: colSolar, backgroundColor: colSolar + 'cc',
       borderWidth: 1, pointRadius: 0, tension: 0.2,
-      fill: 'origin', stack: 'renew', spanGaps: false,
+      fill: 'origin', stack: 'renew', spanGaps: true,
     });
     if (showWind && Object.keys(windLookup).length) datasets.push({
       label: REGION_SHORT[r] + ' Wind',
       data: slots.map(l => windLookup[l] ?? null),
       borderColor: col, backgroundColor: col + 'cc',
       borderWidth: 1.5, pointRadius: 0, tension: 0.2,
-      fill: 'stack', stack: 'renew', spanGaps: false,
+      fill: 'stack', stack: 'renew', spanGaps: true,
     });
   }
 
