@@ -374,7 +374,7 @@ ORIGIN_DUIDS: set = {
     # QLD
     "DDPS1", "MSTUART1", "MSTUART2", "MSTUART3", "ROMA_7",
     "CLARESF1", "DDSF1", "DAYDSF1",
-    "SNB01",
+    "SNB01", "SN02",
     # NSW
     "ER01", "ER02", "ER03", "ER04",
     "URANQ1", "URANQ2", "URANQ3", "URANQ4",
@@ -398,6 +398,7 @@ ORIGIN_DUIDS: set = {
 # Only needed where AEMO's registered name differs from what Origin calls it.
 ORIGIN_DISPLAY_NAMES: dict = {
     "SNB01":    "Supernode Battery",
+    "SN02":     "Supernode 2",
     "OSB-AG":   "Osborne Cogen",
     "ROMA_7":   "Roma Gas",
     "BNGSF1":   "Bungala Solar 1",
