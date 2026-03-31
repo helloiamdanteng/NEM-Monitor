@@ -278,6 +278,13 @@ let stationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
 let _slowPollActive = false;
 let _genPollActive  = false;
 
+// D-1 fuel mix + IC chart state (independent of gen page)
+let dm1GenRegion     = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+let dm1GenMultiSelect = false;
+let dm1PriceFilter   = new Set();
+let dm1PriceWhite    = false;
+let dm1ShowRooftop   = false;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function priceClass(v) {
@@ -5134,11 +5141,54 @@ function renderDMinus1(data) {
   html += `<button onclick="toggleDm1RenewFuel('wind')" id="dm1rr-wind" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:${window._dm1RenewWind?'#34d39933':'transparent'};color:#34d399;cursor:pointer;opacity:${window._dm1RenewWind?'1':'0.35'}">💨 Wind</button>`;
   html += '</div></div>';
 
+  // ── Fuel mix chart ────────────────────────────────────────────────────────────
+  const dm1Fc = (latestData && latestData.fuel_colors) || {};
+  const dm1IsNEM = REGIONS.every(r => dm1GenRegion.has(r));
+  html += '<div class="section-title" style="margin-top:8px">NEM Fuel Mix</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+  html += '<div class="region-pills" style="margin-bottom:0;flex:1">';
+  html += `<button class="region-pill ${dm1IsNEM?'active':''}" style="color:#94a3b8;border-color:#94a3b8" onclick="toggleDm1GenRegion('NEM')">NEM</button>`;
+  for (const r of REGIONS) {
+    const col = REGION_COLORS[r]; const on = dm1GenRegion.has(r);
+    html += `<button class="region-pill ${on?'active':''}" style="color:${col};border-color:${col}" onclick="toggleDm1GenRegion('${r}')">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div>';
+  html += `<button onclick="toggleDm1GenRooftop()" style="font-family:var(--font-mono);font-size:10px;padding:5px 10px;border-radius:20px;cursor:pointer;white-space:nowrap;border:1px solid ${dm1ShowRooftop?'#ffd700':'#475569'};background:${dm1ShowRooftop?'#ffd70022':'transparent'};color:${dm1ShowRooftop?'#ffd700':'#94a3b8'}">☀️ RT Solar</button>`;
+  html += '</div>';
+  html += `<div style="margin-top:5px;margin-bottom:2px"><button onclick="toggleDm1GenMultiSelect()" style="font-family:var(--font-mono);font-size:9px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid ${dm1GenMultiSelect?'#94a3b8':'#334155'};background:${dm1GenMultiSelect?'#94a3b822':'transparent'};color:${dm1GenMultiSelect?'#94a3b8':'#475569'}">${dm1GenMultiSelect?'✓ ':''}Select Multiple</button></div>`;
+  html += '<div class="chart-card"><div class="chart-title">Loading…</div>';
+  html += '<div class="chart-container" style="height:280px"><canvas id="dm1FuelMixChart"></canvas></div>';
+  html += '</div>';
+  // Price toggles
+  const dm1AllPricesOff = dm1PriceFilter.size === 0;
+  html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center">';
+  html += `<button onclick="toggleDm1GenPriceOff()" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid #475569;background:${dm1AllPricesOff?'#47556933':'transparent'};color:${dm1AllPricesOff?'#94a3b8':'#475569'}">OFF</button>`;
+  for (const r of REGIONS) {
+    const col = REGION_COLORS[r]; const on = dm1PriceFilter.has(r);
+    html += `<button onclick="toggleDm1GenPrice('${r}')" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid ${on?col:'#475569'};background:${on?col+'33':'transparent'};color:${on?col:'#475569'}">${REGION_SHORT[r]}$</button>`;
+  }
+  html += `<button onclick="toggleDm1GenPriceWhite()" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;margin-left:auto;border:1px solid ${dm1PriceWhite?'#ffffff':'#475569'};background:${dm1PriceWhite?'#ffffff22':'transparent'};color:${dm1PriceWhite?'#ffffff':'#475569'}">WHITE</button>`;
+  html += '</div>';
+  // Legend
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  for (const [fuel, color] of Object.entries(dm1Fc)) {
+    if (fuel === 'Rooftop Solar' && !dm1ShowRooftop) continue;
+    html += `<div style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:#94a3b8"><div style="width:10px;height:10px;border-radius:2px;background:${color}"></div>${fuel}</div>`;
+  }
+  html += `<div style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:#94a3b8"><div style="width:18px;height:2px;background:#ffffff;border-radius:1px"></div>Demand + Non-Sched</div>`;
+  html += '</div>';
+
+  // ── Interconnector chart ───────────────────────────────────────────────────────
+  html += '<div class="section-title" style="margin-top:16px">Interconnector Flows</div>';
+  html += '<div class="chart-card"><div class="chart-title">Actuals</div>';
+  html += '<div class="chart-container" style="height:240px"><canvas id="dm1IcChart"></canvas></div>';
+  html += '<div id="dm1IcLegend" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>';
+  html += '</div>';
+
   // Store yesterday's date string for the chart loader
   window._dm1YestStr = yestStr;
   return html;
 }
-
 // ── D-1 date helpers ─────────────────────────────────────────────────────────
 // Store selected date as plain {y,m,d} integers to avoid all TZ issues
 // _dMinusSel = {y:2026, m:3, d:19}  (1-indexed month)
@@ -5268,6 +5318,8 @@ async function dMinusLoadPrices(dateStr) {
   destroyChart('dm1Demand');
   destroyChart('dm1Renew');
   destroyChart('dm1Fuel');
+  destroyChart('dm1FuelMix');
+  destroyChart('dm1Ic');
 
   try {
     const fast = await fetch(`/api/historical_day_fast?date=${dateStr}`).then(r => r.json());
@@ -5280,6 +5332,7 @@ async function dMinusLoadPrices(dateStr) {
     drawDMinus1PriceChart(fast);
     drawDMinus1DemandChart(fast);
     drawDMinus1RenewChart(fast);
+    drawDm1IcChart(fast);
     // Load Origin portfolio in parallel
     _loadDm1Portfolio();
 
@@ -5287,7 +5340,8 @@ async function dMinusLoadPrices(dateStr) {
     if (fuel && !fuel.error && fuel.fuel_history) {
       window._dMinus1Data = { ...fast, fuel_history: fuel.fuel_history };
       drawDMinus1RenewChart(window._dMinus1Data);
-      }
+      drawDm1FuelMixChart(window._dMinus1Data);
+    }
     if (status) status.textContent = '';
   } catch(e) {
     if (status) status.textContent = `Error: ${e.message}`;
@@ -5808,6 +5862,318 @@ async function _loadDm1Portfolio() {
     const priceData = window._dMinus1Data?.dispatch_prices_5min || {};
     _drawDm1PortfolioChart(stationMap, priceData);
   } catch(e) { console.warn('D-1 portfolio load failed:', e); }
+}
+
+// ── D-1 fuel mix + IC toggle functions ──────────────────────────────────────
+function _dm1UpdateGenButtons() {
+  // Update region pill active states
+  const isNEM = REGIONS.every(r => dm1GenRegion.has(r));
+  const nemBtn = document.querySelector('[onclick="toggleDm1GenRegion(\'NEM\')"]');
+  if (nemBtn) nemBtn.classList.toggle('active', isNEM);
+  for (const r of REGIONS) {
+    const btn = document.querySelector(`[onclick="toggleDm1GenRegion('${r}')"]`);
+    if (btn) btn.classList.toggle('active', dm1GenRegion.has(r));
+  }
+  // Update price button states
+  const allOff = dm1PriceFilter.size === 0;
+  const offBtn = document.querySelector('[onclick="toggleDm1GenPriceOff()"]');
+  if (offBtn) { offBtn.style.background = allOff ? '#47556933' : 'transparent'; offBtn.style.color = allOff ? '#94a3b8' : '#475569'; }
+  for (const r of REGIONS) {
+    const btn = document.querySelector(`[onclick="toggleDm1GenPrice('${r}')"]`);
+    if (!btn) continue;
+    const col = REGION_COLORS[r]; const on = dm1PriceFilter.has(r);
+    btn.style.borderColor = on ? col : '#475569';
+    btn.style.background  = on ? col+'33' : 'transparent';
+    btn.style.color       = on ? col : '#475569';
+  }
+  const multiBtn = document.querySelector('[onclick="toggleDm1GenMultiSelect()"]');
+  if (multiBtn) {
+    multiBtn.style.borderColor = dm1GenMultiSelect ? '#94a3b8' : '#334155';
+    multiBtn.style.background  = dm1GenMultiSelect ? '#94a3b822' : 'transparent';
+    multiBtn.style.color       = dm1GenMultiSelect ? '#94a3b8' : '#475569';
+    multiBtn.textContent       = (dm1GenMultiSelect ? '✓ ' : '') + 'Select Multiple';
+  }
+}
+
+function toggleDm1GenRegion(r) {
+  if (r === 'NEM') {
+    const allOn = REGIONS.every(x => dm1GenRegion.has(x));
+    allOn ? dm1GenRegion.clear() : REGIONS.forEach(x => dm1GenRegion.add(x));
+    dm1PriceFilter.clear();
+  } else if (dm1GenMultiSelect) {
+    dm1GenRegion.has(r) ? dm1GenRegion.delete(r) : dm1GenRegion.add(r);
+  } else {
+    const alreadyOnly = dm1GenRegion.size === 1 && dm1GenRegion.has(r);
+    if (alreadyOnly) { dm1GenRegion = new Set(REGIONS); dm1PriceFilter.clear(); }
+    else { dm1GenRegion = new Set([r]); dm1PriceFilter = new Set([r]); }
+  }
+  _dm1UpdateGenButtons();
+  if (window._dMinus1Data) drawDm1FuelMixChart(window._dMinus1Data);
+}
+function toggleDm1GenMultiSelect() {
+  dm1GenMultiSelect = !dm1GenMultiSelect;
+  if (!dm1GenMultiSelect && dm1GenRegion.size !== 1) { dm1GenRegion = new Set(REGIONS); dm1PriceFilter.clear(); }
+  _dm1UpdateGenButtons();
+  if (window._dMinus1Data) drawDm1FuelMixChart(window._dMinus1Data);
+}
+function toggleDm1GenRooftop() {
+  dm1ShowRooftop = !dm1ShowRooftop;
+  const btn = document.querySelector('[onclick="toggleDm1GenRooftop()"]');
+  if (btn) { btn.style.borderColor = dm1ShowRooftop ? '#ffd700' : '#475569'; btn.style.background = dm1ShowRooftop ? '#ffd70022' : 'transparent'; btn.style.color = dm1ShowRooftop ? '#ffd700' : '#94a3b8'; }
+  if (window._dMinus1Data) drawDm1FuelMixChart(window._dMinus1Data);
+}
+function toggleDm1GenPrice(r) {
+  dm1PriceFilter.has(r) ? dm1PriceFilter.delete(r) : dm1PriceFilter.add(r);
+  _dm1UpdateGenButtons();
+  if (window._dMinus1Data) drawDm1FuelMixChart(window._dMinus1Data);
+}
+function toggleDm1GenPriceOff() {
+  dm1PriceFilter.clear();
+  _dm1UpdateGenButtons();
+  if (window._dMinus1Data) drawDm1FuelMixChart(window._dMinus1Data);
+}
+function toggleDm1GenPriceWhite() {
+  dm1PriceWhite = !dm1PriceWhite;
+  const btn = document.querySelector('[onclick="toggleDm1GenPriceWhite()"]');
+  if (btn) { btn.style.borderColor = dm1PriceWhite ? '#ffffff' : '#475569'; btn.style.background = dm1PriceWhite ? '#ffffff22' : 'transparent'; btn.style.color = dm1PriceWhite ? '#ffffff' : '#475569'; }
+  if (window._dMinus1Data) drawDm1FuelMixChart(window._dMinus1Data);
+}
+
+function drawDm1FuelMixChart(data) {
+  destroyChart('dm1FuelMix');
+  const ctx = document.getElementById('dm1FuelMixChart');
+  if (!ctx) return;
+  data = data || window._dMinus1Data || {};
+  const fuelHist = data.fuel_history || {};
+  const fc = (latestData && latestData.fuel_colors) || {};
+  const FUEL_ORDER = ['Wind','Solar','Brown Coal','Black Coal','Gas','Hydro','Battery','Rooftop Solar','Liquid','Other'];
+  const fuelOrderFiltered = FUEL_ORDER.filter(f => f !== 'Rooftop Solar' || dm1ShowRooftop);
+  const activeRegions = REGIONS.filter(r => dm1GenRegion.has(r));
+  const regionLabel = activeRegions.length === REGIONS.length ? 'NEM' : activeRegions.map(r => REGION_SHORT[r]).join('+');
+  const card = ctx.closest('.chart-card');
+
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const histLookup = {};
+  for (const r of activeRegions) {
+    histLookup[r] = {};
+    for (const pt of (fuelHist[r] || [])) histLookup[r][pt.interval] = pt;
+  }
+
+  const demHist = data.op_demand_history || data.demand_history || {};
+  const demLookup = {};
+  for (const r of activeRegions) {
+    demLookup[r] = {};
+    for (const pt of (demHist[r] || [])) demLookup[r][pt.interval] = pt.demand;
+  }
+
+  const activeFuels = fuelOrderFiltered.filter(fuel =>
+    fuel !== 'Battery' &&
+    activeRegions.some(r => (fuelHist[r]||[]).some(pt => (pt[fuel]||0) > 0))
+  );
+
+  const actualDatasets = activeFuels.map(fuel => {
+    const color = fc[fuel] || '#95a5a6';
+    return {
+      label: fuel,
+      data: allSlots.map(l => {
+        const hasData = activeRegions.some(r => histLookup[r]?.[l]);
+        if (!hasData) return null;
+        return Math.round(activeRegions.reduce((s,r) => s + (histLookup[r]?.[l]?.[fuel]||0), 0));
+      }),
+      backgroundColor: color+'cc', borderColor: color,
+      borderWidth: 0.5, fill: true, pointRadius: 0,
+      tension: 0.2, stack: 'actual', spanGaps: true, yAxisID: 'y', order: 1,
+    };
+  });
+
+  const battColor = fc['Battery'] || '#9b59b6';
+  const battDataset = {
+    label: 'Battery',
+    data: allSlots.map(l => {
+      const hasData = activeRegions.some(r => histLookup[r]?.[l]);
+      if (!hasData) return null;
+      return Math.round(activeRegions.reduce((s,r) => s + (histLookup[r]?.[l]?.['Battery']||0), 0));
+    }),
+    backgroundColor: battColor+'cc', borderColor: battColor,
+    borderWidth: 0.5, fill: true, pointRadius: 0,
+    tension: 0.2, stack: 'actual', spanGaps: true, yAxisID: 'y', order: 1,
+  };
+
+  const demValMap = {};
+  for (const slot of allSlots) {
+    const hasData = activeRegions.some(r => demLookup[r]?.[slot] !== undefined);
+    if (!hasData) continue;
+    demValMap[slot] = Math.round(activeRegions.reduce((s,r) => s + (demLookup[r]?.[slot]??0), 0));
+  }
+  const demDataset = {
+    label: 'Demand + NonSched',
+    data: allSlots.map(l => demValMap[l] ?? null),
+    borderColor: '#ffffff', backgroundColor: 'transparent',
+    borderWidth: 2, pointRadius: 0, tension: 0.2,
+    spanGaps: true, fill: false, yAxisID: 'y', order: -1,
+  };
+
+  const priceDatasets = [];
+  if (dm1PriceFilter.size > 0) {
+    const priceData = data.dispatch_prices_5min || {};
+    for (const r of REGIONS) {
+      if (!dm1PriceFilter.has(r)) continue;
+      const color = dm1PriceWhite ? '#ffffff' : REGION_COLORS[r];
+      const pm = {};
+      (priceData[r] || []).forEach(p => { pm[p.interval] = p.rrp; });
+      priceDatasets.push({
+        label: `${REGION_SHORT[r]} Price`,
+        data: allSlots.map(t => pm[t] ?? null),
+        borderColor: color, backgroundColor: 'transparent',
+        borderWidth: 1, pointRadius: 0, tension: 0.2,
+        spanGaps: true, fill: false, yAxisID: 'yPrice', order: 0,
+      });
+    }
+  }
+
+  const allDatasets = [...actualDatasets, battDataset, demDataset, ...priceDatasets];
+  if (card) card.querySelector('.chart-title').textContent = `${regionLabel} — fuel mix actuals`;
+
+  charts.dm1FuelMix = new Chart(ctx, {
+    type: 'line', data: { labels: allSlots, datasets: allDatasets },
+    options: { ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins,
+        legend: { display: false },
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+          filter: i => i.raw !== null && i.raw !== 0,
+          callbacks: {
+            label: c => {
+              if (c.raw === null || c.raw <= 0) return null;
+              if ((c.dataset.label||'').includes('Price')) return ` ${c.dataset.label}: $${Number(c.raw).toFixed(2)}/MWh`;
+              return ` ${c.dataset.label}: ${fmt(c.raw)} MW`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
+               callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null},
+             grid:{color:'#1e2d4544'} },
+        y: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}},
+             grid:{color:'#1e293b'},
+             title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}} },
+        ...(dm1PriceFilter.size > 0 ? { yPrice: {
+          type:'linear', position:'right',
+          ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
+          grid:{drawOnChartArea:false},
+          title:{display:true,text:'$/MWh',color:'#94a3b8',font:{size:8}}
+        }} : {})
+      }
+    }
+  });
+}
+
+function drawDm1IcChart(data) {
+  destroyChart('dm1Ic');
+  const ctx = document.getElementById('dm1IcChart');
+  if (!ctx) return;
+  data = data || window._dMinus1Data || {};
+  const hist  = data.ic_history || {};
+  const icIds = Object.keys(hist).sort();
+
+  const legendEl = document.getElementById('dm1IcLegend');
+
+  if (icIds.length === 0) {
+    const card = ctx.closest('.chart-card');
+    if (card) card.querySelector('.chart-title').textContent = 'IC flows — no data';
+    ctx.style.display = 'none';
+    if (legendEl) legendEl.innerHTML = '';
+    return;
+  }
+  ctx.style.display = '';
+
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const IC_COLORS = ['#00d4ff','#ff6b35','#2ed573','#ffd32a','#9b59b6','#e74c3c'];
+  const datasets = [];
+
+  icIds.forEach((id, i) => {
+    const color = IC_COLORS[i % IC_COLORS.length];
+    const hm = {}; (hist[id] || []).forEach(p => { hm[p.interval] = p.flow; });
+    datasets.push({
+      label: id, icId: id, _baseColor: color,
+      data: allSlots.map(l => hm[l] !== undefined ? hm[l] : null),
+      borderColor: color, backgroundColor: 'transparent',
+      borderWidth: 1.5, pointRadius: 0, tension: 0.3, spanGaps: true,
+    });
+  });
+
+  charts.dm1Ic = new Chart(ctx, {
+    type: 'line', data: { labels: allSlots, datasets },
+    options: { ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins,
+        legend: { display: false },
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+          filter: i => i.raw !== null,
+          callbacks: { label: c => c.raw !== null ? ` ${c.dataset.label}: ${c.raw>0?'+':''}${fmt(c.raw)} MW` : null }
+        }
+      },
+      scales: { ...CHART_DEFAULTS.scales,
+        x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
+               callback:(v,i) => allSlots[i]?.endsWith(':00') ? allSlots[i] : null},
+             grid:{color:'#1e2d4544'} },
+        y: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},callback:v=>(v>0?'+':'')+v.toLocaleString()},
+             grid:{color:'#1e293b'},
+             title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}} }
+      }
+    }
+  });
+
+  // Build IC legend with highlight toggle
+  if (legendEl) {
+    legendEl.innerHTML = '';
+    icIds.forEach((id, i) => {
+      const color = IC_COLORS[i % IC_COLORS.length];
+      const safeId = id.replace(/[^a-z0-9]/gi,'_');
+      legendEl.innerHTML += `<button id="dm1ic-btn-${safeId}" data-active="0" onclick="toggleDm1IcHighlight('${id}')"
+        style="display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;
+        color:${color};background:transparent;border:1px solid ${color}33;border-radius:20px;
+        padding:3px 8px;cursor:pointer;transition:all 0.15s">
+        <div style="width:16px;height:2px;background:${color};border-radius:1px;flex-shrink:0"></div>${id}
+      </button>`;
+    });
+  }
+}
+
+function toggleDm1IcHighlight(id) {
+  const chart = charts.dm1Ic;
+  if (!chart) return;
+  const allIds = [...new Set(chart.data.datasets.filter(d => d.icId).map(d => d.icId))];
+  const safeId = id.replace(/[^a-z0-9]/gi,'_');
+  const btn = document.getElementById('dm1ic-btn-' + safeId);
+  const alreadySelected = btn && btn.dataset.active === '1';
+  if (alreadySelected) {
+    chart.data.datasets.forEach((ds, i) => { ds.borderWidth = 1.5; ds.borderColor = ds._baseColor; chart.getDatasetMeta(i).hidden = false; });
+    allIds.forEach(icId => {
+      const b = document.getElementById('dm1ic-btn-' + icId.replace(/[^a-z0-9]/gi,'_'));
+      if (b) { b.dataset.active = '0'; b.style.opacity = '1'; b.style.fontWeight = '400'; b.style.borderWidth = '1px'; }
+    });
+  } else {
+    chart.data.datasets.forEach((ds, i) => {
+      chart.getDatasetMeta(i).hidden = false;
+      ds.borderWidth = ds.icId === id ? 3.5 : 1;
+      ds.borderColor = ds.icId === id ? ds._baseColor : (ds._baseColor||'#fff')+'44';
+    });
+    allIds.forEach(icId => {
+      const b = document.getElementById('dm1ic-btn-' + icId.replace(/[^a-z0-9]/gi,'_'));
+      if (!b) return;
+      if (icId === id) { b.dataset.active = '1'; b.style.opacity = '1'; b.style.fontWeight = '700'; b.style.borderWidth = '2px'; }
+      else { b.dataset.active = '0'; b.style.opacity = '0.3'; b.style.fontWeight = '400'; b.style.borderWidth = '1px'; }
+    });
+  }
+  chart.update('none');
 }
 
 function drawDMinus1Charts(data) {
