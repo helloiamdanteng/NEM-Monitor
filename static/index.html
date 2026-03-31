@@ -979,7 +979,8 @@ function toggleGenPriceOff() {
 function toggleOriginPrice(r) {
   if (originPriceFilter.has(r)) { originPriceFilter.delete(r); }
   else { originPriceFilter.add(r); }
-  if (latestData) renderPanel('origin', latestData);
+  if (currentPanel === 'dminus1') { if (latestData) renderPanel('dminus1', latestData); setTimeout(() => { if (window._dm1StationMap) _drawDm1PortfolioChart(window._dm1StationMap, window._dMinus1Data?.dispatch_prices_5min||{}); }, 50); }
+  else if (latestData) renderPanel('origin', latestData);
 }
 
 function toggleOriginHideOffline() {
@@ -989,12 +990,14 @@ function toggleOriginHideOffline() {
 
 function toggleOriginPriceOff() {
   originPriceFilter.clear();
-  if (latestData) renderPanel('origin', latestData);
+  if (currentPanel === 'dminus1') { if (latestData) renderPanel('dminus1', latestData); setTimeout(() => { if (window._dm1StationMap) _drawDm1PortfolioChart(window._dm1StationMap, window._dMinus1Data?.dispatch_prices_5min||{}); }, 50); }
+  else if (latestData) renderPanel('origin', latestData);
 }
 
 function toggleOriginPriceWhite() {
   originPriceWhite = !originPriceWhite;
-  if (latestData) renderPanel('origin', latestData);
+  if (currentPanel === 'dminus1') { if (latestData) renderPanel('dminus1', latestData); setTimeout(() => { if (window._dm1StationMap) _drawDm1PortfolioChart(window._dm1StationMap, window._dMinus1Data?.dispatch_prices_5min||{}); }, 50); }
+  else if (latestData) renderPanel('origin', latestData);
 }
 
 function toggleGenPriceWhite() {
@@ -2237,22 +2240,26 @@ function toggleOriginState(r) {
       originPriceFilter = new Set([r]); // auto-enable price for this region
     }
   }
-  if (latestData) showPanel('origin');
+  if (currentPanel === 'dminus1') {
+    if (latestData) renderPanel('dminus1', latestData);
+    setTimeout(() => { if (window._dm1StationMap) _drawDm1PortfolioChart(window._dm1StationMap, window._dMinus1Data?.dispatch_prices_5min||{}); }, 50);
+  } else if (latestData) showPanel('origin');
 }
 
 function toggleOriginMultiSelect() {
   originMultiSelect = !originMultiSelect;
   if (originMultiSelect) {
-    // Switching ON: clear prices
     originPriceFilter.clear();
   } else {
-    // Switching OFF: reset to NEM if multiple selected
     if (originStateFilter.size !== 1) {
       originStateFilter = new Set(Object.keys(ORIGIN_STATE_LABELS));
       originPriceFilter.clear();
     }
   }
-  if (latestData) showPanel('origin');
+  if (currentPanel === 'dminus1') {
+    if (latestData) renderPanel('dminus1', latestData);
+    setTimeout(() => { if (window._dm1StationMap) _drawDm1PortfolioChart(window._dm1StationMap, window._dMinus1Data?.dispatch_prices_5min||{}); }, 50);
+  } else if (latestData) showPanel('origin');
 }
 
 function _drawOriginPortfolioChart(stationMap, fc) {
@@ -5035,6 +5042,42 @@ function renderDMinus1(data) {
   let html = `<div class="section-title">D−1 — ${yestLabel}</div>`;
   html += `<span id="dMinus-status" style="font-family:var(--font-mono);font-size:10px;color:#475569"></span>`;
 
+  // ── Origin portfolio chart ────────────────────────────────────────────────
+  html += '<div class="section-title" style="margin-top:12px">Origin Portfolio</div>';
+
+  const isNEM = Object.keys(ORIGIN_STATE_LABELS).every(r => originStateFilter.has(r));
+  html += '<div class="region-pills" style="margin-bottom:8px">';
+  html += `<button class="region-pill ${isNEM?'active':''}" style="color:#94a3b8;border-color:#94a3b8" onclick="toggleOriginState('NEM')">NEM</button>`;
+  for (const [reg, label] of Object.entries(ORIGIN_STATE_LABELS)) {
+    const active = originStateFilter.has(reg);
+    const col = ORIGIN_STATE_COLORS[reg] || REGION_COLORS[reg];
+    html += `<button class="region-pill ${active?'active':''}" style="color:${col};border-color:${col}" onclick="toggleOriginState('${reg}')">${label}</button>`;
+  }
+  html += '</div>';
+  html += `<div style="margin-top:5px;margin-bottom:2px">
+    <button onclick="toggleOriginMultiSelect()"
+      style="font-family:var(--font-mono);font-size:9px;padding:3px 10px;border-radius:20px;cursor:pointer;
+      border:1px solid ${originMultiSelect?'#94a3b8':'#334155'};
+      background:${originMultiSelect?'#94a3b822':'transparent'};
+      color:${originMultiSelect?'#94a3b8':'#475569'}">
+      ${originMultiSelect?'✓ ':''}Select Multiple
+    </button>
+  </div>`;
+  html += `<div class="chart-card" style="margin-bottom:4px">
+    <div style="position:relative;height:280px"><canvas id="dm1-portfolio-chart"></canvas></div>
+  </div>`;
+  // Price toggles
+  const _dm1AllOff = originPriceFilter.size === 0;
+  html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin:-6px 0 10px">';
+  html += `<button onclick="toggleOriginPriceOff()" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid #475569;background:${_dm1AllOff?'#47556933':'transparent'};color:${_dm1AllOff?'#94a3b8':'#475569'}">OFF</button>`;
+  for (const r of Object.keys(ORIGIN_STATE_LABELS)) {
+    const color = ORIGIN_STATE_COLORS[r] || REGION_COLORS[r];
+    const on = originPriceFilter.has(r);
+    html += `<button onclick="toggleOriginPrice('${r}')" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid ${on?color:'#475569'};background:${on?color+'33':'transparent'};color:${on?color:'#475569'}">${REGION_SHORT[r]}$</button>`;
+  }
+  html += `<button onclick="toggleOriginPriceWhite()" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;margin-left:auto;border:1px solid ${originPriceWhite?'#ffffff':'#475569'};background:${originPriceWhite?'#ffffff22':'transparent'};color:${originPriceWhite?'#ffffff':'#475569'}">WHITE</button>`;
+  html += '</div>';
+
   // ── Price chart ──────────────────────────────────────────────────────────────
   html += '<div class="section-title" style="margin-top:12px">Price</div>';
   html += '<div class="chart-card"><div class="chart-title">5-min Dispatch Price ($/MWh)</div>';
@@ -5220,6 +5263,8 @@ async function dMinusLoadPrices(dateStr) {
     drawDMinus1PriceChart(fast);
     drawDMinus1DemandChart(fast);
     drawDMinus1RenewChart(fast);
+    // Load Origin portfolio in parallel
+    _loadDm1Portfolio();
 
     const fuel = await fetch(`/api/historical_day_fuel?date=${dateStr}`).then(r => r.json());
     if (fuel && !fuel.error && fuel.fuel_history) {
@@ -5582,6 +5627,116 @@ function drawDMinus1FuelChart(data) {
       legendEl.appendChild(btn);
     });
   }
+}
+
+function _drawDm1PortfolioChart(histData, priceData) {
+  const canvas = document.getElementById('dm1-portfolio-chart');
+  if (!canvas) return;
+  if (window._dm1PortfolioChart) { window._dm1PortfolioChart.destroy(); window._dm1PortfolioChart = null; }
+
+  const fc = (latestData && latestData.fuel_colors) || {};
+  const NEGATIVE_STATIONS = new Set(['Shoalhaven Pump']);
+
+  const visibleRegs = _originVisibleRegs();
+  const visibleStns = [];
+  for (const reg of [...visibleRegs].reverse())
+    for (const stn of (ORIGIN_STATION_ORDER[reg]||[]))
+      if (histData[stn]) visibleStns.push({name:stn, ...histData[stn]});
+
+  if (!visibleStns.length) return;
+
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  const genDatasets = [];
+  visibleStns.forEach(s => {
+    const col = fc[s.fuel] || '#64748b';
+    const isPump = NEGATIVE_STATIONS.has(s.name);
+    const isBatt = s.fuel === 'Battery';
+    if (isBatt) {
+      genDatasets.push({ label: s.name,
+        data: allSlots.map(t => { const v=s.histMap[t]; return v!=null ? Math.max(0,v) : null; }),
+        backgroundColor:col+'cc', borderColor:col, borderWidth:0.5, fill:'origin', stack:'pos', pointRadius:0, tension:0.2, spanGaps:false, yAxisID:'y', order:2 });
+      genDatasets.push({ label: s.name+' (chg)',
+        data: allSlots.map(t => { const v=s.histMap[t]; return v!=null ? Math.min(0,v) : null; }),
+        backgroundColor:(fc['Battery (charging)']||col)+'cc', borderColor:fc['Battery (charging)']||col,
+        borderWidth:0.5, fill:'origin', stack:'neg', pointRadius:0, tension:0.2, spanGaps:false, yAxisID:'y', order:2 });
+    } else {
+      genDatasets.push({ label: s.name,
+        data: allSlots.map(t => { const v=s.histMap[t]; return v!=null ? (isPump?Math.min(0,v):Math.max(0,v)) : null; }),
+        backgroundColor:col+'cc', borderColor:col, borderWidth:0.5, fill:'origin',
+        stack:isPump?'neg':'pos', pointRadius:0, tension:0.2, spanGaps:false, yAxisID:'y', order:2 });
+    }
+  });
+
+  const priceDatasets = [];
+  if (originPriceFilter.size > 0 && priceData) {
+    for (const reg of REGIONS) {
+      if (!originPriceFilter.has(reg)) continue;
+      const color = originPriceWhite ? '#ffffff' : REGION_COLORS[reg];
+      const pm = {};
+      (priceData[reg] || []).forEach(p => { pm[p.interval] = p.rrp; });
+      priceDatasets.push({ label: `${REGION_SHORT[reg]} Price`,
+        data: allSlots.map(t => pm[t] ?? null),
+        borderColor:color, backgroundColor:'transparent', borderWidth:1,
+        pointRadius:0, tension:0.2, spanGaps:true, fill:false, yAxisID:'yPrice', order:1 });
+    }
+  }
+
+  const datasets = [...genDatasets, ...priceDatasets];
+  const hasPrices = priceDatasets.length > 0;
+
+  window._dm1PortfolioChart = new Chart(canvas, {
+    type:'line', data:{labels:allSlots, datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{ backgroundColor:'#111827',borderColor:'#1e2d45',borderWidth:1,
+          titleColor:'#94a3b8',bodyColor:'#e2e8f0',
+          titleFont:{family:'Space Mono',size:9},bodyFont:{family:'Space Mono',size:10},
+          callbacks:{ label: c => {
+            if (c.raw===null) return null;
+            if ((c.dataset.label||'').includes('Price')) return ` ${c.dataset.label}: $${Number(c.raw).toFixed(2)}/MWh`;
+            if (c.raw<0) return ` ${c.dataset.label}: ${fmt(c.raw)} MW (charging)`;
+            return ` ${c.dataset.label}: ${fmt(c.raw)} MW`;
+          }}}
+      },
+      scales:{
+        x:{ ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,autoSkip:false,maxTicksLimit:1000,
+              callback:function(val){const l=this.getLabelForValue(val);if(!l)return null;const h=parseInt(l.split(':')[0]);return(l.endsWith(':00')&&h%3===0)?l:null;}},
+            grid:{color:'#1e293b',drawOnChartArea:true,drawTicks:false}},
+        y:{stacked:true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e293b'},
+           title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}}},
+        yPrice: hasPrices ? {type:'linear',position:'right',
+          ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)},
+          grid:{drawOnChartArea:false},
+          title:{display:true,text:'$/MWh',color:'#94a3b8',font:{size:9}}} : {display:false}
+      }
+    }
+  });
+}
+
+async function _loadDm1Portfolio() {
+  try {
+    const hist = await fetch('/api/origin_d1').then(r => r.json());
+    // Build stationMap from DUID history (same as renderOrigin)
+    const assets = (latestData && latestData.origin_assets) || {};
+    const stationMap = {};
+    for (const [duid, histArr] of Object.entries(hist)) {
+      const a = assets[duid]; if (!a) continue;
+      const key = a.station;
+      if (!stationMap[key]) stationMap[key] = { fuel: ORIGIN_FUEL_OVERRIDE[key]||a.fuel, region:a.region, duids:[], histMap:{} };
+      stationMap[key].duids.push(duid);
+      for (const pt of histArr) stationMap[key].histMap[pt.interval] = (stationMap[key].histMap[pt.interval]||0) + pt.mw;
+    }
+    window._dm1StationMap = stationMap;
+    const priceData = window._dMinus1Data?.dispatch_prices_5min || {};
+    _drawDm1PortfolioChart(stationMap, priceData);
+  } catch(e) { console.warn('D-1 portfolio load failed:', e); }
 }
 
 function drawDMinus1Charts(data) {
