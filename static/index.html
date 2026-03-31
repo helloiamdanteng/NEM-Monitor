@@ -6497,18 +6497,8 @@ function renderDm1Stations(data) {
 
   // Filter buttons
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px">';
-  html += `<button onclick="toggleDm1StationsHideOffline()" style="font-family:var(--font-mono);font-size:10px;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid ${dm1StationsHideOffline?'#2ed573':'#475569'};background:${dm1StationsHideOffline?'#2ed57322':'transparent'};color:${dm1StationsHideOffline?'#2ed573':'#94a3b8'}">${dm1StationsHideOffline?'✓':''} Hide offline</button>`;
-  html += `<button onclick="toggleDm1StationsHideSmall()" style="font-family:var(--font-mono);font-size:10px;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid ${dm1StationsHideSmall?'#2ed573':'#475569'};background:${dm1StationsHideSmall?'#2ed57322':'transparent'};color:${dm1StationsHideSmall?'#2ed573':'#94a3b8'}">${dm1StationsHideSmall?'✓':''} Hide &lt;100 MW</button>`;
+  html += `<button onclick="toggleDm1StationsHideSmall()" style="font-family:var(--font-mono);font-size:10px;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid ${dm1StationsHideSmall?'#2ed573':'#475569'};background:${dm1StationsHideSmall?'#2ed57322':'transparent'};color:${dm1StationsHideSmall?'#2ed573':'#94a3b8'}">${dm1StationsHideSmall?'✓':''} Hide &lt;100 MW cap</button>`;
   html += '</div>';
-
-  // Build station map from genData (registration) — MW comes from fuel_history D-1 data
-  const fuelHist = (window._dMinus1Data && window._dMinus1Data.fuel_history) || {};
-  // Get latest interval from fuel_history for each region
-  const latestFuelSnap = {};
-  for (const r of REGIONS) {
-    const pts = fuelHist[r] || [];
-    if (pts.length) latestFuelSnap[r] = pts[pts.length-1];
-  }
 
   const stationMap = {};
   const allGroupedRegions = [...REGIONS, ...Object.keys(grouped).filter(r => !REGIONS.includes(r))];
@@ -6519,11 +6509,9 @@ function renderDm1Stations(data) {
       if (!dm1StationsFuelFilter.has(fuel)) continue;
       for (const u of (regionFuels[fuel] || [])) {
         const key = (u.station && u.station !== u.duid) ? u.station : u.duid;
-        if (!stationMap[key]) stationMap[key] = { fuel, region, duids: [], totalMw: 0, totalCap: 0 };
+        if (!stationMap[key]) stationMap[key] = { fuel, region, duids: [], totalCap: 0 };
         stationMap[key].duids.push(u.duid);
         stationMap[key].totalCap += (u.capacity || 0);
-        // MW from live genData (best proxy since D-1 SCADA is aggregated by fuel not station)
-        stationMap[key].totalMw += (u.mw || 0);
       }
     }
   }
@@ -6531,17 +6519,15 @@ function renderDm1Stations(data) {
   const fuelRank = {}; FUEL_ORDER.forEach((f,i) => fuelRank[f] = i);
   const stations = Object.entries(stationMap).sort((a,b) => {
     const fA = fuelRank[a[1].fuel]??99, fB = fuelRank[b[1].fuel]??99;
-    return fA !== fB ? fA-fB : Math.abs(b[1].totalMw)-Math.abs(a[1].totalMw);
+    return fA !== fB ? fA-fB : b[1].totalCap - a[1].totalCap;
   });
   const visible = stations.filter(([,s]) => {
-    if (dm1StationsHideOffline && Math.abs(s.totalMw) <= 1) return false;
-    if (dm1StationsHideSmall && Math.abs(s.totalMw) < 100) return false;
+    if (dm1StationsHideSmall && s.totalCap < 100) return false;
     return true;
   });
 
   const totalDuids = Object.values(stationMap).reduce((n,s) => n+s.duids.length, 0);
-  const activeStns = stations.filter(([,s]) => Math.abs(s.totalMw) > 1).length;
-  html += `<div style="font-family:var(--font-mono);font-size:10px;color:#475569;margin-bottom:10px">${stations.length} stations · ${totalDuids} DUIDs · ${activeStns} active · showing ${visible.length}</div>`;
+  html += `<div style="font-family:var(--font-mono);font-size:10px;color:#475569;margin-bottom:10px">${stations.length} stations · ${totalDuids} DUIDs · showing ${visible.length}</div>`;
 
   if (!visible.length) {
     html += '<div style="font-family:var(--font-mono);font-size:11px;color:#475569;padding:16px 0">No stations match current filters</div>';
@@ -6558,13 +6544,8 @@ function renderDm1Stations(data) {
     }
     const regIdx = _dm1StationRegistryIdx++;
     _dm1StationRegistry[regIdx] = { duids: s.duids, name: stnName, fuel: s.fuel, region: s.region, capacity: s.totalCap };
-    const color   = REGION_COLORS[s.region] || '#64748b';
-    const mw      = s.totalMw;
-    const cap     = s.totalCap;
-    const isCharge = mw < -1; const isOn = mw > 1;
-    const mwColor = isCharge ? '#38bdf8' : (isOn ? '#2ed573' : '#475569');
-    const pct     = cap > 0 ? Math.min(Math.abs(mw)/cap*100, 100) : 0;
-    const mwStr   = isOn || isCharge ? `${mw>0?'+':''}${fmt(mw,0)}` : '—';
+    const color  = REGION_COLORS[s.region] || '#64748b';
+    const cap    = s.totalCap;
     const duidStr = s.duids.length === 1 ? s.duids[0] : s.duids.join(', ');
     html += `<div class="station-row" style="cursor:pointer" onclick="openDm1StationModal(${regIdx})">
       <div style="min-width:0;flex:1">
@@ -6573,10 +6554,9 @@ function renderDm1Stations(data) {
           <span style="color:${color}">${REGION_SHORT[s.region]}</span> · <span style="color:#64748b">${duidStr}</span>${s.duids.length>1?` <span style="color:#475569">(${s.duids.length} units)</span>`:''}
         </div>
       </div>
-      <div class="station-bar-wrap"><div class="station-bar" style="width:${pct.toFixed(1)}%;background:${mwColor}"></div></div>
-      <div style="text-align:right;min-width:56px">
-        <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${mwColor}">${mwStr}<span style="font-size:9px;color:var(--text-muted)"> MW</span>${isCharge?'<span style="font-size:8px;color:#38bdf8"> ↓</span>':''}</div>
-        <div style="font-family:var(--font-mono);font-size:9px;color:#475569">${cap>0?fmt(cap,0)+' cap':''}</div>
+      <div style="text-align:right;min-width:56px;flex-shrink:0">
+        <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:#64748b">${cap>0?fmt(cap,0):'—'}<span style="font-size:9px;color:var(--text-muted)"> MW</span></div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:#475569">cap</div>
       </div>
     </div>`;
   }
