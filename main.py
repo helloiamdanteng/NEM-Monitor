@@ -1978,6 +1978,7 @@ async def price_tod_test():
     return JSONResponse(content=result)
 
 
+@app.get("/api/historical_day")
 async def historical_day(date: str):
     """Fetch full day of historical data for D-1 page: prices, demand, fuel mix."""
     import re
