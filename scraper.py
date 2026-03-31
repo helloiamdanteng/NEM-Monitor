@@ -3796,12 +3796,16 @@ def scrape_gbb() -> dict:
             "Regional - NSW", "Regional - NT", "Regional - VIC", "Gippsland",
         }
 
-        # Determine which dates are complete (have PROD + LNGEXPORT = full settlement)
+        # Determine which dates are complete:
+        # Must have PROD + LNGEXPORT AND a full complement of rows (≥150)
+        # A partial day may have all types present but very few facilities submitted
+        MIN_COMPLETE_ROWS = 150
         complete_dates = set()
         partial_dates  = set()
         for d in all_dates:
-            types = {r["FacilityType"] for r in rows if r["GasDate"] == d}
-            if "PROD" in types and "LNGEXPORT" in types:
+            d_rows = [r for r in rows if r["GasDate"] == d]
+            types = {r["FacilityType"] for r in d_rows}
+            if "PROD" in types and "LNGEXPORT" in types and len(d_rows) >= MIN_COMPLETE_ROWS:
                 complete_dates.add(d)
             else:
                 partial_dates.add(d)
