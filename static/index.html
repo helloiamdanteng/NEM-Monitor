@@ -290,6 +290,14 @@ let dm1BattRegion      = 'NEM';
 let dm1BattShowPrices  = false;
 let dm1BattWhitePrices = true;
 
+// D-1 station view state (independent of gen page)
+let dm1StationsRegionFilter = new Set(['QLD1','NSW1','VIC1','SA1','TAS1']);
+let dm1StationsFuelFilter   = new Set(STATIONS_FUEL_ORDER);
+let dm1StationsHideOffline  = true;
+let dm1StationsHideSmall    = false;
+const _dm1StationRegistry   = {};
+let   _dm1StationRegistryIdx = 0;
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function priceClass(v) {
@@ -5247,6 +5255,11 @@ function renderDMinus1(data) {
   html += '<div class="chart-container" style="height:180px"><canvas id="dm1BattSocChart"></canvas></div>';
   html += '</div>';
 
+  // ── Station view ─────────────────────────────────────────────────────────────
+  html += '<div id="dm1-stations-section" style="margin-top:16px">';
+  html += renderDm1Stations(data);
+  html += '</div>';
+
   // Store yesterday's date string for the chart loader
   window._dm1YestStr = yestStr;
   return html;
@@ -6398,6 +6411,300 @@ function drawDm1BatteryCharts(data) {
         }
       }
     });
+  }
+}
+
+// ── D-1 station view functions ────────────────────────────────────────────────
+function toggleDm1StationRegion(r) {
+  const allOn = REGIONS.every(x => dm1StationsRegionFilter.has(x));
+  if (r === 'NEM') {
+    dm1StationsRegionFilter = allOn ? new Set() : new Set(REGIONS);
+  } else {
+    const onlyThis = dm1StationsRegionFilter.size === 1 && dm1StationsRegionFilter.has(r);
+    if (onlyThis) dm1StationsRegionFilter = new Set(REGIONS);
+    else dm1StationsRegionFilter = new Set([r]);
+  }
+  _renderDm1StationsInPlace();
+}
+
+function toggleDm1StationFuel(fuel) {
+  if (fuel === 'ALL') {
+    const allOn = STATIONS_FUEL_ORDER.every(f => dm1StationsFuelFilter.has(f));
+    allOn ? dm1StationsFuelFilter.clear() : STATIONS_FUEL_ORDER.forEach(f => dm1StationsFuelFilter.add(f));
+  } else {
+    dm1StationsFuelFilter.has(fuel) ? dm1StationsFuelFilter.delete(fuel) : dm1StationsFuelFilter.add(fuel);
+  }
+  _renderDm1StationsInPlace();
+}
+
+function toggleDm1StationsHideOffline() {
+  dm1StationsHideOffline = !dm1StationsHideOffline;
+  _renderDm1StationsInPlace();
+}
+
+function toggleDm1StationsHideSmall() {
+  dm1StationsHideSmall = !dm1StationsHideSmall;
+  _renderDm1StationsInPlace();
+}
+
+function _renderDm1StationsInPlace() {
+  const el = document.getElementById('dm1-stations-section');
+  if (el && latestData) el.innerHTML = renderDm1Stations(latestData);
+}
+
+function renderDm1Stations(data) {
+  const fc       = (latestData && latestData.fuel_colors) || {};
+  const FUEL_ORDER = ['Brown Coal','Black Coal','Gas','Hydro','Battery','Wind','Solar','Rooftop Solar','Liquid','Other'];
+  const FUEL_COLORS_PILLS = {
+    'Brown Coal':'#78350f','Black Coal':'#334155','Gas':'#f97316','Hydro':'#38bdf8',
+    'Battery':'#a78bfa','Wind':'#34d399','Solar':'#fbbf24','Rooftop Solar':'#fde68a',
+    'Liquid':'#94a3b8','Other':'#475569'
+  };
+
+  // Use grouped from genData (live registration data for DUIDs/stations)
+  if (!genData || !genData.grouped) {
+    return `<div class="section-title">DUIDs — Station View</div><div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:8px">Loading generator data…</div>`;
+  }
+  const grouped = genData.grouped;
+
+  // Reset registry
+  Object.keys(_dm1StationRegistry).forEach(k => delete _dm1StationRegistry[k]);
+  _dm1StationRegistryIdx = 0;
+
+  let html = '<div class="section-title">DUIDs — Station View</div>';
+
+  // Region pills
+  const isNEM = REGIONS.every(r => dm1StationsRegionFilter.has(r));
+  html += '<div class="region-pills">';
+  html += `<button class="region-pill ${isNEM?'active':''}" style="color:#94a3b8;border-color:#94a3b8" onclick="toggleDm1StationRegion('NEM')">NEM</button>`;
+  for (const r of REGIONS) {
+    const active = !isNEM && dm1StationsRegionFilter.has(r) ? 'active' : '';
+    const col = REGION_COLORS[r];
+    html += `<button class="region-pill ${active}" style="color:${col};border-color:${col}" onclick="toggleDm1StationRegion('${r}')">${REGION_SHORT[r]}</button>`;
+  }
+  html += '</div>';
+
+  // Fuel pills
+  const allFuelsOn = STATIONS_FUEL_ORDER.every(f => dm1StationsFuelFilter.has(f));
+  html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 10px">';
+  html += `<button onclick="toggleDm1StationFuel('ALL')" style="font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid #94a3b8;background:${allFuelsOn?'#94a3b822':'transparent'};color:${allFuelsOn?'#94a3b8':'#475569'}">ALL</button>`;
+  for (const fuel of STATIONS_FUEL_ORDER) {
+    const on = dm1StationsFuelFilter.has(fuel); const col = FUEL_COLORS_PILLS[fuel] || '#94a3b8';
+    html += `<button onclick="toggleDm1StationFuel('${fuel}')" style="font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid ${on?col:col+'44'};background:${on?col+'22':'transparent'};color:${on?col:col+'44'}">${fuel}</button>`;
+  }
+  html += '</div>';
+
+  // Filter buttons
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px">';
+  html += `<button onclick="toggleDm1StationsHideOffline()" style="font-family:var(--font-mono);font-size:10px;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid ${dm1StationsHideOffline?'#2ed573':'#475569'};background:${dm1StationsHideOffline?'#2ed57322':'transparent'};color:${dm1StationsHideOffline?'#2ed573':'#94a3b8'}">${dm1StationsHideOffline?'✓':''} Hide offline</button>`;
+  html += `<button onclick="toggleDm1StationsHideSmall()" style="font-family:var(--font-mono);font-size:10px;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid ${dm1StationsHideSmall?'#2ed573':'#475569'};background:${dm1StationsHideSmall?'#2ed57322':'transparent'};color:${dm1StationsHideSmall?'#2ed573':'#94a3b8'}">${dm1StationsHideSmall?'✓':''} Hide &lt;100 MW</button>`;
+  html += '</div>';
+
+  // Build station map from genData (registration) — MW comes from fuel_history D-1 data
+  const fuelHist = (window._dMinus1Data && window._dMinus1Data.fuel_history) || {};
+  // Get latest interval from fuel_history for each region
+  const latestFuelSnap = {};
+  for (const r of REGIONS) {
+    const pts = fuelHist[r] || [];
+    if (pts.length) latestFuelSnap[r] = pts[pts.length-1];
+  }
+
+  const stationMap = {};
+  const allGroupedRegions = [...REGIONS, ...Object.keys(grouped).filter(r => !REGIONS.includes(r))];
+  for (const region of allGroupedRegions) {
+    if (REGIONS.includes(region) && !dm1StationsRegionFilter.has(region)) continue;
+    const regionFuels = grouped[region] || {};
+    for (const fuel of FUEL_ORDER) {
+      if (!dm1StationsFuelFilter.has(fuel)) continue;
+      for (const u of (regionFuels[fuel] || [])) {
+        const key = (u.station && u.station !== u.duid) ? u.station : u.duid;
+        if (!stationMap[key]) stationMap[key] = { fuel, region, duids: [], totalMw: 0, totalCap: 0 };
+        stationMap[key].duids.push(u.duid);
+        stationMap[key].totalCap += (u.capacity || 0);
+        // MW from live genData (best proxy since D-1 SCADA is aggregated by fuel not station)
+        stationMap[key].totalMw += (u.mw || 0);
+      }
+    }
+  }
+
+  const fuelRank = {}; FUEL_ORDER.forEach((f,i) => fuelRank[f] = i);
+  const stations = Object.entries(stationMap).sort((a,b) => {
+    const fA = fuelRank[a[1].fuel]??99, fB = fuelRank[b[1].fuel]??99;
+    return fA !== fB ? fA-fB : Math.abs(b[1].totalMw)-Math.abs(a[1].totalMw);
+  });
+  const visible = stations.filter(([,s]) => {
+    if (dm1StationsHideOffline && Math.abs(s.totalMw) <= 1) return false;
+    if (dm1StationsHideSmall && Math.abs(s.totalMw) < 100) return false;
+    return true;
+  });
+
+  const totalDuids = Object.values(stationMap).reduce((n,s) => n+s.duids.length, 0);
+  const activeStns = stations.filter(([,s]) => Math.abs(s.totalMw) > 1).length;
+  html += `<div style="font-family:var(--font-mono);font-size:10px;color:#475569;margin-bottom:10px">${stations.length} stations · ${totalDuids} DUIDs · ${activeStns} active · showing ${visible.length}</div>`;
+
+  if (!visible.length) {
+    html += '<div style="font-family:var(--font-mono);font-size:11px;color:#475569;padding:16px 0">No stations match current filters</div>';
+    return html;
+  }
+
+  let currentFuel = null;
+  html += '<div class="ic-list">';
+  for (const [stnName, s] of visible) {
+    if (s.fuel !== currentFuel) {
+      currentFuel = s.fuel;
+      const fuelCol = fc[s.fuel] || '#94a3b8';
+      html += `<div style="font-family:var(--font-mono);font-size:9px;font-weight:700;color:${fuelCol};padding:10px 0 4px;letter-spacing:0.08em;border-bottom:1px solid ${fuelCol}33;margin-bottom:2px">${s.fuel.toUpperCase()}</div>`;
+    }
+    const regIdx = _dm1StationRegistryIdx++;
+    _dm1StationRegistry[regIdx] = { duids: s.duids, name: stnName, fuel: s.fuel, region: s.region, capacity: s.totalCap };
+    const color   = REGION_COLORS[s.region] || '#64748b';
+    const mw      = s.totalMw;
+    const cap     = s.totalCap;
+    const isCharge = mw < -1; const isOn = mw > 1;
+    const mwColor = isCharge ? '#38bdf8' : (isOn ? '#2ed573' : '#475569');
+    const pct     = cap > 0 ? Math.min(Math.abs(mw)/cap*100, 100) : 0;
+    const mwStr   = isOn || isCharge ? `${mw>0?'+':''}${fmt(mw,0)}` : '—';
+    const duidStr = s.duids.length === 1 ? s.duids[0] : s.duids.join(', ');
+    html += `<div class="station-row" style="cursor:pointer" onclick="openDm1StationModal(${regIdx})">
+      <div style="min-width:0;flex:1">
+        <div style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text)">${stnName}</div>
+        <div style="font-family:var(--font-mono);font-size:8px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">
+          <span style="color:${color}">${REGION_SHORT[s.region]}</span> · <span style="color:#64748b">${duidStr}</span>${s.duids.length>1?` <span style="color:#475569">(${s.duids.length} units)</span>`:''}
+        </div>
+      </div>
+      <div class="station-bar-wrap"><div class="station-bar" style="width:${pct.toFixed(1)}%;background:${mwColor}"></div></div>
+      <div style="text-align:right;min-width:56px">
+        <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:${mwColor}">${mwStr}<span style="font-size:9px;color:var(--text-muted)"> MW</span>${isCharge?'<span style="font-size:8px;color:#38bdf8"> ↓</span>':''}</div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:#475569">${cap>0?fmt(cap,0)+' cap':''}</div>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+async function openDm1StationModal(regIdx) {
+  const reg = _dm1StationRegistry[regIdx];
+  if (!reg) return;
+  const { duids, name: stationName, fuel, region, capacity } = reg;
+  const fc = (latestData && latestData.fuel_colors) || {};
+  const baseColor = fc[fuel] || '#64748b';
+  const dateStr   = window._dm1YestStr || '';
+
+  document.getElementById('stationModalTitle').textContent = stationName;
+  document.getElementById('stationModalSub').textContent =
+    `${fuel}  ·  ${REGION_SHORT[region] || region}${capacity ? '  ·  ' + fmt(capacity,0) + ' MW cap' : ''}  ·  D-1`;
+  document.getElementById('stationModalStats').innerHTML = '<span style="color:#64748b">Loading…</span>';
+  document.getElementById('stationModal').classList.add('open');
+  if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
+
+  let results;
+  try {
+    results = await fetch(`/api/stations/batch_d1?duids=${duids.map(encodeURIComponent).join(',')}&date=${dateStr}`).then(r => r.json());
+  } catch(e) {
+    document.getElementById('stationModalStats').innerHTML = `<span style="color:#e74c3c">Failed to load: ${e.message}</span>`;
+    return;
+  }
+
+  results = results.filter(d => d.history && d.history.length > 0);
+  if (!results.length) {
+    document.getElementById('stationModalStats').innerHTML = '<span style="color:#64748b">No SCADA data available for D-1</span>';
+    return;
+  }
+
+  const allSlots = [];
+  for (let h = 0; h < 24; h++)
+    for (let m = 0; m < 60; m += 5)
+      allSlots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
+  // Price data from D-1 cache
+  const priceArr = (window._dMinus1Data && window._dMinus1Data.dispatch_prices_5min && window._dMinus1Data.dispatch_prices_5min[region]) || [];
+  const histPriceMap = {}; priceArr.forEach(p => { histPriceMap[p.interval] = p.rrp; });
+
+  function unitColor(idx, total) {
+    if (total <= 1) return baseColor;
+    const r=parseInt(baseColor.slice(1,3),16), g=parseInt(baseColor.slice(3,5),16), b=parseInt(baseColor.slice(5,7),16);
+    const factor = 0.5 + (idx/Math.max(total-1,1))*0.5;
+    return `rgba(${Math.round(r*factor)},${Math.round(g*factor)},${Math.round(b*factor)},0.85)`;
+  }
+
+  const datasets = [];
+  results.forEach((d, i) => {
+    const hm = {}; d.history.forEach(p => { if (p.interval) hm[p.interval] = p.mw??0; });
+    const color = unitColor(i, results.length);
+    const bgColor = color.startsWith('rgba') ? color.replace('0.85)','0.35)') : color+'59';
+    datasets.push({
+      label: d.duid,
+      data: allSlots.map(l => hm[l] !== undefined ? hm[l] : null),
+      borderColor: color, backgroundColor: bgColor,
+      borderWidth: 1.5, pointRadius: 0, tension: 0.2,
+      spanGaps: true, fill: 'origin', yAxisID: 'y', order: 2,
+    });
+  });
+  datasets.push({
+    label: 'Price (actual)',
+    data: allSlots.map(t => histPriceMap[t] ?? null),
+    borderColor: '#ffffff', backgroundColor: 'transparent',
+    borderWidth: 0.5, pointRadius: 0, tension: 0.2,
+    spanGaps: true, fill: false, yAxisID: 'yPrice', order: 1,
+  });
+
+  try {
+    const _existing = Chart.getChart('stationModalChart');
+    if (_existing) _existing.destroy();
+    if (_stationModalChart) { _stationModalChart.destroy(); _stationModalChart = null; }
+    const ctx = document.getElementById('stationModalChart');
+    _stationModalChart = new Chart(ctx, {
+      type: 'line', data: { labels: allSlots, datasets },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: results.length > 1, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6 } },
+          tooltip: { backgroundColor:'#1e293b', titleColor:'#94a3b8', bodyColor:'#e2e8f0', borderColor:'#334155', borderWidth:1,
+            callbacks: {
+              title: items => items[0]?.label || '',
+              label: c => {
+                if (c.raw===null||c.raw===undefined) return null;
+                const lbl = c.dataset.label||'';
+                if (lbl.startsWith('Price')) return ` ${lbl}: $${Number(c.raw).toFixed(2)}/MWh`;
+                if (c.raw<0) return ` ${lbl}: ${fmt(c.raw,0)} MW (charging)`;
+                return ` ${lbl}: ${fmt(c.raw,0)} MW`;
+              },
+              footer: items => {
+                const gen = items.filter(i => i.raw!==null && !String(i.dataset.label).startsWith('Price'));
+                const total = gen.reduce((s,i) => s+(i.raw||0), 0);
+                return gen.length>1 ? `Total: ${fmt(total,0)} MW` : null;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,callback(v,i){const l=this.getLabelForValue(i);return l&&l.endsWith(':00')?l:null;}}, grid:{color:'#1e293b'} },
+          y: { stacked:true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e293b'}, title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}} },
+          yPrice: { type:'linear', position:'right', ticks:{color:'#94a3b8',font:{family:'Space Mono',size:9},callback:v=>'$'+v.toFixed(0)}, grid:{drawOnChartArea:false}, title:{display:true,text:'$/MWh',color:'#94a3b8',font:{size:8}} }
+        }
+      }
+    });
+
+    // Stats
+    const latestByUnit = results.map(d => {
+      const sorted = [...d.history].sort((a,b) => a.interval<b.interval?-1:1);
+      return { duid: d.duid, mw: sorted.length ? sorted[sorted.length-1].mw : null };
+    });
+    const totalNow = latestByUnit.reduce((s,u) => s+(u.mw||0), 0);
+    let statsHtml = [`<span>Last interval: <b style="color:${baseColor}">${fmt(totalNow,0)} MW</b></span>`,
+      capacity ? `<span>Capacity: <b>${fmt(capacity,0)} MW</b></span>` : ''].filter(Boolean).join('');
+    if (results.length > 1) {
+      statsHtml += '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">' +
+        latestByUnit.map((u,i) => {
+          const color = unitColor(i, results.length);
+          return `<span style="color:${color};font-size:10px">${u.duid}: <b>${u.mw!==null?fmt(u.mw,0)+' MW':'—'}</b></span>`;
+        }).join('') + '</div>';
+    }
+    document.getElementById('stationModalStats').innerHTML = statsHtml;
+  } catch(e) {
+    document.getElementById('stationModalStats').innerHTML = `<span style="color:#e74c3c">Chart error: ${e.message}</span>`;
   }
 }
 
