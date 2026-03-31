@@ -2422,6 +2422,13 @@ async def gbb_debug():
 
         out["state_summary"] = {st:{"supply":round(v["supply"],1),"demand":round(v["demand"],1),"net":round(v["supply"]-v["demand"],1)} for st,v in by_state.items()}
         out["supply_detail"] = {st:v["detail"] for st,v in by_state.items() if v["detail"]}
+
+        # Show row counts per date to check completeness
+        out["rows_per_date"] = {}
+        for d in all_dates[-5:]:
+            d_rows = [ro for ro in rows if ro["GasDate"] == d]
+            types = {ro["FacilityType"] for ro in d_rows}
+            out["rows_per_date"][d] = {"rows": len(d_rows), "types": sorted(types)}
         return out
 
     result = await loop.run_in_executor(None, _inspect)
