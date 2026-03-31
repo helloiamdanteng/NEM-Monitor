@@ -1998,6 +1998,46 @@ async def historical_day(date: str):
         logger.error(f"historical_day error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.get("/api/historical_day_fast")
+async def historical_day_fast(date: str):
+    """Fetch prices + demand only (no SCADA fuel mix) — fast path using TradingIS archive."""
+    import re
+    if not re.match(r'^\d{8}$', date):
+        return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    from scraper import scrape_historical_day_fast
+    loop = asyncio.get_running_loop()
+    try:
+        data = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_historical_day_fast, date),
+            timeout=60.0
+        )
+        return JSONResponse(content=data)
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"error": "timeout"})
+    except Exception as e:
+        logger.error(f"historical_day_fast error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get("/api/historical_day_fuel")
+async def historical_day_fuel(date: str):
+    """Fetch fuel mix only (SCADA) — slow path, called after fast path."""
+    import re
+    if not re.match(r'^\d{8}$', date):
+        return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    from scraper import scrape_historical_day_fuel
+    loop = asyncio.get_running_loop()
+    try:
+        data = await asyncio.wait_for(
+            loop.run_in_executor(None, scrape_historical_day_fuel, date),
+            timeout=120.0
+        )
+        return JSONResponse(content=data)
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"error": "timeout"})
+    except Exception as e:
+        logger.error(f"historical_day_fuel error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.get("/api/historical_day_debug")
 async def historical_day_debug(date: str):
     """Quick debug: just check what files exist for a date, don't fetch them all."""
