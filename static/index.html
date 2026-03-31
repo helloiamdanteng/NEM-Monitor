@@ -1970,13 +1970,12 @@ function toggleIcHighlight(id) {
 const ORIGIN_FUEL_OVERRIDE = {
   'Eraring Battery': 'Battery',
   'Supernode Battery': 'Battery',
-  'Supernode 2': 'Battery',
   'Eraring': 'Black Coal',
   'Eraring Liquid': 'Liquid',
 };
 
 const ORIGIN_STATION_ORDER = {
-  QLD1: ['Darling Downs','Supernode Battery','Supernode 2','Mt Stuart','Roma Gas','Clare Solar Farm','Darling Downs Solar','Daydream Solar'],
+  QLD1: ['Darling Downs','Supernode Battery','Mt Stuart','Roma Gas','Clare Solar Farm','Darling Downs Solar','Daydream Solar'],
   NSW1: ['Eraring','Eraring Battery','Uranquinty','Shoalhaven','Shoalhaven Pump','Moree Solar Farm','Gunning Wind Farm','Eraring Liquid'],
   VIC1: ['Mortlake','Stockyard Hill'],
   SA1:  ['Osborne Cogen','Quarantine','Ladbroke Grove','Snowtown 1','Snowtown 2','Bungala Solar 1','Bungala Solar 2'],
@@ -2058,17 +2057,6 @@ function renderOrigin(data) {
   </div>`;
 
   // ── Portfolio output total ────────────────────────────────────────────────
-  let visibleMw = 0;
-  for (const reg of visibleRegs) {
-    for (const stn of (ORIGIN_STATION_ORDER[reg]||[])) {
-      if (stationMap[stn]) visibleMw += stationMap[stn].totalMw || 0;
-    }
-  }
-  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">PORTFOLIO OUTPUT TODAY</span>
-    <span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:#f39c12">${fmt(visibleMw)} <span style="font-size:9px;color:var(--text-muted)">MW</span></span>
-  </div>`;
-
   // ── Portfolio chart ───────────────────────────────────────────────────────
   html += `<div class="chart-card" style="margin-bottom:16px">
     <div style="position:relative;height:280px"><canvas id="origin-portfolio-chart"></canvas></div>
