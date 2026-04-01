@@ -6066,9 +6066,16 @@ function _drawDm1PortfolioChart(histData, priceData) {
 }
 
 async function _loadDm1Portfolio() {
+  const dateStr = window._dm1YestStr || '';
+  // Use cache if available for this date
+  if (window._dm1Cache?.date === dateStr && window._dm1Cache?.portfolio) {
+    window._dm1StationMap = window._dm1Cache.portfolio;
+    const priceData = window._dMinus1Data?.dispatch_prices_5min || {};
+    _drawDm1PortfolioChart(window._dm1Cache.portfolio, priceData);
+    return;
+  }
   try {
     const hist = await fetch('/api/origin_d1').then(r => r.json());
-    // Build stationMap from DUID history (same as renderOrigin)
     const assets = (latestData && latestData.origin_assets) || {};
     const stationMap = {};
     for (const [duid, histArr] of Object.entries(hist)) {
@@ -6079,6 +6086,7 @@ async function _loadDm1Portfolio() {
       for (const pt of histArr) stationMap[key].histMap[pt.interval] = (stationMap[key].histMap[pt.interval]||0) + pt.mw;
     }
     window._dm1StationMap = stationMap;
+    if (window._dm1Cache?.date === dateStr) window._dm1Cache.portfolio = stationMap;
     const priceData = window._dMinus1Data?.dispatch_prices_5min || {};
     _drawDm1PortfolioChart(stationMap, priceData);
   } catch(e) { console.warn('D-1 portfolio load failed:', e); }
@@ -6758,7 +6766,18 @@ async function openDm1StationModal(regIdx) {
 
   let results;
   try {
-    results = await fetch(`/api/stations/batch_d1?duids=${duids.map(encodeURIComponent).join(',')}&date=${dateStr}`).then(r => r.json());
+    // Cache station SCADA per date — key by station name
+    const cacheKey = stationName;
+    const stCache = window._dm1Cache?.stations;
+    if (window._dm1Cache?.date === dateStr && stCache?.[cacheKey]) {
+      results = stCache[cacheKey];
+    } else {
+      results = await fetch(`/api/stations/batch_d1?duids=${duids.map(encodeURIComponent).join(',')}&date=${dateStr}`).then(r => r.json());
+      if (window._dm1Cache?.date === dateStr) {
+        if (!window._dm1Cache.stations) window._dm1Cache.stations = {};
+        window._dm1Cache.stations[cacheKey] = results;
+      }
+    }
   } catch(e) {
     document.getElementById('stationModalStats').innerHTML = `<span style="color:#e74c3c">Failed to load: ${e.message}</span>`;
     return;
