@@ -4776,7 +4776,9 @@ function _renderPriceHistCharts(data, liveData) {
         val = capOn ? dp?.tod_energy?.[col.key] : dp?.tod?.[col.key];
       }
       const hasVal = enoughData && val !== undefined && val !== null;
-      t += `<td style="text-align:right;padding:5px 4px;color:${hasVal ? selCol : '#334155'};border-bottom:1px solid #1e2d4533">${hasVal ? '$'+val.toFixed(2) : '—'}</td>`;
+      const isSelectedCol = window._selectedTod === col.key;
+      const cellCol = !hasVal ? '#334155' : isSelectedCol ? '#fbbf24' : selCol;
+      t += `<td style="text-align:right;padding:5px 4px;color:${cellCol};border-bottom:1px solid #1e2d4533;font-weight:${isSelectedCol&&hasVal?'700':'400'}">${hasVal ? '$'+val.toFixed(2) : '—'}</td>`;
     }
     t += '</tr>';
   }
@@ -4811,7 +4813,7 @@ function _renderPriceHistCharts(data, liveData) {
       };
     });
 
-    let _selectedTod = null;
+    let _selectedTod = window._selectedTod || null;
     const _applyTodStyle = () => {
       const c = charts.tod;
       if (!c) return;
@@ -4867,7 +4869,10 @@ function _renderPriceHistCharts(data, liveData) {
         btn.textContent = col.label;
         btn.onclick = () => {
           _selectedTod = (_selectedTod === col.key) ? null : col.key;
+          window._selectedTod = _selectedTod;
           _applyTodStyle();
+          // Re-render table to update font colours
+          _renderPriceHistCharts(window._priceHistData, window._liveDataRef);
         };
         todLegend.appendChild(btn);
       });
