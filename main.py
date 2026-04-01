@@ -2044,12 +2044,22 @@ async def price_tod_test():
     return JSONResponse(content=result)
 
 
+# ── D-1 server-side cache — keyed by date string (YYYYMMDD) ──────────────────
+# Yesterday's data is immutable once published, so we cache indefinitely per date.
+# Cache is cleared automatically when a new day's date is requested.
+_dm1_fast_cache: dict[str, dict] = {}   # date → fast data
+_dm1_fuel_cache: dict[str, dict] = {}   # date → fuel data
+
 @app.get("/api/historical_day_fast")
 async def historical_day_fast(date: str):
-    """Fetch prices + demand only (no SCADA fuel mix) — fast path using TradingIS archive."""
+    """Fetch prices + demand only (no SCADA fuel mix) — fast path using DispatchIS/TradingIS."""
     import re
     if not re.match(r'^\d{8}$', date):
         return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    # Serve from cache if available
+    if date in _dm1_fast_cache:
+        logger.info(f"historical_day_fast: cache hit for {date}")
+        return JSONResponse(content=_dm1_fast_cache[date])
     from scraper import scrape_historical_day_fast
     loop = asyncio.get_running_loop()
     try:
@@ -2057,6 +2067,11 @@ async def historical_day_fast(date: str):
             loop.run_in_executor(None, scrape_historical_day_fast, date),
             timeout=60.0
         )
+        if data and not data.get("error"):
+            _dm1_fast_cache[date] = data
+            # Keep cache lean — only retain last 2 dates
+            for old in [k for k in _dm1_fast_cache if k != date]:
+                del _dm1_fast_cache[old]
         return JSONResponse(content=data)
     except asyncio.TimeoutError:
         return JSONResponse(status_code=504, content={"error": "timeout"})
@@ -2070,6 +2085,10 @@ async def historical_day_fuel(date: str):
     import re
     if not re.match(r'^\d{8}$', date):
         return JSONResponse(status_code=400, content={"error": "date must be YYYYMMDD"})
+    # Serve from cache if available
+    if date in _dm1_fuel_cache:
+        logger.info(f"historical_day_fuel: cache hit for {date}")
+        return JSONResponse(content=_dm1_fuel_cache[date])
     from scraper import scrape_historical_day_fuel
     loop = asyncio.get_running_loop()
     try:
@@ -2077,6 +2096,10 @@ async def historical_day_fuel(date: str):
             loop.run_in_executor(None, scrape_historical_day_fuel, date),
             timeout=120.0
         )
+        if data and not data.get("error"):
+            _dm1_fuel_cache[date] = data
+            for old in [k for k in _dm1_fuel_cache if k != date]:
+                del _dm1_fuel_cache[old]
         return JSONResponse(content=data)
     except asyncio.TimeoutError:
         return JSONResponse(status_code=504, content={"error": "timeout"})
