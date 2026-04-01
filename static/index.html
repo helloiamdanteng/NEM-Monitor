@@ -4210,10 +4210,14 @@ function drawDayAheadCharts(data) {
     const da1LabelSet = new Set();
     for (const r of REGIONS) (pdGen[r]||[]).forEach(p => { if (p.interval.startsWith(tStr)) da1LabelSet.add(p.interval); });
     const da1Labels = Array.from(da1LabelSet).sort();
-    // Plain HH:MM labels for clean x-axis display
-    const da1DisplayLabels = da1Labels.map(l => l.split(' ')[1] || l);
     console.log('[DA1 Renew] tStr:', tStr, 'tomorrow labels:', da1Labels.length);
     if (da1Labels.length) {
+      // Use a clean 30-min HH:MM spine — same approach as price/demand charts
+      const da1Slots = [];
+      for (let h = 0; h < 24; h++)
+        for (let m = 0; m < 60; m += 30)
+          da1Slots.push((h<10?'0':'')+h+':'+(m<10?'0':'')+m);
+
       const da1Datasets = [];
       const SOLAR_COLORS = {'QLD1':'#fbd07c','NSW1':'#90c8f0','VIC1':'#86e8b0','SA1':'#f0908a','TAS1':'#c49fd8'};
       for (const r of [...REGIONS].reverse()) {
@@ -4221,20 +4225,21 @@ function drawDayAheadCharts(data) {
         const solarMap = {}, windMap = {};
         (pdGen[r]||[]).forEach(p => {
           if (p.interval.startsWith(tStr)) {
-            if (p.solar != null) solarMap[p.interval] = p.solar;
-            if (p.wind  != null) windMap[p.interval]  = p.wind;
+            const hhmm = p.interval.split(' ')[1] || '';
+            if (p.solar != null) solarMap[hhmm] = p.solar;
+            if (p.wind  != null) windMap[hhmm]  = p.wind;
           }
         });
         if (Object.keys(solarMap).length && _da1Solar) da1Datasets.push({
           label: REGION_SHORT[r]+' Solar', regionId: r,
-          data: da1Labels.map(l => solarMap[l] ?? null),
+          data: da1Slots.map(l => solarMap[l] ?? null),
           borderColor: SOLAR_COLORS[r]||REGION_COLORS[r],
           backgroundColor: (SOLAR_COLORS[r]||REGION_COLORS[r])+'cc',
           borderWidth: 1, fill: 'origin', pointRadius: 0, tension: 0.2, spanGaps: true, stack: 'renew', yAxisID: 'y',
         });
         if (Object.keys(windMap).length && _da1Wind) da1Datasets.push({
           label: REGION_SHORT[r]+' Wind', regionId: r,
-          data: da1Labels.map(l => windMap[l] ?? null),
+          data: da1Slots.map(l => windMap[l] ?? null),
           borderColor: REGION_COLORS[r], backgroundColor: REGION_COLORS[r]+'cc',
           borderWidth: 1.5, fill: 'stack', pointRadius: 0, tension: 0.2, spanGaps: true, stack: 'renew', yAxisID: 'y',
         });
@@ -4243,7 +4248,7 @@ function drawDayAheadCharts(data) {
       const da1Ctx = document.getElementById('da1RenewChart');
       if (da1Ctx && da1Datasets.length) {
         charts.da1Renew = new Chart(da1Ctx, {
-          type: 'line', data: { labels: da1DisplayLabels, datasets: da1Datasets },
+          type: 'line', data: { labels: da1Slots, datasets: da1Datasets },
           options: { ...CHART_DEFAULTS,
             plugins: { ...CHART_DEFAULTS.plugins,
               legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6,
@@ -4255,9 +4260,7 @@ function drawDayAheadCharts(data) {
             },
             scales: {
               x: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,
-                autoSkip:true, maxTicksLimit:13,
-                callback(v,i){ const l=this.getLabelForValue(i); return l&&l.endsWith(':00')?l:null; }
-              }, grid:{color:'#1e2d4544'} },
+                callback:(v,i) => i%2===0?da1Slots[i]:null}, grid:{color:'#1e2d4544'} },
               y: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e293b'} }
             }
           }
