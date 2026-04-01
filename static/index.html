@@ -7478,12 +7478,12 @@ function renderAbout(data) {
         <td style="padding:6px 0;color:var(--text-muted);text-align:right">NEMWeb · MT_PASA / ST_PASA</td>
       </tr>
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 0;color:var(--text)">Wind &amp; solar forecast (D+1)</td>
+        <td style="padding:6px 0;color:var(--text)">Wind &amp; solar forecast (D+)</td>
         <td style="padding:6px 0;color:var(--text-muted);text-align:right">NEMWeb · PREDISPATCH_REGION_SOLUTION</td>
       </tr>
       <tr>
-        <td style="padding:6px 0;color:var(--text)">Weather forecast (D+)</td>
-        <td style="padding:6px 0;color:var(--text-muted);text-align:right">Open-Meteo · BOM ACCESS-G model</td>
+        <td style="padding:6px 0;color:var(--text)">7-day demand &amp; wind/solar (D+)</td>
+        <td style="padding:6px 0;color:var(--text-muted);text-align:right">NEMWeb · ST_PASA_REGIONSOLUTION</td>
       </tr>
     </table>
 
@@ -7511,6 +7511,14 @@ function renderAbout(data) {
       </tr>
     </table>
 
+    <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text);margin-bottom:8px">WEATHER DATA SOURCES</div>
+    <table style="width:100%;font-family:var(--font-mono);font-size:10px;border-collapse:collapse;margin-bottom:12px">
+      <tr>
+        <td style="padding:6px 0;color:var(--text)">7-day weather forecast (D+)</td>
+        <td style="padding:6px 0;color:var(--text-muted);text-align:right">Open-Meteo · BOM ACCESS-G model</td>
+      </tr>
+    </table>
+
     <div style="font-family:var(--font-mono);font-size:10px;font-weight:700;color:var(--text);margin-bottom:8px">DATA REFRESH</div>
     <table style="width:100%;font-family:var(--font-mono);font-size:10px;border-collapse:collapse;margin-bottom:12px">
       <tr style="border-bottom:1px solid var(--border)">
@@ -7518,15 +7526,19 @@ function renderAbout(data) {
         <td style="padding:6px 0;color:var(--accent);text-align:right">Server polling — every 5–15 min</td>
       </tr>
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 0;color:var(--text)">Outages (MTPASA) · Weather · D+ wind+solar</td>
+        <td style="padding:6px 0;color:var(--text)">Outages · Weather · D+ forecasts</td>
         <td style="padding:6px 0;color:var(--accent);text-align:right">Server polling — every 30 min</td>
       </tr>
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 0;color:var(--text)">Gas prices (STTM &amp; DWGM)</td>
-        <td style="padding:6px 0;color:var(--accent);text-align:right">Server polling — every 6 hours</td>
+        <td style="padding:6px 0;color:var(--text)">Gas (GBB production, storage, pipelines)</td>
+        <td style="padding:6px 0;color:var(--accent);text-align:right">Server cache — 1 hour TTL</td>
       </tr>
       <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 0;color:var(--text)">D-1 · Gas · Avg</td>
+        <td style="padding:6px 0;color:var(--text)">Historical average prices (Avg)</td>
+        <td style="padding:6px 0;color:var(--accent);text-align:right">Server cache — 6 hour TTL</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 0;color:var(--text)">D-1 · Gas prices · Avg</td>
         <td style="padding:6px 0;color:#f39c12;text-align:right">Fetched on demand when page opened</td>
       </tr>
       <tr>
