@@ -4962,6 +4962,11 @@ function _renderGBB(gbb) {
   const partialDates  = new Set(gbb.partial_dates  || []);
   let html = '';
 
+  // ── Disclaimer ──
+  html += `<div style="font-family:var(--font-mono);font-size:9px;color:#475569;padding:8px 10px;background:#1e293b;border-radius:6px;margin-bottom:8px;border-left:2px solid #334155">
+    Data sourced from AEMO GasBB (GasBBActualFlowStorageLast31). State supply &amp; demand totals are approximate and may not exactly match the GasBB Bulletin Board calculations.
+  </div>`;
+
   // ── State supply/demand summary table ──
   html += '<div class="chart-card" style="margin-top:8px;padding:12px 14px">';
   html += `<div class="chart-title">East Coast Gas — Supply & Demand by State`;
@@ -5091,17 +5096,45 @@ function _renderGBB(gbb) {
     const PROD_COLORS = { "QLD (CSG+LNG)":"#f39c12","SA: Moomba":"#e74c3c","VIC: Longford":"#2ed573","VIC: Otway":"#1abc9c","VIC: Orbost":"#3498db","VIC: ATHENA":"#9b59b6","VIC: Lang Lang":"#27ae60","NT":"#64748b","Storage (net)":"#ffffff" };
     const PROD_ORDER = ["QLD (CSG+LNG)","SA: Moomba","VIC: Longford","VIC: Otway","VIC: Orbost","VIC: ATHENA","VIC: Lang Lang","NT","Storage (net)"];
     if (Object.keys(prodHist).length && chartDates.length) {
+      // Find today's index for the NOW line
+      const todayAestMs = Date.now() + 10 * 3600 * 1000;
+      const todayStr = new Date(todayAestMs).toISOString().slice(0,10);
+      const nowIdx = chartDates.indexOf(todayStr);
+
       const prodDatasets = PROD_ORDER.filter(k=>prodHist[k]).map(k=>({
         label: k.replace("VIC: ","").replace("SA: ",""),
         data: chartDates.map(d=>{const p=(prodHist[k]||[]).find(x=>x.gas_date===d);return p?p.supply_tj:null;}),
-        borderColor: chartDates.map(d=>forecastDates.has(d) ? PROD_COLORS[k]+"55" : PROD_COLORS[k]),
+        borderColor: chartDates.map(d=>forecastDates.has(d) ? PROD_COLORS[k]+"33" : PROD_COLORS[k]),
         backgroundColor: k==="Storage (net)" ? PROD_COLORS[k]+"22" :
-          chartDates.map(d=>forecastDates.has(d) ? PROD_COLORS[k]+"22" : PROD_COLORS[k]+"cc"),
+          chartDates.map(d=>forecastDates.has(d) ? PROD_COLORS[k]+"11" : PROD_COLORS[k]+"cc"),
         borderWidth: k==="Storage (net)" ? 2 : 1.5,
         pointRadius: k==="Storage (net)" ? 2 : 0,
         tension: 0.2, fill: k==="Storage (net)" ? "origin" : true,
         segment: {borderDash: ctx=>_dashStyle(chartDates[ctx.p0DataIndex])},
       }));
+
+      // NOW line plugin
+      const nowLineGBB = {
+        id: 'nowLineGBB',
+        afterDraw(chart) {
+          if (nowIdx < 0) return;
+          const {ctx, chartArea: {top, bottom}, scales: {x}} = chart;
+          const xPos = x.getPixelForValue(nowIdx);
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(xPos, top);
+          ctx.lineTo(xPos, bottom);
+          ctx.strokeStyle = '#ffffff66';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4, 3]);
+          ctx.stroke();
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '9px Space Mono';
+          ctx.fillText('today', xPos + 3, top + 12);
+          ctx.restore();
+        }
+      };
+
       const prodCtx = document.getElementById("gbbProductionChart");
       if (prodCtx) {
         destroyChart("gbbProduction");
@@ -5112,7 +5145,8 @@ function _renderGBB(gbb) {
             scales:{
               x:{ticks:{color:"#64748b",font:{family:"Space Mono",size:9},maxRotation:45,autoSkip:true,maxTicksLimit:12},grid:{color:"#1e2d4544"}},
               y:{stacked:true,ticks:{color:"#94a3b8",font:{family:"Space Mono",size:9},callback:_yTJ},grid:{color:"#1e2d45"}}
-            }}
+            }},
+          plugins: [nowLineGBB]
         });
         _makeLegend("gbbProdLegend","gbbProduction", PROD_ORDER.filter(k=>prodHist[k]).map(k=>PROD_COLORS[k]));
       }
