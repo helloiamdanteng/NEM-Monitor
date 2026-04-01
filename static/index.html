@@ -4201,52 +4201,41 @@ function drawDayAheadCharts(data) {
     }
   }
 
-  // ── D+1 Wind + Solar chart (tomorrow only from ST PASA) ────────────────────
-  if (slowData && slowData.stpasa_demand) {
-    const pasa = slowData.stpasa_demand;
-    // Get tomorrow's date string (AEST)
+  // ── D+1 Wind + Solar chart (tomorrow from predispatch_gen) ────────────────
+  const pdGen = (data && data.predispatch_gen) || {};
+  if (Object.keys(pdGen).length) {
     const tomorrowAest = new Date(Date.now() + 10*3600*1000 + 86400*1000);
     const tStr = tomorrowAest.getUTCFullYear() + '-' +
       String(tomorrowAest.getUTCMonth()+1).padStart(2,'0') + '-' +
       String(tomorrowAest.getUTCDate()).padStart(2,'0');
-    // Filter pasaLabels to tomorrow only
-    const pasaLabelSet = new Set();
-    for (const r of REGIONS) (pasa[r]||[]).forEach(p => pasaLabelSet.add(p.interval));
-    const da1Labels = Array.from(pasaLabelSet).sort().filter(l => l.startsWith(tStr));
+    const da1LabelSet = new Set();
+    for (const r of REGIONS) (pdGen[r]||[]).forEach(p => { if (p.interval.startsWith(tStr)) da1LabelSet.add(p.interval); });
+    const da1Labels = Array.from(da1LabelSet).sort();
+    console.log('[DA1 Renew] tStr:', tStr, 'tomorrow labels:', da1Labels.length);
     if (da1Labels.length) {
       const da1Datasets = [];
       const SOLAR_COLORS = {'QLD1':'#fbd07c','NSW1':'#90c8f0','VIC1':'#86e8b0','SA1':'#f0908a','TAS1':'#c49fd8'};
       for (const r of [...REGIONS].reverse()) {
         if (!da1RenewFilter.has(r)) continue;
         const solarMap = {}, windMap = {};
-        (pasa[r]||[]).forEach(p => {
-          if (p.solar_uigf != null) solarMap[p.interval] = p.solar_uigf;
-          if (p.wind_uigf  != null) windMap[p.interval]  = p.wind_uigf;
+        (pdGen[r]||[]).forEach(p => {
+          if (p.interval.startsWith(tStr)) {
+            if (p.solar != null) solarMap[p.interval] = p.solar;
+            if (p.wind  != null) windMap[p.interval]  = p.wind;
+          }
         });
         if (Object.keys(solarMap).length && _da1Solar) da1Datasets.push({
-          label: REGION_SHORT[r]+' Solar', regionId: r, seriesType: 'solar',
+          label: REGION_SHORT[r]+' Solar', regionId: r,
           data: da1Labels.map(l => solarMap[l] ?? null),
           borderColor: SOLAR_COLORS[r]||REGION_COLORS[r],
           backgroundColor: (SOLAR_COLORS[r]||REGION_COLORS[r])+'cc',
           borderWidth: 1, fill: 'origin', pointRadius: 0, tension: 0.2, spanGaps: true, stack: 'renew', yAxisID: 'y',
         });
         if (Object.keys(windMap).length && _da1Wind) da1Datasets.push({
-          label: REGION_SHORT[r]+' Wind', regionId: r, seriesType: 'wind',
+          label: REGION_SHORT[r]+' Wind', regionId: r,
           data: da1Labels.map(l => windMap[l] ?? null),
           borderColor: REGION_COLORS[r], backgroundColor: REGION_COLORS[r]+'cc',
           borderWidth: 1.5, fill: 'stack', pointRadius: 0, tension: 0.2, spanGaps: true, stack: 'renew', yAxisID: 'y',
-        });
-      }
-      if (_da1Demand) {
-        const demLookup = {};
-        for (const r of REGIONS) {
-          if (!da1RenewFilter.has(r)) continue;
-          (pasa[r]||[]).forEach(p => { if (p.demand_50 != null) demLookup[p.interval] = (demLookup[p.interval]||0) + p.demand_50; });
-        }
-        if (Object.keys(demLookup).length) da1Datasets.push({
-          label: 'Demand', data: da1Labels.map(l => demLookup[l] ?? null),
-          borderColor: '#ffffff', backgroundColor: 'transparent',
-          borderWidth: 2, pointRadius: 0, tension: 0.2, fill: false, order: 0, spanGaps: true,
         });
       }
       destroyChart('da1Renew');
@@ -4254,7 +4243,7 @@ function drawDayAheadCharts(data) {
       if (da1Ctx && da1Datasets.length) {
         const xTickCb1 = function(v,i) {
           const l = this.getLabelForValue(v);
-          try { const d = new Date(l.replace(' ','T')); return d.getMinutes()===0?d.getHours().toString().padStart(2,'0')+':00':null; } catch { return null; }
+          try { const parts = l.split(' '); const t = parts[1]||''; const [hh] = t.split(':'); return t.endsWith(':00')?hh+':00':null; } catch { return null; }
         };
         charts.da1Renew = new Chart(da1Ctx, {
           type: 'line', data: { labels: da1Labels, datasets: da1Datasets },
@@ -4277,7 +4266,6 @@ function drawDayAheadCharts(data) {
     }
   }
 }
-
 
 function drawWeekCharts(fastData) {
   if (!slowData || !slowData.stpasa_demand) return;
