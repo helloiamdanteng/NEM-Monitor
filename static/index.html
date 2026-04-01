@@ -3863,12 +3863,16 @@ let daPriceFilter  = new Set(DA_DEFAULT);
 let daDemandFilter = new Set(DA_DEFAULT);
 let daPasaFilter   = new Set(DA_DEFAULT);
 let daRenewFilter  = new Set(['QLD1','NSW1','VIC1','SA1']);  // TAS wind off by default
+let da1RenewFilter = new Set(['QLD1','NSW1','VIC1','SA1']);  // D+1 renew chart filter
+let _da1Solar = false;  // solar off by default (matches 7-day)
+let _da1Wind  = true;   // wind on by default
+let _da1Demand = false; // demand off by default
 
 // weekRenewFilter/weekRegionFilter kept in sync with daRenewFilter/daPasaFilter
 // for drawWeekCharts compatibility
 function toggleDAPills(chartId, r) {
-  const filterMap = { price: 'daPriceFilter', demand: 'daDemandFilter', pasa: 'daPasaFilter', renew: 'daRenewFilter' };
-  const filters = { price: daPriceFilter, demand: daDemandFilter, pasa: daPasaFilter, renew: daRenewFilter };
+  const filterMap = { price: 'daPriceFilter', demand: 'daDemandFilter', pasa: 'daPasaFilter', renew: 'daRenewFilter', da1renew: 'da1RenewFilter' };
+  const filters = { price: daPriceFilter, demand: daDemandFilter, pasa: daPasaFilter, renew: daRenewFilter, da1renew: da1RenewFilter };
   const f = filters[chartId];
   if (!f) return;
   if (r === 'NEM') {
@@ -3892,6 +3896,19 @@ function toggleWeekRenewFuel(fuel) {
   // Persist demand state so it survives panel re-renders
   if (fuel === 'demand') window._wrDemand = !on;
   if (latestData) { requestAnimationFrame(() => drawWeekCharts(latestData)); }
+}
+
+function toggleDa1RenewFuel(fuel) {
+  if (fuel === 'solar')  _da1Solar  = !_da1Solar;
+  if (fuel === 'wind')   _da1Wind   = !_da1Wind;
+  if (fuel === 'demand') _da1Demand = !_da1Demand;
+  const btn = document.getElementById('da1-' + fuel);
+  if (btn) {
+    const on = fuel === 'solar' ? _da1Solar : fuel === 'wind' ? _da1Wind : _da1Demand;
+    btn.dataset.on = on ? '1' : '0';
+    btn.style.opacity = on ? '1' : '0.35';
+  }
+  if (latestData) requestAnimationFrame(() => drawDayAheadCharts(latestData));
 }
 
 function toggleDayAheadPriceRegion(r) {
@@ -4040,6 +4057,18 @@ function renderDayAhead(data) {
   html += chartPills('demand', daDemandFilter);
   html += '</div>';
 
+  // D+1 Wind + Solar chart
+  html += '<div class="chart-card" style="margin-top:12px">';
+  html += '<div class="chart-title">Wind + Solar Forecast (ST PASA) — Tomorrow</div>';
+  html += '<div style="position:relative;height:220px"><canvas id="da1RenewChart"></canvas></div>';
+  html += chartPills('da1renew', da1RenewFilter);
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
+  html += `<button onclick="toggleDa1RenewFuel('solar')" id="da1-solar" data-on="${_da1Solar?'1':'0'}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:${_da1Solar?'1':'0.35'}">☀ Solar</button>`;
+  html += `<button onclick="toggleDa1RenewFuel('wind')" id="da1-wind" data-on="${_da1Wind?'1':'0'}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer;opacity:${_da1Wind?'1':'0.35'}">💨 Wind</button>`;
+  html += `<button onclick="toggleDa1RenewFuel('demand')" id="da1-demand" data-on="${_da1Demand?'1':'0'}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #ffffff;background:transparent;color:#94a3b8;cursor:pointer;opacity:${_da1Demand?'1':'0.35'}">📊 Demand</button>`;
+  html += '</div>';
+  html += '</div>';
+
   // ── Week-ahead section ────────────────────────────────────────────────────────
   html += '<div class="section-title" style="margin-top:16px">7-Day Ahead</div>';
 
@@ -4169,6 +4198,82 @@ function drawDayAheadCharts(data) {
         if (!daDemandFilter.has(ds.regionId)) charts.dayAheadDemand.getDatasetMeta(i).hidden = true;
       });
       charts.dayAheadDemand.update();
+    }
+  }
+
+  // ── D+1 Wind + Solar chart (tomorrow only from ST PASA) ────────────────────
+  if (slowData && slowData.stpasa_demand) {
+    const pasa = slowData.stpasa_demand;
+    // Get tomorrow's date string (AEST)
+    const tomorrowAest = new Date(Date.now() + 10*3600*1000 + 86400*1000);
+    const tStr = tomorrowAest.getUTCFullYear() + '-' +
+      String(tomorrowAest.getUTCMonth()+1).padStart(2,'0') + '-' +
+      String(tomorrowAest.getUTCDate()).padStart(2,'0');
+    // Filter pasaLabels to tomorrow only
+    const pasaLabelSet = new Set();
+    for (const r of REGIONS) (pasa[r]||[]).forEach(p => pasaLabelSet.add(p.interval));
+    const da1Labels = Array.from(pasaLabelSet).sort().filter(l => l.startsWith(tStr));
+    if (da1Labels.length) {
+      const da1Datasets = [];
+      const SOLAR_COLORS = {'QLD1':'#fbd07c','NSW1':'#90c8f0','VIC1':'#86e8b0','SA1':'#f0908a','TAS1':'#c49fd8'};
+      for (const r of [...REGIONS].reverse()) {
+        if (!da1RenewFilter.has(r)) continue;
+        const solarMap = {}, windMap = {};
+        (pasa[r]||[]).forEach(p => {
+          if (p.solar_uigf != null) solarMap[p.interval] = p.solar_uigf;
+          if (p.wind_uigf  != null) windMap[p.interval]  = p.wind_uigf;
+        });
+        if (Object.keys(solarMap).length && _da1Solar) da1Datasets.push({
+          label: REGION_SHORT[r]+' Solar', regionId: r, seriesType: 'solar',
+          data: da1Labels.map(l => solarMap[l] ?? null),
+          borderColor: SOLAR_COLORS[r]||REGION_COLORS[r],
+          backgroundColor: (SOLAR_COLORS[r]||REGION_COLORS[r])+'cc',
+          borderWidth: 1, fill: 'origin', pointRadius: 0, tension: 0.2, spanGaps: true, stack: 'renew', yAxisID: 'y',
+        });
+        if (Object.keys(windMap).length && _da1Wind) da1Datasets.push({
+          label: REGION_SHORT[r]+' Wind', regionId: r, seriesType: 'wind',
+          data: da1Labels.map(l => windMap[l] ?? null),
+          borderColor: REGION_COLORS[r], backgroundColor: REGION_COLORS[r]+'cc',
+          borderWidth: 1.5, fill: 'stack', pointRadius: 0, tension: 0.2, spanGaps: true, stack: 'renew', yAxisID: 'y',
+        });
+      }
+      if (_da1Demand) {
+        const demLookup = {};
+        for (const r of REGIONS) {
+          if (!da1RenewFilter.has(r)) continue;
+          (pasa[r]||[]).forEach(p => { if (p.demand_50 != null) demLookup[p.interval] = (demLookup[p.interval]||0) + p.demand_50; });
+        }
+        if (Object.keys(demLookup).length) da1Datasets.push({
+          label: 'Demand', data: da1Labels.map(l => demLookup[l] ?? null),
+          borderColor: '#ffffff', backgroundColor: 'transparent',
+          borderWidth: 2, pointRadius: 0, tension: 0.2, fill: false, order: 0, spanGaps: true,
+        });
+      }
+      destroyChart('da1Renew');
+      const da1Ctx = document.getElementById('da1RenewChart');
+      if (da1Ctx && da1Datasets.length) {
+        const xTickCb1 = function(v,i) {
+          const l = this.getLabelForValue(v);
+          try { const d = new Date(l.replace(' ','T')); return d.getMinutes()===0?d.getHours().toString().padStart(2,'0')+':00':null; } catch { return null; }
+        };
+        charts.da1Renew = new Chart(da1Ctx, {
+          type: 'line', data: { labels: da1Labels, datasets: da1Datasets },
+          options: { ...CHART_DEFAULTS,
+            plugins: { ...CHART_DEFAULTS.plugins,
+              legend: { display: true, labels: { color:'#94a3b8', font:{family:'Space Mono',size:9}, boxWidth:10, padding:6,
+                filter: item => item.datasetIndex === da1Datasets.findIndex(d => d.label === item.text)
+              }},
+              tooltip: { ...CHART_DEFAULTS.plugins.tooltip, filter: i => i.raw !== null,
+                callbacks: { label: c => c.raw===null?null:` ${c.dataset.label}: ${fmt(c.raw)} MW` }
+              }
+            },
+            scales: {
+              x: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,callback:xTickCb1}, grid:{color:'#1e2d4544'} },
+              y: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e293b'} }
+            }
+          }
+        });
+      }
     }
   }
 }
