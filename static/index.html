@@ -4865,18 +4865,21 @@ function _renderPriceHistCharts(data, liveData) {
         const btn = document.createElement('button');
         btn.dataset.key   = col.key;
         btn.dataset.color = col.color;
-        btn.style.cssText = `font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid ${col.color};background:${col.color}22;color:${col.color};transition:all 0.15s;white-space:nowrap`;
+        const isAlreadySel = _selectedTod === col.key;
+        const displayCol = isAlreadySel ? '#fbbf24' : col.color;
+        btn.style.cssText = `font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:20px;cursor:pointer;border:1px solid ${displayCol};background:${displayCol}22;color:${displayCol};transition:all 0.15s;white-space:nowrap;font-weight:${isAlreadySel?'700':'400'}`;
         btn.textContent = col.label;
         btn.onclick = () => {
           _selectedTod = (_selectedTod === col.key) ? null : col.key;
           window._selectedTod = _selectedTod;
-          _applyTodStyle();
-          // Re-render table to update font colours
+          // Re-render redraws chart + table with correct selection state
           _renderPriceHistCharts(window._priceHistData, window._liveDataRef);
         };
         todLegend.appendChild(btn);
       });
     }
+    // Restore selection state if a TOD was previously selected
+    if (_selectedTod) _applyTodStyle();
   }
 
   // Store liveData ref for re-render on region switch
