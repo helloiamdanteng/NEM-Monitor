@@ -4242,7 +4242,12 @@ function drawDayAheadCharts(data) {
       if (da1Ctx && da1Datasets.length) {
         const xTickCb1 = function(v,i) {
           const l = this.getLabelForValue(v);
-          try { const parts = l.split(' '); const t = parts[1]||''; const [hh] = t.split(':'); return t.endsWith(':00')?hh+':00':null; } catch { return null; }
+          try {
+            const t = l.split(' ')[1] || '';
+            if (!t.endsWith(':00')) return null;
+            const hh = t.slice(0,2);
+            return hh + ':00';
+          } catch { return null; }
         };
         charts.da1Renew = new Chart(da1Ctx, {
           type: 'line', data: { labels: da1Labels, datasets: da1Datasets },
@@ -4256,7 +4261,7 @@ function drawDayAheadCharts(data) {
               }
             },
             scales: {
-              x: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,callback:xTickCb1}, grid:{color:'#1e2d4544'} },
+              x: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9},maxRotation:0,maxTicksLimit:25,callback:xTickCb1}, grid:{color:'#1e2d4544'} },
               y: { stacked: true, ticks:{color:'#64748b',font:{family:'Space Mono',size:9}}, title:{display:true,text:'MW',color:'#64748b',font:{family:'Space Mono',size:9}}, grid:{color:'#1e293b'} }
             }
           }
