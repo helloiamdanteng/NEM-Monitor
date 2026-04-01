@@ -28,7 +28,6 @@ DISPATCH_IS_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/PredispatchIS_Reports/"
 SCADA_URL         = f"{NEMWEB_BASE}/REPORTS/CURRENT/Dispatch_SCADA/"
 TRADING_IS_URL    = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
-TRADING_CURRENT   = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
 TRADING_ARCHIVE   = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/TradingIS_Reports/"
 MTPASA_DUID_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/MTPASA_DUIDAvailability/"
 PDPASA_DUID_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/PDPASA_DUIDAvailability/"
@@ -735,7 +734,7 @@ def scrape_trading_history() -> dict:
     now_aest = datetime.now(AEST)
     today_str = now_aest.strftime("%Y%m%d")
 
-    all_zips = _list_hrefs(TRADING_CURRENT)
+    all_zips = _list_hrefs(TRADING_IS_URL)
     today_zips = sorted([u for u in all_zips if today_str in u])
     if not today_zips:
         today_zips = sorted(all_zips)[-48:]
