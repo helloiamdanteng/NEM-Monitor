@@ -4052,20 +4052,19 @@ function renderDayAhead(data) {
 
   // Demand chart
   html += '<div class="chart-card" style="margin-top:12px">';
-  html += '<div class="chart-title">Demand Forecast (MW) — ST PASA 50% probability</div>';
+  html += '<div class="chart-title">Demand Forecast (MW) — Predispatch</div>';
   html += '<div class="chart-container" style="height:200px"><canvas id="dayAheadDemandChart"></canvas></div>';
   html += chartPills('demand', daDemandFilter);
   html += '</div>';
 
   // D+1 Wind + Solar chart
   html += '<div class="chart-card" style="margin-top:12px">';
-  html += '<div class="chart-title">Wind + Solar Forecast (ST PASA) — Tomorrow</div>';
+  html += '<div class="chart-title">Wind + Solar Forecast — Predispatch</div>';
   html += '<div style="position:relative;height:220px"><canvas id="da1RenewChart"></canvas></div>';
   html += chartPills('da1renew', da1RenewFilter);
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
   html += `<button onclick="toggleDa1RenewFuel('solar')" id="da1-solar" data-on="${_da1Solar?'1':'0'}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #f59e0b;background:#f59e0b33;color:#f59e0b;cursor:pointer;opacity:${_da1Solar?'1':'0.35'}">☀ Solar</button>`;
   html += `<button onclick="toggleDa1RenewFuel('wind')" id="da1-wind" data-on="${_da1Wind?'1':'0'}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #34d399;background:#34d39933;color:#34d399;cursor:pointer;opacity:${_da1Wind?'1':'0.35'}">💨 Wind</button>`;
-  html += `<button onclick="toggleDa1RenewFuel('demand')" id="da1-demand" data-on="${_da1Demand?'1':'0'}" style="font-family:var(--font-mono);font-size:10px;padding:4px 12px;border-radius:20px;border:1px solid #ffffff;background:transparent;color:#94a3b8;cursor:pointer;opacity:${_da1Demand?'1':'0.35'}">📊 Demand</button>`;
   html += '</div>';
   html += '</div>';
 
