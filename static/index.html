@@ -4353,6 +4353,9 @@ function renderPricesHist() {
 
   let html = '<div class="section-title">Average Pool Prices</div>';
 
+  // Status message for loading
+  html += '<div id="prices-hist-status" style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:4px 0 8px"></div>';
+
   // Summary table at top (populated by _renderPriceHistCharts)
   html += '<div id="prices-hist-table"></div>';
 
@@ -4386,7 +4389,7 @@ async function drawPricesHist() {
     return;
   }
   const status = document.getElementById('prices-hist-status');
-  if (status) status.textContent = 'Loading 90 days of price data… (first load takes ~30s)';
+  if (status) status.textContent = 'Loading 95 days of price data… (first load takes ~30s)';
   try {
     const data = await fetch('/api/historical_price_averages').then(r => r.json());
     if (data.error) { if (status) status.textContent = `Error: ${data.error}`; return; }
