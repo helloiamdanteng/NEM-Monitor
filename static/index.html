@@ -376,15 +376,53 @@ async function triggerRescrape() {
   try {
     const r = await fetch('/api/rescrape');
     await r.json();
+    // Clear D-1 cache so next visit refetches fresh data
+    window._dm1Cache = null;
     // Refresh data after 60s
     setTimeout(() => {
       fetchData();
+      // If on D-1, reload it too
+      if (currentPanel === 'dminus1' && window._dm1YestStr) {
+        dMinusLoadPrices(window._dm1YestStr);
+      }
       if (btn) { btn.textContent = '⟳ Rescrape'; btn.disabled = false; }
     }, 60000);
   } catch(e) {
     if (btn) { btn.textContent = '⟳ Rescrape'; btn.disabled = false; }
   }
 }
+
+// ── Scheduled D-1 cache refresh ───────────────────────────────────────────────
+// Clears browser cache at 1:30am, 7:30am, 1:30pm, 7:30pm AEST
+// so data stays fresh for users with the tab open all day
+function _scheduleDm1Refresh() {
+  const REFRESH_TIMES_AEST = ['01:30', '07:30', '13:30', '19:30'];
+  function _msUntilNext() {
+    const nowAestMs = Date.now() + 10 * 3600 * 1000;
+    const now = new Date(nowAestMs);
+    const hhmm = now.getUTCHours().toString().padStart(2,'0') + ':' + now.getUTCMinutes().toString().padStart(2,'0');
+    // Find next scheduled time today or tomorrow
+    const todayMins = now.getUTCHours() * 60 + now.getUTCMinutes();
+    for (const t of REFRESH_TIMES_AEST) {
+      const [h, m] = t.split(':').map(Number);
+      const tMins = h * 60 + m;
+      if (tMins > todayMins) return (tMins - todayMins) * 60 * 1000;
+    }
+    // All times passed today — next is first time tomorrow
+    const [h, m] = REFRESH_TIMES_AEST[0].split(':').map(Number);
+    return (24 * 60 - todayMins + h * 60 + m) * 60 * 1000;
+  }
+  function _doRefresh() {
+    window._dm1Cache = null;
+    if (currentPanel === 'dminus1' && window._dm1YestStr) {
+      dMinusLoadPrices(window._dm1YestStr);
+    }
+    // Schedule next refresh
+    setTimeout(_doRefresh, _msUntilNext());
+  }
+  setTimeout(_doRefresh, _msUntilNext());
+}
+_scheduleDm1Refresh();
 
 function showPanel(name) {
   currentPanel = name;
