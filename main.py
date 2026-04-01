@@ -2654,6 +2654,24 @@ async def gas_data(refresh: bool = False):
 
 _gbb_cache: dict = {"data": None, "last_updated": None}
 
+@app.get("/api/gbb-cache-inspect")
+async def gbb_cache_inspect():
+    """Inspect processed GBB cache — check chart_dates, production_history, pipeline_flows counts."""
+    d = _gbb_cache.get("data")
+    if not d:
+        return JSONResponse(content={"error": "no cache yet"})
+    return JSONResponse(content={
+        "chart_dates": d.get("chart_dates", []),
+        "forecast_dates": d.get("forecast_dates", []),
+        "latest_date": d.get("latest_date"),
+        "last_complete_date": d.get("last_complete_date"),
+        "production_history_keys": list(d.get("production_history", {}).keys()),
+        "demand_by_sector_keys": list(d.get("demand_by_sector", {}).keys()),
+        "pipeline_flows_keys": list(d.get("pipeline_flows", {}).keys()),
+        "storage_keys": list(d.get("storage", {}).keys()),
+        "prod_sample": {k: v[:2] for k,v in list(d.get("production_history", {}).items())[:2]},
+    })
+
 @app.get("/api/gbb")
 async def gbb_data(refresh: bool = False):
     """Return GBB storage levels and state summary. Cached for 1 hour."""
