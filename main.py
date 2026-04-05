@@ -1696,62 +1696,38 @@ async def rescrape():
 
 @app.get("/api/pd-sens-debug")
 async def pd_sens_debug():
-    """Debug: trace scrape_predispatch_sensitivity step by step."""
-    from scraper import _list_hrefs, _read_zip, _parse_aemo, NEMWEB_BASE, NEM_REGIONS, AEST
-    from datetime import datetime, timedelta
-    diag = {}
+    """Debug: fetch PREDISPATCHSCENARIODEMAND to see what S1-S6 mean."""
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, _fetch_predispatch, NEMWEB_BASE
+    import csv, io
+    result = {}
+    # Check main predispatch file
+    pd_text = _fetch_predispatch()
+    pd_tables = set()
+    reader = csv.reader(io.StringIO(pd_text))
+    for row in reader:
+        if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+            pd_tables.add(f"{row[1].strip()}_{row[2].strip()}".upper())
+    result["pd_tables"] = sorted(pd_tables)
+    for tk in ["PREDISPATCH_SCENARIODEMAND", "PREDISPATCHSCENARIODEMAND", "SCENARIO_DEMAND"]:
+        rows = list(_parse_aemo(pd_text, tk))
+        if rows:
+            result[f"pd_{tk}"] = rows[:10]
+    # Check sensitivities file
     url = f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/"
     files = _list_hrefs(url)
-    text = _read_zip(files[-1])
-    rows = list(_parse_aemo(text, "PREDISPATCH_PRICESENSITIVITIES"))
-    diag["total_rows"] = len(rows)
-    if not rows:
-        return diag
-    sample = rows[0]
-    rrpeep_cols = sorted([k for k in sample.keys() if k.startswith("RRPEEP")],
-                          key=lambda x: int(x.replace("RRPEEP", "")))
-    diag["rrpeep_cols_count"] = len(rrpeep_cols)
-    diag["rrpeep_cols_first6"] = rrpeep_cols[:6]
-    now_aest = datetime.now(AEST).replace(tzinfo=None)
-    passed = 0
-    filtered = 0
-    no_scenarios = 0
-    region_series = {r: {} for r in NEM_REGIONS}
-    for row in rows:
-        region = row.get("REGIONID","").strip()
-        if region not in NEM_REGIONS:
-            continue
-        if row.get("INTERVENTION","0") not in ("0",""):
-            continue
-        dt_str = row.get("DATETIME","")
-        if not dt_str:
-            continue
-        try:
-            dt = datetime.fromisoformat(dt_str.replace("/","-")) - timedelta(minutes=30)
-            if dt.replace(tzinfo=None) < now_aest - timedelta(minutes=30):
-                filtered += 1
-                continue
-            passed += 1
-            label = dt.strftime("%H:%M")
-            scenarios = {}
-            for col in rrpeep_cols[:6]:
-                v = row.get(col,"")
-                if v:
-                    try: scenarios[f"S{col.replace('RRPEEP','')}"] = round(float(v),2)
-                    except: pass
-            if scenarios:
-                region_series[region][label] = scenarios
-            else:
-                no_scenarios += 1
-        except Exception as e:
-            diag["row_error"] = str(e)
-    diag["rows_passed_filter"] = passed
-    diag["rows_filtered_out"] = filtered
-    diag["rows_no_scenarios"] = no_scenarios
-    result = {r: list(s.items())[:2] for r,s in region_series.items() if s}
-    diag["result_regions"] = list(result.keys())
-    diag["nsw_sample"] = result.get("NSW1",[])
-    return diag
+    if files:
+        text = _read_zip(files[-1])
+        sens_tables = set()
+        reader = csv.reader(io.StringIO(text))
+        for row in reader:
+            if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+                sens_tables.add(f"{row[1].strip()}_{row[2].strip()}".upper())
+        result["sens_tables"] = sorted(sens_tables)
+        for tk in ["PREDISPATCH_SCENARIODEMAND", "PREDISPATCHSCENARIODEMAND", "SCENARIO_DEMAND"]:
+            rows = list(_parse_aemo(text, tk))
+            if rows:
+                result[f"sens_{tk}"] = rows[:10]
+    return result
 
 # Cache for MTPASA calendar data (refreshed with slow cache)
 _mtpasa_cal_cache: dict = {"data": None, "last_updated": None}
