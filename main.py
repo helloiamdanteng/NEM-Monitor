@@ -1695,79 +1695,31 @@ async def rescrape():
 
 @app.get("/api/pd-sens-debug")
 async def pd_sens_debug():
+    """Debug: show all tables + columns in the predispatch file, and sample PRICESENSITIVITIES rows."""
     from scraper import _fetch_predispatch, _parse_aemo
+    import csv, io
     text = _fetch_predispatch()
-    tables = set()
-    import csv, io
-    reader = csv.reader(io.StringIO(text))
-    for row in reader:
-        if row and row[0].strip().upper() == 'I' and len(row) >= 3:
-            tables.add(row[2].strip().upper())
-    # Check PRICESENSITIVITIES columns
-    sens_rows = list(_parse_aemo(text, 'PREDISPATCH_PRICESENSITIVITIES'))[:2]
-    return {"tables": sorted(tables), "sens_sample": sens_rows}
-
-@app.get("/api/sens-debug2")
-async def sens_debug2():
-    """Read scenario definitions from the sensitivities file."""
-    from scraper import _list_hrefs, _read_zip, _parse_aemo, PREDISPATCH_SENS_URL
-    import csv, io
-    files = _list_hrefs(PREDISPATCH_SENS_URL)
-    if not files: return {"error": "no files"}
-    text = _read_zip(files[-1])
-    
-    # Dump ALL I-rows (table headers) to see every table and its columns
-    result = {"file": files[-1], "all_tables": {}}
-    reader = csv.reader(io.StringIO(text))
-    for row in reader:
-        if row and row[0].strip().upper() == 'I' and len(row) >= 3:
-            tbl = row[2].strip().upper()
-            cols = [c.strip() for c in row[4:] if c.strip()]
-            result["all_tables"][tbl] = cols
-    
-    # Sample first 3 D-rows from every table
-    result["samples"] = {}
-    for tbl in result["all_tables"]:
-        rows = list(_parse_aemo(text, tbl))
-        result["samples"][tbl] = rows[:3]
-    
-    return result
-
-@app.get("/api/sens-debug")
-async def sens_debug():
-    from scraper import _list_hrefs, _read_zip, _parse_aemo, PREDISPATCH_SENS_URL, get_latest_file_url
-    import csv, io
-    result = {}
-    try:
-        files = _list_hrefs(PREDISPATCH_SENS_URL)
-        result['total_files'] = len(files)
-        result['sample_files'] = files[-3:] if files else []
-    except Exception as e:
-        result['list_error'] = str(e)
-        return result
-    if not files:
-        return result
-    url = files[-1]
-    result['fetching'] = url
-    text = _read_zip(url)
-    result['text_len'] = len(text)
-    # List tables
+    if not text:
+        return {"error": "could not fetch predispatch file"}
     tables = {}
     reader = csv.reader(io.StringIO(text))
     for row in reader:
         if row and row[0].strip().upper() == 'I' and len(row) >= 3:
             tbl = row[2].strip().upper()
             cols = [c.strip() for c in row[4:] if c.strip()]
-            tables[tbl] = cols[:20]
-    result['tables'] = tables
-    # Sample first NSW1 row from any sensitivity table
+            tables[tbl] = cols
+    # Sample PRICESENSITIVITIES rows
+    sens_rows = []
     for tbl_key in tables:
-        rows = list(_parse_aemo(text, tbl_key))
-        nsw = [r for r in rows if r.get('REGIONID','').strip() == 'NSW1'][:1]
-        if nsw:
-            result['nsw_sample_' + tbl_key] = nsw[0]
+        if 'SENS' in tbl_key and 'PRICE' in tbl_key:
+            rows = list(_parse_aemo(text, tbl_key))
+            nsw = [r for r in rows if r.get('REGIONID','').strip() == 'NSW1'][:3]
+            sens_rows = nsw
             break
-    return result
+    return {
+        "tables": {k: v for k, v in sorted(tables.items())},
+        "sens_sample": sens_rows
+    }
 
 # Cache for MTPASA calendar data (refreshed with slow cache)
 _mtpasa_cal_cache: dict = {"data": None, "last_updated": None}
