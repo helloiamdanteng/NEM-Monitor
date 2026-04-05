@@ -1696,21 +1696,46 @@ async def rescrape():
 
 @app.get("/api/pd-sens-debug")
 async def pd_sens_debug():
-    """Debug: test sensitivity scraper and show result."""
-    from scraper import scrape_predispatch_sensitivity
-    loop = asyncio.get_running_loop()
+    """Debug: step through sensitivity scraper with diagnostics."""
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, NEMWEB_BASE, NEM_REGIONS, AEST
+    from datetime import datetime, timedelta
+    import csv, io
+    diag = {}
     try:
-        result = await asyncio.wait_for(
-            loop.run_in_executor(None, scrape_predispatch_sensitivity, ""),
-            timeout=60.0
-        )
-        nsw = (result.get("NSW1") or [])[:2]
-        return {
-            "counts": {r: len(v) for r, v in result.items()},
-            "nsw_sample": nsw
-        }
+        url = f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/"
+        files = _list_hrefs(url)
+        diag["files_found"] = len(files)
+        diag["latest_file"] = files[-1] if files else None
+        if not files:
+            return diag
+        text = _read_zip(files[-1])
+        diag["text_len"] = len(text)
+        rows = list(_parse_aemo(text, "PREDISPATCH_PRICESENSITIVITIES"))
+        diag["total_rows"] = len(rows)
+        if not rows:
+            return diag
+        sample = rows[0]
+        diag["sample_keys"] = list(sample.keys())
+        diag["sample_regionid"] = sample.get("REGIONID","")
+        diag["sample_intervention"] = sample.get("INTERVENTION","")
+        diag["sample_datetime"] = sample.get("DATETIME","")
+        diag["sample_rrpeep1"] = sample.get("RRPEEP1","")
+        # Check date filtering
+        now_aest = datetime.now(AEST).replace(tzinfo=None)
+        diag["now_aest"] = now_aest.strftime("%Y-%m-%d %H:%M")
+        dt_str = sample.get("DATETIME","")
+        if dt_str:
+            dt = datetime.fromisoformat(dt_str.replace("/","-")) - timedelta(minutes=30)
+            diag["sample_dt_shifted"] = dt.strftime("%Y-%m-%d %H:%M")
+            diag["sample_passes_filter"] = dt.replace(tzinfo=None) >= now_aest - timedelta(minutes=30)
+        # NSW1 rows
+        nsw = [r for r in rows if r.get("REGIONID","").strip() == "NSW1"]
+        diag["nsw_rows"] = len(nsw)
+        if nsw:
+            diag["nsw_sample"] = {k: v for k, v in list(nsw[0].items())[:10]}
     except Exception as e:
-        return {"error": str(e)}
+        diag["error"] = str(e)
+    return diag
 
 # Cache for MTPASA calendar data (refreshed with slow cache)
 _mtpasa_cal_cache: dict = {"data": None, "last_updated": None}
