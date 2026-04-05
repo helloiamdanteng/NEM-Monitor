@@ -26,6 +26,7 @@ AEST = ZoneInfo("Australia/Brisbane")  # UTC+10 fixed - AEMO never uses daylight
 NEMWEB_BASE       = "https://www.nemweb.com.au"
 DISPATCH_IS_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/DispatchIS_Reports/"
 PREDISPATCH_URL   = f"{NEMWEB_BASE}/REPORTS/CURRENT/PredispatchIS_Reports/"
+
 SCADA_URL         = f"{NEMWEB_BASE}/REPORTS/CURRENT/Dispatch_SCADA/"
 TRADING_IS_URL    = f"{NEMWEB_BASE}/REPORTS/CURRENT/TradingIS_Reports/"
 TRADING_ARCHIVE   = f"{NEMWEB_BASE}/REPORTS/ARCHIVE/TradingIS_Reports/"
@@ -1061,7 +1062,7 @@ def scrape_predispatch_prices(text: str) -> dict:
     now_aest = datetime.now(AEST).replace(tzinfo=None)
     today    = now_aest.date()
     region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
-    for tk in ["PREDISPATCH_REGION_PRICES", "PREDISPATCH_PRICE", "PREDISPATCH_REGIONPRICE"]:
+    for tk in ["PREDISPATCH_REGION_PRICES", "REGION_PRICES", "PREDISPATCH_PRICE", "PREDISPATCH_REGIONPRICE"]:
         rows = _parse_aemo(text, tk)
         if not rows:
             continue
@@ -1090,6 +1091,78 @@ def scrape_predispatch_prices(text: str) -> dict:
         if series:
             result[region] = [{"interval": k, "rrp": v} for k, v in sorted(series.items())]
     logger.info(f"Predispatch prices: {sum(len(v) for v in result.values())} pts")
+    return result
+
+
+def scrape_predispatch_sensitivity(text: str) -> dict:
+    """
+    Extract predispatch price sensitivity scenarios (RRP1–RRP8) from REGION_PRICES table.
+    Returns { region: [{interval, scenarios: {label: rrp}}] }
+    Scenario labels come from PREDISPATCHSCENARIODEMAND (demand offsets in MW).
+    Falls back to generic labels (Scenario 1–8) if demand table not available.
+    """
+    now_aest = datetime.now(AEST).replace(tzinfo=None)
+    today    = now_aest.date()
+
+    # Try to read scenario demand offsets to build labels like "+100 MW", "-200 MW"
+    scenario_labels: dict[str, str] = {}
+    for tk in ["PREDISPATCH_SCENARIO_DEMAND", "PREDISPATCHSCENARIODEMAND"]:
+        rows = _parse_aemo(text, tk)
+        if not rows:
+            continue
+        for row in rows:
+            scen = row.get("SCENARIO", "").strip()
+            offset_str = row.get("REGIONDEMANDOFFSET", row.get("DEMANDOFFSET", ""))
+            if scen and offset_str:
+                try:
+                    offset = float(offset_str)
+                    label = (f"+{int(offset)} MW" if offset > 0 else f"{int(offset)} MW") if offset != 0 else "Base"
+                    scenario_labels[scen] = label
+                except (ValueError, TypeError):
+                    pass
+        if scenario_labels:
+            break
+
+    region_series: dict[str, dict] = {r: {} for r in NEM_REGIONS}
+    for tk in ["PREDISPATCH_REGION_PRICES", "REGION_PRICES", "PREDISPATCH_PRICE", "PREDISPATCH_REGIONPRICE"]:
+        rows = _parse_aemo(text, tk)
+        if not rows:
+            continue
+        for row in rows:
+            region = row.get("REGIONID", "")
+            if region not in NEM_REGIONS:
+                continue
+            if row.get("INTERVENTION", "0") not in ("0", ""):
+                continue
+            dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
+            if not dt_str:
+                continue
+            try:
+                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                if dt.date() != today or dt < now_aest - timedelta(minutes=30):
+                    continue
+                label = dt.strftime("%H:%M")
+                scenarios = {}
+                for i in range(1, 9):
+                    rrp_str = row.get(f"RRP{i}", "")
+                    if rrp_str:
+                        try:
+                            scen_key = str(i)
+                            scen_label = scenario_labels.get(scen_key, f"Scenario {i}")
+                            scenarios[scen_label] = round(float(rrp_str), 2)
+                        except (ValueError, TypeError):
+                            pass
+                if scenarios:
+                    region_series[region][label] = scenarios
+            except (ValueError, TypeError):
+                pass
+        break
+
+    result = {}
+    for region, series in region_series.items():
+        if series:
+            result[region] = [{"interval": k, "scenarios": v} for k, v in sorted(series.items())]
+    logger.info(f"Predispatch sensitivity: {sum(len(v) for v in result.values())} pts")
     return result
 
 
@@ -1620,7 +1693,7 @@ def scrape_all() -> dict:
     logger.info("scrape_all starting...")
 
     # Run all IO-bound fetches concurrently with per-future timeout
-    with ThreadPoolExecutor(max_workers=4) as ex:
+    with ThreadPoolExecutor(max_workers=5) as ex:
         f_dispatch_is   = ex.submit(_fetch_dispatch_is)
         f_predispatch   = ex.submit(_fetch_predispatch)
         f_trading       = ex.submit(scrape_trading_history)
@@ -1639,6 +1712,13 @@ def scrape_all() -> dict:
     trading          = _safe_result(f_trading,        {"prices": {}, "fetch_stats": {}}, "trading")
     dispatch_hist    = _safe_result(f_dispatch_hist,  {"demand": {}, "op_demand": {}, "prices": {}}, "dispatch_hist")
     scada_vals       = _safe_result(f_scada,          {}, "scada")
+
+    # Parse sensitivity from predispatch text (RRP1-RRP8 in REGION_PRICES table)
+    try:
+        pd_sensitivity = scrape_predispatch_sensitivity(predispatch_text)
+    except Exception as e:
+        logger.warning(f"scrape_predispatch_sensitivity failed: {e}")
+        pd_sensitivity = {}
 
     dispatch_demand       = dispatch_hist.get("demand", {})
     dispatch_op_demand    = dispatch_hist.get("op_demand", {})
@@ -1780,6 +1860,7 @@ def scrape_all() -> dict:
         "dispatch_prices_5min":  capped_dispatch_prices,
         "price_fetch_stats":     trading.get("fetch_stats", {}),
         "predispatch_prices":    pd_prices,
+        "predispatch_sensitivity": pd_sensitivity,
         "demand_history":        demand_history,
         "op_demand_history":     dispatch_op_demand,
         "dispatch_history":      dispatch_demand,
