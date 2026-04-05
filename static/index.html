@@ -628,16 +628,21 @@ function drawPriceSensitivityChart(data) {
 
   // 3. Sensitivity scenario lines
   const SENS_COLORS = {
-    '+100MW': '#22c55e', '+200MW': '#16a34a', '+400MW': '#15803d',
-    '-100MW': '#f97316', '-200MW': '#ea580c', '-400MW': '#c2410c',
+    '+100 MW': '#22c55e', '+200 MW': '#16a34a', '+500 MW': '#15803d', '+1000 MW': '#14532d',
+    '-100 MW': '#f97316', '-200 MW': '#ea580c', '-500 MW': '#c2410c', '-1000 MW': '#9a3412',
+    'NEM +450 MW': '#22c55e', 'NEM -450 MW': '#f97316',
+    'NEM +900 MW': '#16a34a', 'NEM -900 MW': '#ea580c',
   };
+  const SENS_PALETTE = ['#22c55e','#16a34a','#15803d','#f97316','#ea580c','#c2410c','#818cf8','#f472b6'];
 
   // Collect all scenario labels present in the data
   const scenarioLabels = new Set();
   Object.values(sensMap).forEach(s => Object.keys(s).forEach(k => scenarioLabels.add(k)));
 
-  for (const scen of [...scenarioLabels].sort()) {
-    const col = SENS_COLORS[scen] || '#94a3b8';
+  const scenList = [...scenarioLabels].sort();
+  for (let si = 0; si < scenList.length; si++) {
+    const scen = scenList[si];
+    const col = SENS_COLORS[scen] || SENS_PALETTE[si % SENS_PALETTE.length];
     datasets.push({
       label: scen,
       data: allSlots.map((l,i) => {
