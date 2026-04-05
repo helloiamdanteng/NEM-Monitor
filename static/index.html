@@ -625,8 +625,8 @@ function drawPriceSensitivityChart(data) {
       if (i === nowIdx) return histMap[l] ?? pdMap[l] ?? null;
       return pdMap[l] ?? null;
     }),
-    borderColor: color + 'aa', backgroundColor: 'transparent',
-    borderWidth: selectedScen ? 2.5 : 1.5,
+    borderColor: selectedScen ? '#ffffff' : color + 'aa', backgroundColor: 'transparent',
+    borderWidth: selectedScen ? 3 : 1.5,
     borderDash: [6,3],
     pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
   });
@@ -666,7 +666,7 @@ function drawPriceSensitivityChart(data) {
             generateLabels: chart => chart.data.datasets.map((ds, i) => {
               const col = ds._sensScen
                 ? (ds._sensScen === selectedScen ? '#fbbf24' : (SENS_COLORS[ds._sensScen] || SENS_PALETTE[i % SENS_PALETTE.length]))
-                : ds.borderColor;
+                : (ds._pdLine && selectedScen ? '#ffffff' : ds.borderColor);
               return {
                 text: ds.label, fillStyle: col, strokeStyle: col,
                 lineWidth: 1, datasetIndex: i,
