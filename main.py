@@ -1693,8 +1693,36 @@ async def rescrape():
     _origin_d1_cache.clear()
     return {"status": "rescrape triggered — history backfill + fast + gen running in background"}
 
-@app.get("/api/pd-sens-dir")
-async def pd_sens_dir():
+@app.get("/api/pd-sens-scenarios")
+async def pd_sens_scenarios():
+    """Check scenario demand offset definitions."""
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, _fetch_predispatch, NEMWEB_BASE
+    import csv, io
+    result = {}
+    # Check main predispatch file for scenario demand table
+    pd_text = _fetch_predispatch()
+    for tk in ["PREDISPATCH_SCENARIO_DEMAND", "PREDISPATCHSCENARIODEMAND", "SCENARIO_DEMAND"]:
+        rows = list(_parse_aemo(pd_text, tk))
+        if rows:
+            result[f"pd_{tk}"] = rows[:5]
+    # Check the sensitivities file
+    sens_url = f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/"
+    files = _list_hrefs(sens_url)
+    if files:
+        text = _read_zip(files[-1])
+        tables = {}
+        reader = csv.reader(io.StringIO(text))
+        for row in reader:
+            if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+                tbl = f"{row[1].strip()}_{row[2].strip()}".upper()
+                cols = [c.strip() for c in row[4:] if c.strip()]
+                tables[tbl] = cols
+        result["sens_file_tables"] = list(tables.keys())
+        for tk in tables:
+            if "SCENARIO" in tk or "DEMAND" in tk:
+                rows = list(_parse_aemo(text, tk))
+                result[f"sens_{tk}"] = rows[:10]
+    return result
     """Check what's in the Predispatch_Sensitivities directory."""
     from scraper import _list_hrefs, _read_zip, _parse_aemo, NEMWEB_BASE
     import csv, io
