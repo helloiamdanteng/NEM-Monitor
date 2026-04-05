@@ -1693,105 +1693,27 @@ async def rescrape():
     _origin_d1_cache.clear()
     return {"status": "rescrape triggered — history backfill + fast + gen running in background"}
 
-@app.get("/api/pd-sens-scenarios")
-async def pd_sens_scenarios():
-    """Check scenario demand offset definitions."""
-    from scraper import _list_hrefs, _read_zip, _parse_aemo, _fetch_predispatch, NEMWEB_BASE
-    import csv, io
-    result = {}
-    # Check main predispatch file for scenario demand table
-    pd_text = _fetch_predispatch()
-    for tk in ["PREDISPATCH_SCENARIO_DEMAND", "PREDISPATCHSCENARIODEMAND", "SCENARIO_DEMAND"]:
-        rows = list(_parse_aemo(pd_text, tk))
-        if rows:
-            result[f"pd_{tk}"] = rows[:5]
-    # Check the sensitivities file
-    sens_url = f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/"
-    files = _list_hrefs(sens_url)
-    if files:
-        text = _read_zip(files[-1])
-        tables = {}
-        reader = csv.reader(io.StringIO(text))
-        for row in reader:
-            if row and row[0].strip().upper() == 'I' and len(row) >= 3:
-                tbl = f"{row[1].strip()}_{row[2].strip()}".upper()
-                cols = [c.strip() for c in row[4:] if c.strip()]
-                tables[tbl] = cols
-        result["sens_file_tables"] = list(tables.keys())
-        for tk in tables:
-            if "SCENARIO" in tk or "DEMAND" in tk:
-                rows = list(_parse_aemo(text, tk))
-                result[f"sens_{tk}"] = rows[:10]
-    return result
-    """Check what's in the Predispatch_Sensitivities directory."""
+
+@app.get("/api/pd-sens-debug")
+async def pd_sens_debug():
+    """Debug: show columns and sample rows from the Predispatch_Sensitivities file."""
     from scraper import _list_hrefs, _read_zip, _parse_aemo, NEMWEB_BASE
     import csv, io
-    results = {}
-    # Try a few possible URLs
-    urls_to_try = [
-        f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/",
-        f"{NEMWEB_BASE}/REPORTS/CURRENT/PredispatchSensitivities/",
-        f"{NEMWEB_BASE}/REPORTS/CURRENT/PREDISPATCH_SENSITIVITIES/",
-    ]
-    for url in urls_to_try:
-        try:
-            files = _list_hrefs(url)
-            results[url] = files[-3:] if files else []
-            if files:
-                # Try reading the latest file
-                text = _read_zip(files[-1])
-                tables = {}
-                reader = csv.reader(io.StringIO(text))
-                for row in reader:
-                    if row and row[0].strip().upper() == 'I' and len(row) >= 3:
-                        tbl = f"{row[1].strip()}_{row[2].strip()}".upper()
-                        cols = [c.strip() for c in row[4:] if c.strip()]
-                        tables[tbl] = cols
-                # Sample NSW1 from any table
-                for tk in tables:
-                    rows = list(_parse_aemo(text, tk))
-                    nsw = [r for r in rows if r.get('REGIONID','') == 'NSW1'][:1]
-                    if nsw:
-                        results[f"sample_{tk}"] = nsw[0]
-                        break
-                results["sens_tables"] = tables
-                break
-        except Exception as e:
-            results[url] = f"error: {e}"
-    return results
-    """Debug: show sensitivity data from current fast cache."""
-    from scraper import _fetch_predispatch, _parse_aemo, scrape_predispatch_sensitivity
-    import csv, io
-    text = _fetch_predispatch()
-    if not text:
-        return {"error": "could not fetch predispatch file"}
-    # Show table names and REGION_PRICES columns
+    url = f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/"
+    files = _list_hrefs(url)
+    if not files:
+        return {"error": "no files found"}
+    text = _read_zip(files[-1])
     tables = {}
     reader = csv.reader(io.StringIO(text))
     for row in reader:
         if row and row[0].strip().upper() == 'I' and len(row) >= 3:
-            tbl = row[2].strip().upper()
+            tbl = f"{row[1].strip()}_{row[2].strip()}".upper()
             cols = [c.strip() for c in row[4:] if c.strip()]
             tables[tbl] = cols
-    # Sample first NSW1 row from REGION_PRICES
-    region_prices_sample = []
-    for tk in ["PREDISPATCH_REGION_PRICES", "REGION_PRICES"]:
-        rows = list(_parse_aemo(text, tk))
-        nsw = [r for r in rows if r.get('REGIONID','').strip() == 'NSW1'][:2]
-        if nsw:
-            region_prices_sample = nsw
-            break
-    # Run sensitivity scrape
-    sens = scrape_predispatch_sensitivity(text)
-    # Sample first NSW1 entry
-    nsw_sens = (sens.get('NSW1') or [])[:2]
-    return {
-        "table_names": sorted(tables.keys()),
-        "region_prices_cols": tables.get("REGION_PRICES", tables.get("PREDISPATCH_REGION_PRICES", [])),
-        "region_prices_sample": region_prices_sample,
-        "sensitivity_nsw_sample": nsw_sens,
-        "sensitivity_counts": {r: len(v) for r, v in sens.items()}
-    }
+    rows = list(_parse_aemo(text, "PREDISPATCH_PRICESENSITIVITIES"))
+    nsw = [r for r in rows if r.get('REGIONID','').strip() == 'NSW1'][:2]
+    return {"tables": tables, "nsw_sample": nsw, "total_rows": len(rows)}
 
 # Cache for MTPASA calendar data (refreshed with slow cache)
 _mtpasa_cal_cache: dict = {"data": None, "last_updated": None}
