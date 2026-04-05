@@ -1693,8 +1693,44 @@ async def rescrape():
     _origin_d1_cache.clear()
     return {"status": "rescrape triggered — history backfill + fast + gen running in background"}
 
-@app.get("/api/pd-sens-debug")
-async def pd_sens_debug():
+@app.get("/api/pd-sens-dir")
+async def pd_sens_dir():
+    """Check what's in the Predispatch_Sensitivities directory."""
+    from scraper import _list_hrefs, _read_zip, _parse_aemo, NEMWEB_BASE
+    import csv, io
+    results = {}
+    # Try a few possible URLs
+    urls_to_try = [
+        f"{NEMWEB_BASE}/REPORTS/CURRENT/Predispatch_Sensitivities/",
+        f"{NEMWEB_BASE}/REPORTS/CURRENT/PredispatchSensitivities/",
+        f"{NEMWEB_BASE}/REPORTS/CURRENT/PREDISPATCH_SENSITIVITIES/",
+    ]
+    for url in urls_to_try:
+        try:
+            files = _list_hrefs(url)
+            results[url] = files[-3:] if files else []
+            if files:
+                # Try reading the latest file
+                text = _read_zip(files[-1])
+                tables = {}
+                reader = csv.reader(io.StringIO(text))
+                for row in reader:
+                    if row and row[0].strip().upper() == 'I' and len(row) >= 3:
+                        tbl = f"{row[1].strip()}_{row[2].strip()}".upper()
+                        cols = [c.strip() for c in row[4:] if c.strip()]
+                        tables[tbl] = cols
+                # Sample NSW1 from any table
+                for tk in tables:
+                    rows = list(_parse_aemo(text, tk))
+                    nsw = [r for r in rows if r.get('REGIONID','') == 'NSW1'][:1]
+                    if nsw:
+                        results[f"sample_{tk}"] = nsw[0]
+                        break
+                results["sens_tables"] = tables
+                break
+        except Exception as e:
+            results[url] = f"error: {e}"
+    return results
     """Debug: show sensitivity data from current fast cache."""
     from scraper import _fetch_predispatch, _parse_aemo, scrape_predispatch_sensitivity
     import csv, io
