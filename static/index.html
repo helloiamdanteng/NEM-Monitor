@@ -533,7 +533,7 @@ function renderPrices(data) {
   }
   html += '</div>';
   if (sensPillState) {
-    html += '<div class="chart-card"><div class="chart-container" style="height:200px"><canvas id="pdSensChart"></canvas></div></div>';
+    html += '<div class="chart-card"><div class="chart-container" style="height:250px"><canvas id="pdSensChart"></canvas></div></div>';
   } else {
     html += '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:12px 0">Select a region to view price sensitivities</div>';
   }
@@ -596,6 +596,7 @@ function drawPriceSensitivityChart(data) {
   const nowIdx = allSlots.findIndex(l => l >= nowStr);
   const color = REGION_COLORS[region];
   const selectedScen = window._pdSensScen || null;
+  const pdLineSelected = window._pdLineSelected || false;
 
   const SENS_COLORS = {
     '+100 MW': '#22c55e', '+200 MW': '#16a34a', '+500 MW': '#15803d', '+1000 MW': '#14532d',
@@ -619,13 +620,15 @@ function drawPriceSensitivityChart(data) {
   // 2. PD base forecast
   datasets.push({
     label: 'PD Forecast',
+    _pdLine: true,
     data: allSlots.map((l,i) => {
       if (i < nowIdx) return null;
       if (i === nowIdx) return histMap[l] ?? pdMap[l] ?? null;
       return pdMap[l] ?? null;
     }),
-    borderColor: color + 'aa', backgroundColor: 'transparent',
-    borderWidth: 1.5, borderDash: [6,3],
+    borderColor: pdLineSelected ? '#fbbf24' : color + 'aa', backgroundColor: 'transparent',
+    borderWidth: pdLineSelected ? 2 : 1.5,
+    borderDash: pdLineSelected ? [] : [6,3],
     pointRadius: 0, tension: 0.2, fill: false, spanGaps: false,
   });
 
@@ -661,19 +664,25 @@ function drawPriceSensitivityChart(data) {
       plugins: { ...CHART_DEFAULTS.plugins,
         legend: { display: true,
           labels: { color:'#94a3b8', font:{family:'Space Mono',size:8}, boxWidth:8, padding:5,
-            generateLabels: chart => chart.data.datasets.map((ds, i) => ({
-              text: ds.label,
-              fillStyle: ds._sensScen ? (ds._sensScen === selectedScen ? '#fbbf24' : (SENS_COLORS[ds._sensScen] || SENS_PALETTE[i % SENS_PALETTE.length])) : ds.borderColor,
-              strokeStyle: ds.borderColor,
-              lineWidth: 1,
-              datasetIndex: i,
-              fontColor: ds._sensScen === selectedScen ? '#fbbf24' : '#94a3b8',
-            }))
+            generateLabels: chart => chart.data.datasets.map((ds, i) => {
+              let col;
+              if (ds._pdLine) col = pdLineSelected ? '#fbbf24' : ds.borderColor;
+              else if (ds._sensScen) col = ds._sensScen === selectedScen ? '#fbbf24' : (SENS_COLORS[ds._sensScen] || SENS_PALETTE[i % SENS_PALETTE.length]);
+              else col = ds.borderColor;
+              return {
+                text: ds.label, fillStyle: col, strokeStyle: col,
+                lineWidth: 1, datasetIndex: i,
+                fontColor: (ds._pdLine && pdLineSelected) || ds._sensScen === selectedScen ? '#fbbf24' : '#94a3b8',
+              };
+            })
           },
           onClick: (e, legendItem, legend) => {
             const ds = legend.chart.data.datasets[legendItem.datasetIndex];
-            if (!ds._sensScen) return;
-            window._pdSensScen = (window._pdSensScen === ds._sensScen) ? null : ds._sensScen;
+            if (ds._pdLine) {
+              window._pdLineSelected = !window._pdLineSelected;
+            } else if (ds._sensScen) {
+              window._pdSensScen = (window._pdSensScen === ds._sensScen) ? null : ds._sensScen;
+            } else return;
             if (latestData) drawPriceSensitivityChart(latestData);
           }
         },
