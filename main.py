@@ -3693,11 +3693,20 @@ async def gas_debug():
 
         # Directory listings first — tells us straight away whether the
         # base path itself resolves, independent of any specific filename.
+        # Try href= case/quote-insensitively AND a generic filename-shaped
+        # token scan, since a page can list real files without matching the
+        # exact `href="...zip"` markup _list_hrefs() expects elsewhere —
+        # and dump a raw snippet so a human can just look at it directly if
+        # both of those come up empty (e.g. a JS-rendered listing).
         for label, base_url in [("sttm_dir", STTM_BASE + "/"), ("vicgas_dir", VICGAS_BASE + "/")]:
             entry, text = _probe(base_url)
             entry["label"] = label
             if text:
-                entry["sample_hrefs"] = _re.findall(r'href="([^"]+)"', text)[:15]
+                entry["sample_hrefs"] = _re.findall(r'href=[\'"]([^\'"]+)[\'"]', text, _re.I)[:20]
+                entry["filename_like_tokens"] = sorted(set(
+                    _re.findall(r'[A-Za-z0-9_\-.]+\.(?:zip|csv)', text, _re.I)
+                ))[:30]
+                entry["raw_snippet"] = text[:2500]
             out["probes"].append(entry)
 
         # STTM CURRENTDAY.ZIP
