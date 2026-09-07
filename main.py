@@ -3453,28 +3453,66 @@ def _scrape_barchart_curve(root: str, num_contracts: int = 18) -> list:
 
 @app.get("/api/commodities-debug")
 async def commodities_debug():
-    """Return raw first contract from Barchart for CB (Brent) to inspect field names."""
+    """
+    Diagnose the Barchart scrape end-to-end with a brand-new session (not
+    the 30-min-cached one _scrape_barchart_curve normally reuses — that
+    cache doesn't check for success, so a blocked session would otherwise
+    just keep getting reused and re-tested against itself). Reports the
+    initial page load's status/cookies, then the API call's status,
+    response headers (any WAF/bot-management fingerprint shows up there),
+    and raw body — not just the parsed JSON, in case the response isn't
+    actually JSON (an HTML challenge page, for instance).
+    """
     try:
         import requests as req_lib
-        s = _get_barchart_session()
+        out = {}
+
+        s = req_lib.Session()
+        s.headers.update({
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        page = s.get("https://www.barchart.com/futures/quotes/CL*0/futures-prices", timeout=15, headers={
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        })
+        out["page_load"] = {
+            "status": page.status_code,
+            "final_url": page.url,
+            "cookies_obtained": list(s.cookies.keys()),
+            "content_length": len(page.content),
+        }
+
         xsrf = req_lib.utils.unquote(s.cookies.get("XSRF-TOKEN", ""))
+        out["xsrf_token_present"] = bool(xsrf)
+
         url = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
         params = {
             "symbols": "CB*1",
             "fields": "symbol,contractName,lastPrice,priceChange,previousClose,volume,openInterest,tradeTimestamp,tradeTime,serverTimestamp,lastUpdate,sessionDateDisplayLong",
             "raw": "1",
         }
-        r = s.get(url, params=params, timeout=10, headers={
+        r = s.get(url, params=params, timeout=15, headers={
             "Accept": "application/json",
             "Referer": "https://www.barchart.com/futures/quotes/CB*0/futures-prices",
             "X-XSRF-TOKEN": xsrf,
         })
-        data = r.json()
-        items = data.get("data", [])
-        if items:
-            raw = items[0].get("raw", items[0])
-            return JSONResponse(content={"status": r.status_code, "raw": raw, "all_keys": list(raw.keys())})
-        return JSONResponse(content={"status": r.status_code, "data": data})
+        out["api_call"] = {
+            "status": r.status_code,
+            "response_headers": dict(r.headers),
+            "raw_body": r.text[:1500],
+        }
+        try:
+            data = r.json()
+            items = data.get("data", [])
+            if items:
+                raw = items[0].get("raw", items[0])
+                out["parsed"] = {"raw": raw, "all_keys": list(raw.keys())}
+            else:
+                out["parsed"] = {"data": data}
+        except Exception as e:
+            out["json_parse_error"] = f"{type(e).__name__}: {e}"
+
+        return JSONResponse(content=out)
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
