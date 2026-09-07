@@ -3343,13 +3343,13 @@ def scrape_eraring_price_archive(dates: set) -> dict:
 def scrape_eraring_scada_archive(dates: set) -> dict:
     """
     Fetch ER01-ER04 5-min SCADA output for a set of specific past dates from
-    AEMO's Dispatch_SCADA CURRENT + ARCHIVE listings. Each file covers one
-    5-min interval for every DUID in the NEM — filtered down to just
-    Eraring's 4 units to keep this affordable, but it's still one HTTP fetch
-    per interval per day (~288/day), so this is meant for a slow background
-    backfill, never a live request. AEMO's archive retention for this report
-    type isn't guaranteed to cover the full requested range — whatever days
-    come back empty are simply omitted, not fabricated.
+    AEMO's Dispatch_SCADA CURRENT + ARCHIVE listings. CURRENT files cover one
+    5-min interval each; ARCHIVE files bundle a whole day per zip
+    (PUBLIC_DISPATCHSCADA_YYYYMMDD.zip) — one HTTP fetch per requested day,
+    not per interval. Still meant for a background backfill rather than a
+    live request. AEMO's archive retention for this report type isn't
+    guaranteed to cover the full requested range — whatever days come back
+    empty are simply omitted, not fabricated.
     Returns { "YYYY-MM-DD": { duid: { "HH:MM": mw } } }.
     """
     from concurrent.futures import ThreadPoolExecutor as _TPE
@@ -3384,10 +3384,22 @@ def scrape_eraring_scada_archive(dates: set) -> dict:
     results: dict = {}
 
     def _fetch(url):
+        # CURRENT files are one 5-min interval each (a single CSV) — _read_zip
+        # handles those fine. ARCHIVE files bundle a whole day
+        # (PUBLIC_DISPATCHSCADA_YYYYMMDD.zip, no per-interval timestamp), and
+        # AEMO packages that either as several flat CSVs or as nested
+        # per-interval zips (the same zip-of-zips pattern TradingIS archives
+        # already use) — try the flat/multi-CSV read first, then fall back to
+        # zip-of-zips if that finds no CSVs at all, so either structure works.
         try:
-            text = _read_zip(url)
+            text = _read_zip_all(url)
         except Exception:
-            return
+            text = ""
+        if not text:
+            try:
+                text = _read_zip_of_zips(url)
+            except Exception:
+                text = ""
         if not text:
             return
         for row in _parse_aemo(text, "DISPATCH_UNIT_SCADA"):
