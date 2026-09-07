@@ -3370,20 +3370,26 @@ _barchart_session = None
 _barchart_session_time = None
 
 def _get_barchart_session():
-    """Return a requests session with valid Barchart cookies (XSRF token)."""
-    import requests as req_lib, time as time_lib
+    """
+    Return a curl_cffi session (browser-TLS-fingerprint impersonation) with
+    valid Barchart cookies (XSRF token). Plain `requests` no longer works
+    here — confirmed live: Barchart's edge returns a 202 bot-check
+    interstitial (~2KB, zero cookies set) to a stock requests/urllib3 TLS
+    handshake instead of the real page, so no session cookie is ever
+    obtainable and every API call 403s regardless of headers sent. curl_cffi
+    replicates a real Chrome TLS/JA3 fingerprint (and matching header set)
+    so the edge serves the actual page.
+    """
+    from curl_cffi import requests as req_lib
+    import time as time_lib
     global _barchart_session, _barchart_session_time
     from datetime import datetime, timezone, timedelta
     # Reuse session if under 30 minutes old
     if _barchart_session and _barchart_session_time:
         if datetime.now(timezone.utc) - _barchart_session_time < timedelta(minutes=30):
             return _barchart_session
-    s = req_lib.Session()
-    s.headers.update({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-    })
-    s.get("https://www.barchart.com/futures/quotes/CL*0/futures-prices", timeout=10, headers={
+    s = req_lib.Session(impersonate="chrome")
+    s.get("https://www.barchart.com/futures/quotes/CL*0/futures-prices", timeout=15, headers={
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     })
     time_lib.sleep(0.5)
@@ -3397,9 +3403,9 @@ def _scrape_barchart_curve(root: str, num_contracts: int = 18) -> list:
     Scrape forward curve for a futures root from Barchart internal API.
     Returns list of {symbol, contractName, lastPrice, priceChange, previousClose, volume, tradeTime}
     """
-    import requests as req_lib
+    from urllib.parse import unquote
     s = _get_barchart_session()
-    xsrf = req_lib.utils.unquote(s.cookies.get("XSRF-TOKEN", ""))
+    xsrf = unquote(s.cookies.get("XSRF-TOKEN", ""))
     symbols = ",".join([f"{root}*{i}" for i in range(1, num_contracts + 1)])
     url = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
     params = {
@@ -3457,21 +3463,21 @@ async def commodities_debug():
     Diagnose the Barchart scrape end-to-end with a brand-new session (not
     the 30-min-cached one _scrape_barchart_curve normally reuses — that
     cache doesn't check for success, so a blocked session would otherwise
-    just keep getting reused and re-tested against itself). Reports the
+    just keep getting reused and re-tested against itself). Uses curl_cffi
+    (browser TLS/JA3 fingerprint impersonation) rather than plain requests —
+    confirmed live that requests' TLS handshake gets served a 202 bot-check
+    interstitial with zero cookies instead of the real page. Reports the
     initial page load's status/cookies, then the API call's status,
     response headers (any WAF/bot-management fingerprint shows up there),
     and raw body — not just the parsed JSON, in case the response isn't
     actually JSON (an HTML challenge page, for instance).
     """
     try:
-        import requests as req_lib
+        from curl_cffi import requests as req_lib
+        from urllib.parse import unquote
         out = {}
 
-        s = req_lib.Session()
-        s.headers.update({
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-        })
+        s = req_lib.Session(impersonate="chrome")
         page = s.get("https://www.barchart.com/futures/quotes/CL*0/futures-prices", timeout=15, headers={
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         })
@@ -3482,7 +3488,7 @@ async def commodities_debug():
             "content_length": len(page.content),
         }
 
-        xsrf = req_lib.utils.unquote(s.cookies.get("XSRF-TOKEN", ""))
+        xsrf = unquote(s.cookies.get("XSRF-TOKEN", ""))
         out["xsrf_token_present"] = bool(xsrf)
 
         url = "https://www.barchart.com/proxies/core-api/v1/quotes/get"
@@ -3546,8 +3552,8 @@ async def commodities_data(refresh: bool = False):
         # EUR/USD for TTF conversion
         try:
             s = _get_barchart_session()
-            import requests as req_lib
-            xsrf = req_lib.utils.unquote(s.cookies.get("XSRF-TOKEN", ""))
+            from urllib.parse import unquote
+            xsrf = unquote(s.cookies.get("XSRF-TOKEN", ""))
             r = s.get("https://www.barchart.com/proxies/core-api/v1/quotes/get",
                 params={"symbols": "^EURUSD", "fields": "lastPrice", "raw": "1"},
                 timeout=8, headers={"Accept": "application/json",
