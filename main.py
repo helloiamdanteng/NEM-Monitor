@@ -650,7 +650,7 @@ async def gen_loop():
         await asyncio.wait_for(_load_eraring_cache_from_github(), timeout=20)
     except Exception as e:
         logger.warning(f"eraring-daily: load-on-startup failed: {e}")
-    asyncio.create_task(_run_eraring_backfill(7))
+    asyncio.create_task(_run_eraring_backfill(30))
     # Backfill 24hr SCADA history once at startup so chart is immediately populated
     try:
         loop = asyncio.get_running_loop()
@@ -2782,14 +2782,8 @@ async def eraring_daily_summary(days: int = 30, cap300: bool = False):
 
     # Kick off a background backfill for anything still missing — cheap to
     # call repeatedly, it no-ops while already running or already complete.
-    # Capped at 7 days regardless of how many were requested for display:
-    # Pass 2's SCADA archive fetch costs one HTTP request per 5-min interval
-    # per day, so bounding the one-shot backfill keeps it reliably
-    # completing in one run rather than getting caught mid-flight by the
-    # next redeploy. A wider pull can still be triggered explicitly via
-    # GET /api/eraring/backfill?days=N.
-    if any(d not in _eraring_daily_cache for d in past_dates[:7]):
-        asyncio.create_task(_run_eraring_backfill(7))
+    if any(d not in _eraring_daily_cache for d in past_dates[:30]):
+        asyncio.create_task(_run_eraring_backfill(30))
 
     for d in past_dates:
         variants = _eraring_daily_cache.get(d)
