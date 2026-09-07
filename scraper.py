@@ -3802,7 +3802,9 @@ def scrape_gas(days: int = 14) -> dict:
     """
     Scrape gas market data:
     - STTM: ex ante prices + scheduled withdrawals for Adelaide, Brisbane, Sydney
-      Source: nemweb REPORTS/CURRENT/STTM/CURRENTDAY.ZIP + DAY01..DAY14.ZIP
+      Source: nemweb REPORTS/CURRENT/STTM/CurrentDay.zip (case-sensitive
+      filename — AEMO's underlying storage is Azure Blob Storage, unlike the
+      directory path itself which tolerates any case)
     - VicGas DWGM: indicative intraday price + scheduled price + withdrawals + history
       Source: nemweb REPORTS/CURRENT/VicGas/ (flat CSVs)
 
@@ -3885,14 +3887,17 @@ def scrape_gas(days: int = 14) -> dict:
             logger.warning(f"scrape_gas: STTM ZIP parse failed: {e}")
         return out
 
-    # ── STTM: fetch CURRENTDAY ZIP only ──────────────────────────────────────
-    # CURRENTDAY.ZIP contains:
+    # ── STTM: fetch CurrentDay ZIP only ───────────────────────────────────────
+    # CurrentDay.zip contains:
     #   int651 — ex ante market prices (today + last 8 days = 9 days, 3 hubs each)
     #   int652 — ex ante schedule quantities (today's demand only, flow_direction F)
     # No daily demand history available from STTM sources.
+    # NB: nemweb's directory path is case-insensitive, but AEMO's underlying
+    # storage (Azure Blob Storage, per the WebContentNotFound error format)
+    # is case-sensitive on the filename itself — this must match exactly.
 
     def _fetch_sttm_current():
-        url = f"{STTM_BASE}/CURRENTDAY.ZIP"
+        url = f"{STTM_BASE}/CurrentDay.zip"
         r = _get(url, timeout=30)
         if not r:
             return {}
@@ -4002,10 +4007,13 @@ def scrape_gas(days: int = 14) -> dict:
         r = _get(url, timeout=15)
         return r.text if r else ""
 
+    # NB: filenames are case-sensitive on AEMO's underlying storage (Azure
+    # Blob Storage, per the WebContentNotFound error format) even though the
+    # directory path itself tolerates any case — these must match exactly.
     vicgas_files = [
-        "INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV",      # intraday indicative price
-        "INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", # 14-day price history
-        "INT050_V4_SCHED_WITHDRAWALS_1.CSV",           # today's withdrawals by zone
+        "int037b_v4_indicative_mkt_price_1.csv",      # intraday indicative price
+        "int041_v4_market_and_reference_prices_1.csv", # 14-day price history
+        "int050_v4_sched_withdrawals_1.csv",           # today's withdrawals by zone
     ]
     with _TPE(max_workers=4) as ex:
         vicgas_texts = {f: t for f, t in zip(vicgas_files, ex.map(_fetch_vicgas_csv, vicgas_files))}
@@ -4014,7 +4022,7 @@ def scrape_gas(days: int = 14) -> dict:
     # Columns: demand_type_name, price_value_gst_ex, transmission_group_id, schedule_type_id,
     #          transmission_id, gas_date, approval_datetime, current_date
     try:
-        text = vicgas_texts.get("INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV", "")
+        text = vicgas_texts.get("int037b_v4_indicative_mkt_price_1.csv", "")
         if text:
             reader = csv.DictReader(io.StringIO(text))
             pts = []
@@ -4037,7 +4045,7 @@ def scrape_gas(days: int = 14) -> dict:
     # INT041 — 14-day price history
     # Columns: gas_date, price_bod_gst_ex, price_10am_gst_ex, ..., imb_wtd_ave_price_gst_ex, current_date
     try:
-        text = vicgas_texts.get("INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", "")
+        text = vicgas_texts.get("int041_v4_market_and_reference_prices_1.csv", "")
         if text:
             from datetime import datetime as _dt
             reader = csv.DictReader(io.StringIO(text))
@@ -4063,7 +4071,7 @@ def scrape_gas(days: int = 14) -> dict:
     # INT050 — today's scheduled withdrawals by zone (filter to today's date only)
     # Columns: gas_date, withdrawal_zone_name, scheduled_qty, transmission_id, current_date
     try:
-        text = vicgas_texts.get("INT050_V4_SCHED_WITHDRAWALS_1.CSV", "")
+        text = vicgas_texts.get("int050_v4_sched_withdrawals_1.csv", "")
         if text:
             from datetime import datetime as _dt, date as _date
             today_str = _date.today().strftime("%d %b %Y")  # e.g. "29 Mar 2026"

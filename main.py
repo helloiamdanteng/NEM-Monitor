@@ -3709,8 +3709,8 @@ async def gas_debug():
                 entry["raw_snippet"] = text[:2500]
             out["probes"].append(entry)
 
-        # STTM CURRENTDAY.ZIP
-        entry, content = _probe(f"{STTM_BASE}/CURRENTDAY.ZIP", binary=True)
+        # STTM CurrentDay.zip (case-sensitive filename — see scrape_gas)
+        entry, content = _probe(f"{STTM_BASE}/CurrentDay.zip", binary=True)
         entry["label"] = "sttm_currentday_zip"
         out["probes"].append(entry)
         if content:
@@ -3725,11 +3725,11 @@ async def gas_debug():
             except Exception as e:
                 out["sttm_zip_error"] = f"{type(e).__name__}: {e}"
 
-        # VicGas CSVs
+        # VicGas CSVs (case-sensitive, all-lowercase filenames — see scrape_gas)
         for filename, key in [
-            ("INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", "vicgas_int041_rows"),
-            ("INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV", "vicgas_int037b_first5"),
-            ("INT050_V4_SCHED_WITHDRAWALS_1.CSV", "vicgas_int050_rows"),
+            ("int041_v4_market_and_reference_prices_1.csv", "vicgas_int041_rows"),
+            ("int037b_v4_indicative_mkt_price_1.csv", "vicgas_int037b_first5"),
+            ("int050_v4_sched_withdrawals_1.csv", "vicgas_int050_rows"),
         ]:
             entry, text = _probe(f"{VICGAS_BASE}/{filename}")
             entry["label"] = key
