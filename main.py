@@ -2532,7 +2532,8 @@ def _compute_eraring_day_stats(date_str: str, duid_hist: dict, nsw_prices: dict,
     common = [l for l in totals if l in nsw_prices]
     if not common:
         return {"date": date_str, "production_mwh": round(production_mwh, 1),
-                "twp": None, "dwap": None, "ratio": None, "intervals": 0}
+                "twp": None, "dwap": None, "ratio": None, "intervals": 0,
+                "sum_mw": 0.0, "sum_mw_price": 0.0, "sum_price": 0.0}
 
     sum_mw = sum_mw_price = sum_price = 0.0
     for l in common:
@@ -2554,6 +2555,13 @@ def _compute_eraring_day_stats(date_str: str, duid_hist: dict, nsw_prices: dict,
         "dwap": round(dwap, 2) if dwap is not None else None,
         "ratio": round(ratio, 4) if ratio is not None else None,
         "intervals": len(common),
+        # Raw weighted-sum components (not just the derived twp/dwap/ratio)
+        # so callers combining multiple days (e.g. a monthly rollup) can
+        # recompute the weighted average correctly instead of naively
+        # averaging each day's already-derived ratio.
+        "sum_mw": sum_mw,
+        "sum_mw_price": sum_mw_price,
+        "sum_price": sum_price,
     }
 
 
@@ -2563,6 +2571,36 @@ def _compute_eraring_day_both(date_str: str, duid_hist: dict, nsw_prices: dict) 
     return {
         "full":   _compute_eraring_day_stats(date_str, duid_hist, nsw_prices, cap300=False),
         "cap300": _compute_eraring_day_stats(date_str, duid_hist, nsw_prices, cap300=True),
+    }
+
+
+def _aggregate_eraring_days(stats_list: list):
+    """
+    Combine a list of per-day Eraring stats (as returned by
+    _compute_eraring_day_stats) into one rollup — e.g. a calendar month.
+    Recombines the underlying weighted-sum components (sum_mw, sum_mw_price,
+    sum_price, intervals) rather than averaging each day's already-derived
+    twp/dwap/ratio, since a plain average would weight every day equally
+    regardless of how many valid intervals it actually had.
+    """
+    if not stats_list:
+        return None
+    production_mwh = sum(s.get("production_mwh") or 0.0 for s in stats_list)
+    sum_mw         = sum(s.get("sum_mw") or 0.0 for s in stats_list)
+    sum_mw_price   = sum(s.get("sum_mw_price") or 0.0 for s in stats_list)
+    sum_price      = sum(s.get("sum_price") or 0.0 for s in stats_list)
+    intervals      = sum(s.get("intervals") or 0 for s in stats_list)
+
+    twp   = (sum_price / intervals) if intervals else None
+    dwap  = (sum_mw_price / sum_mw) if sum_mw > 0 else None
+    ratio = (dwap / twp) if (dwap is not None and twp) else None
+
+    return {
+        "production_mwh": round(production_mwh, 1),
+        "twp": round(twp, 2) if twp is not None else None,
+        "dwap": round(dwap, 2) if dwap is not None else None,
+        "ratio": round(ratio, 4) if ratio is not None else None,
+        "days_with_data": len(stats_list),
     }
 
 
@@ -2750,7 +2788,7 @@ async def eraring_backfill_trigger(days: int = 30):
     """Manually (re-)trigger the AEMO archive backfill in the background."""
     if _eraring_backfill_running:
         return {"status": "already running"}
-    asyncio.create_task(_run_eraring_backfill(max(1, min(days, 90))))
+    asyncio.create_task(_run_eraring_backfill(max(1, min(days, 400))))
     return {"status": "backfill started", "days": days}
 
 
@@ -2823,7 +2861,7 @@ async def eraring_archive_debug(days_ago: int = 15):
 
 
 @app.get("/api/eraring/daily_summary")
-async def eraring_daily_summary(days: int = 30, cap300: bool = False):
+async def eraring_daily_summary(days: int = 14, cap300: bool = False):
     """
     Last N days of Eraring production/TWP/DWAP/ratio, newest first. Today is
     computed live from in-memory history; past days come from
@@ -2862,6 +2900,85 @@ async def eraring_daily_summary(days: int = 30, cap300: bool = False):
                 results.append(stats)
 
     return JSONResponse(content={"days": results})
+
+
+@app.get("/api/eraring/monthly_summary")
+async def eraring_monthly_summary(months: int = 12, cap300: bool = False):
+    """
+    Last N calendar months of Eraring production/TWP/DWAP/ratio, newest
+    first, including the current (partial) month. Each month is a rollup of
+    that month's daily stats via _aggregate_eraring_days — i.e. built from
+    the underlying weighted-sum components, not an average of daily ratios.
+    Shares _eraring_daily_cache with the daily summary, but a 12-month
+    window needs far more historical coverage than the daily table's
+    default backfill asks for, so this triggers its own wider background
+    backfill (sized to the oldest month requested) when coverage is short.
+    """
+    from scraper import _duid_history, _dispatch_price_history, AEST
+    from datetime import datetime
+    from calendar import monthrange
+
+    now_aest  = datetime.now(AEST)
+    today     = now_aest.date()
+    today_str = today.strftime("%Y-%m-%d")
+    months    = max(1, min(months, 24))
+
+    # Calendar months, most-recent (current) first.
+    month_keys = []
+    y, m = now_aest.year, now_aest.month
+    for _ in range(months):
+        month_keys.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+
+    today_stats = _compute_eraring_day_stats(
+        today_str, _duid_history, dict(_dispatch_price_history.get("NSW1", {})), cap300=cap300
+    )
+
+    # Every calendar date across the requested months, excluding today/future.
+    all_dates = []
+    for (yr, mo) in month_keys:
+        last_day = monthrange(yr, mo)[1]
+        for day in range(1, last_day + 1):
+            d = datetime(yr, mo, day).date()
+            if d < today:
+                all_dates.append(d.strftime("%Y-%m-%d"))
+
+    if any(d not in _eraring_daily_cache for d in all_dates):
+        oldest_y, oldest_mo = month_keys[-1]
+        span_days = (today - datetime(oldest_y, oldest_mo, 1).date()).days + 2
+        asyncio.create_task(_run_eraring_backfill(max(31, span_days)))
+
+    results = []
+    for (yr, mo) in month_keys:
+        last_day = monthrange(yr, mo)[1]
+        day_stats = []
+        for day in range(1, last_day + 1):
+            d = datetime(yr, mo, day).date()
+            if d > today:
+                continue
+            if d == today:
+                if today_stats:
+                    day_stats.append(today_stats)
+                continue
+            variants = _eraring_daily_cache.get(d.strftime("%Y-%m-%d"))
+            if variants:
+                stats = variants.get("cap300" if cap300 else "full")
+                if stats:
+                    day_stats.append(stats)
+        agg = _aggregate_eraring_days(day_stats)
+        results.append({
+            "month": f"{yr:04d}-{mo:02d}",
+            "label": datetime(yr, mo, 1).strftime("%b %Y"),
+            "production_mwh": agg["production_mwh"] if agg else None,
+            "twp": agg["twp"] if agg else None,
+            "dwap": agg["dwap"] if agg else None,
+            "ratio": agg["ratio"] if agg else None,
+            "days_with_data": agg["days_with_data"] if agg else 0,
+        })
+
+    return JSONResponse(content={"months": results})
 
 
 @app.get("/api/historical_day_prices")

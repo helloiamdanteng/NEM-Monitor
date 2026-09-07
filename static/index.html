@@ -7955,11 +7955,13 @@ const ERARING_COLOR = '#38bdf8';
 let _eraringData = null; // raw /api/stations/batch results, cached per page load
 let eraringShowPrice = true; // NSW1 price overlay — on by default
 let _eraringDailyData = null; // /api/eraring/daily_summary results, cached per page load
-let eraringCap300 = true; // when true, TWP/DWAP/ratio clip NSW1 RRP to $300 (every interval still counted) — on by default
+let _eraringMonthlyData = null; // /api/eraring/monthly_summary results, cached per page load
+let eraringCap300 = true; // when true, TWP/DWAP/ratio clip NSW1 RRP to $300 (every interval still counted) — on by default; shared by both the daily and monthly tables
 
 function toggleEraringCap300() {
   eraringCap300 = !eraringCap300;
   _eraringDailyData = null; // force a re-fetch with the new filter
+  _eraringMonthlyData = null;
   if (currentPanel === 'eraring') renderPanel('eraring', latestData || {});
 }
 
@@ -8106,14 +8108,14 @@ function _renderEraringContent(results) {
 }
 
 function _renderEraringDailySummary() {
-  let html = '<div class="section-title">Daily Summary — Last 30 Days</div>';
+  let html = '<div class="section-title">Daily &amp; Monthly Summary</div>';
   html += '<div style="font-family:var(--font-mono);font-size:9px;color:#475569;margin-bottom:8px;line-height:1.5">' +
     'TWP = NSW1 time-weighted average price (every 5-min interval counts equally). ' +
     'DWAP = Eraring\'s own dispatch-weighted average price (weighted by its output). ' +
     'Ratio = DWAP ÷ TWP — above 100% means Eraring captured better-than-average prices.' +
     '</div>';
 
-  html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">
+  html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px">
     <button onclick="toggleEraringCap300()" style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:20px;cursor:pointer;
       border:1px solid ${eraringCap300 ? '#f39c12' : '#475569'};
       background:${eraringCap300 ? '#f39c1233' : 'transparent'};
@@ -8122,16 +8124,24 @@ function _renderEraringDailySummary() {
     </button>
   </div>`;
 
+  html += '<div style="font-family:var(--font-mono);font-size:10px;color:#94a3b8;font-weight:700;margin-bottom:6px">Last 14 Days</div>';
+  html += _renderEraringDailyTable();
+
+  html += '<div style="font-family:var(--font-mono);font-size:10px;color:#94a3b8;font-weight:700;margin:14px 0 6px">Last 12 Months</div>';
+  html += _renderEraringMonthlyTable();
+
+  return html;
+}
+
+function _renderEraringDailyTable() {
   if (!_eraringDailyData) {
-    html += '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:12px 0">Loading daily summary…</div>';
-    return html;
+    return '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:12px 0">Loading daily summary…</div>';
   }
   if (!_eraringDailyData.length) {
-    html += '<div class="state-msg"><div class="icon">📊</div><div>No historical data available yet — this builds up day by day</div></div>';
-    return html;
+    return '<div class="state-msg"><div class="icon">📊</div><div>No historical data available yet — this builds up day by day</div></div>';
   }
 
-  html += '<div class="chart-card" style="padding:0;overflow-x:auto">';
+  let html = '<div class="chart-card" style="padding:0;overflow-x:auto">';
   html += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px;white-space:nowrap">';
   html += `<thead><tr style="border-bottom:1px solid var(--border)">
     <th style="text-align:left;padding:8px 10px;color:#64748b">Date</th>
@@ -8159,6 +8169,41 @@ function _renderEraringDailySummary() {
   return html;
 }
 
+function _renderEraringMonthlyTable() {
+  if (!_eraringMonthlyData) {
+    return '<div style="font-family:var(--font-mono);font-size:10px;color:#475569;padding:12px 0">Loading monthly summary…</div>';
+  }
+  if (!_eraringMonthlyData.length) {
+    return '<div class="state-msg"><div class="icon">📊</div><div>No historical data available yet — this builds up month by month</div></div>';
+  }
+
+  let html = '<div class="chart-card" style="padding:0;overflow-x:auto">';
+  html += '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:10px;white-space:nowrap">';
+  html += `<thead><tr style="border-bottom:1px solid var(--border)">
+    <th style="text-align:left;padding:8px 10px;color:#64748b">Month</th>
+    <th style="text-align:right;padding:8px 10px;color:#64748b">Production</th>
+    <th style="text-align:right;padding:8px 10px;color:#64748b">TWP</th>
+    <th style="text-align:right;padding:8px 10px;color:#64748b">DWAP</th>
+    <th style="text-align:right;padding:8px 10px;color:#64748b">Ratio</th>
+  </tr></thead><tbody>`;
+
+  _eraringMonthlyData.forEach((mo, i) => {
+    const monthLabel = mo.label + (i === 0 ? ' (so far)' : '');
+    const ratioColor = mo.ratio == null ? '#475569' : mo.ratio >= 1 ? '#2ed573' : '#e74c3c';
+    const noData = !mo.days_with_data;
+    html += `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 10px;color:var(--text)">${monthLabel}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--text)">${noData?'—':fmt(mo.production_mwh,0)+' MWh'}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--text)">${mo.twp!=null?fmtPrice(mo.twp):'—'}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--text)">${mo.dwap!=null?fmtPrice(mo.dwap):'—'}</td>
+      <td style="padding:6px 10px;text-align:right;color:${ratioColor};font-weight:700">${mo.ratio!=null?(mo.ratio*100).toFixed(1)+'%':'—'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  return html;
+}
+
 async function fetchEraringData() {
   try {
     const results = await fetch(`/api/stations/batch?duids=${ERARING_DUIDS.join(',')}`).then(r => r.json());
@@ -8177,7 +8222,7 @@ let _eraringDailyPollTimer = null;
 async function fetchEraringDailySummary() {
   const prevCount = (_eraringDailyData || []).length;
   try {
-    const result = await fetch(`/api/eraring/daily_summary?days=30&cap300=${eraringCap300}`).then(r => r.json());
+    const result = await fetch(`/api/eraring/daily_summary?days=14&cap300=${eraringCap300}`).then(r => r.json());
     _eraringDailyData = result.days || [];
   } catch(e) {
     console.error('Eraring daily summary fetch error:', e);
@@ -8187,8 +8232,32 @@ async function fetchEraringDailySummary() {
   // background (can take minutes) — keep checking back while coverage is
   // still growing, and stop on its own once it plateaus.
   clearTimeout(_eraringDailyPollTimer);
-  if (_eraringDailyData.length < 30 && _eraringDailyData.length !== prevCount) {
+  if (_eraringDailyData.length < 14 && _eraringDailyData.length !== prevCount) {
     _eraringDailyPollTimer = setTimeout(fetchEraringDailySummary, 20000);
+  }
+  if (currentPanel === 'eraring') {
+    renderPanel('eraring', latestData || {});
+  }
+}
+
+let _eraringMonthlyPollTimer = null;
+
+async function fetchEraringMonthlySummary() {
+  const prevWithData = (_eraringMonthlyData || []).filter(mo => mo.days_with_data > 0).length;
+  try {
+    const result = await fetch(`/api/eraring/monthly_summary?months=12&cap300=${eraringCap300}`).then(r => r.json());
+    _eraringMonthlyData = result.months || [];
+  } catch(e) {
+    console.error('Eraring monthly summary fetch error:', e);
+    if (_eraringMonthlyData === null) _eraringMonthlyData = [];
+  }
+  // Backfilling up to 12 months of archive data can take a while — keep
+  // polling back while the number of months with any data is still
+  // growing, and stop on its own once it plateaus.
+  clearTimeout(_eraringMonthlyPollTimer);
+  const monthsWithData = _eraringMonthlyData.filter(mo => mo.days_with_data > 0).length;
+  if (monthsWithData < _eraringMonthlyData.length && monthsWithData !== prevWithData) {
+    _eraringMonthlyPollTimer = setTimeout(fetchEraringMonthlySummary, 20000);
   }
   if (currentPanel === 'eraring') {
     renderPanel('eraring', latestData || {});
@@ -8369,6 +8438,7 @@ function renderPanel(panel, data) {
         if (_eraringData) setTimeout(() => _drawEraringChart(_eraringData), 50);
         else fetchEraringData();
         if (!_eraringDailyData) fetchEraringDailySummary();
+        if (!_eraringMonthlyData) fetchEraringMonthlySummary();
       }
     } catch(e) {
       console.error(`Chart error [${panel}]:`, e);
