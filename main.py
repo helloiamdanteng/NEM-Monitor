@@ -22,6 +22,27 @@ from scraper import scrape_all, scrape_gen, scrape_slow, scrape_scada_history, s
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _gh_raw_accept_headers(base_headers: dict) -> dict:
+    """
+    GitHub's Contents API only populates the JSON response's 'content'
+    field for files <=1MB — for anything bigger (our data/gen/<date>.json
+    daily snapshots run ~2-3MB) it's silently omitted from an otherwise
+    200 OK response, so `r.json()["content"]` raises KeyError. Every
+    caller wrapped that in a broad try/except that treats the failure as
+    "file doesn't exist", which is exactly why gen-history's restart
+    restore (_load_gen_history_from_github) and the Eraring backfill's
+    Pass 1 (_fetch_github_json) never actually recovered anything: the
+    files were always there, just too big to read this way. Requesting
+    the 'raw' media type instead returns the file body directly, no size
+    cap up to 100MB, but the response is no longer JSON-wrapped — it has
+    no 'sha' field, so this is only for read-only fetches, never for a
+    GET that also needs 'sha' to prepare a subsequent write.
+    """
+    h = dict(base_headers)
+    h["Accept"] = "application/vnd.github.v3.raw"
+    return h
+
 fast_cache   = {"data": None, "last_updated": None, "error": None}
 mtpasa_cache = {"data": [],   "last_updated": None, "error": None}
 gen_cache  = {"data": None, "last_updated": None, "error": None}
@@ -140,12 +161,12 @@ async def _load_price_history_from_github():
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(
                 f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
-                headers=GH_HEADERS,
+                headers=_gh_raw_accept_headers(GH_HEADERS),
             )
             if r.status_code != 200:
                 logger.info(f"prices: no persisted snapshot for {today} (status={r.status_code})")
                 return
-            saved = json.loads(base64.b64decode(r.json()["content"]).decode())
+            saved = json.loads(r.text)
 
             n = 0
             for region in NEM_REGIONS:
@@ -274,15 +295,15 @@ async def _load_gen_history_from_github():
         return n
 
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get(
                 f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}",
-                headers=GH_HEADERS,
+                headers=_gh_raw_accept_headers(GH_HEADERS),
             )
             if r.status_code != 200:
                 logger.info(f"gen-history: no persisted snapshot for {today} (status={r.status_code})")
                 return
-            saved = json.loads(base64.b64decode(r.json()["content"]).decode())
+            saved = json.loads(r.text)
 
             n_fh = _restore(_fuel_history, saved.get("fuel_history", {}))
             n_dh = _restore(_duid_history, saved.get("duid_history", {}))
@@ -2205,10 +2226,10 @@ async def prices_rolling(days: int = 14):
             try:
                 r = await client.get(
                     f"https://api.github.com/repos/{GH_REPO}/contents/{path}",
-                    headers=GH_HEADERS,
+                    headers=_gh_raw_accept_headers(GH_HEADERS),
                 )
                 if r.status_code == 200:
-                    data = json.loads(base64.b64decode(r.json()["content"]).decode())
+                    data = json.loads(r.text)
                     data.pop("date", None)
                     result[date_str] = data
             except Exception:
@@ -2297,9 +2318,9 @@ async def price_tod_test():
         for offset in [0, 1]:  # today and yesterday
             date_str = (now_aest - timedelta(days=offset)).strftime("%Y-%m-%d")
             path = f"data/prices/{date_str}.json"
-            r = await client.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=headers)
+            r = await client.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=_gh_raw_accept_headers(headers))
             if r.status_code == 200:
-                day_data = json.loads(base64.b64decode(r.json()["content"]).decode())
+                day_data = json.loads(r.text)
                 nsw = day_data.get("NSW1", {})
                 all_keys = sorted(nsw.keys())
                 result[date_str] = {
@@ -2546,12 +2567,15 @@ def _compute_eraring_day_both(date_str: str, duid_hist: dict, nsw_prices: dict) 
 
 
 async def _fetch_github_json(client, gh_repo: str, gh_headers: dict, path: str):
-    import json, base64
+    import json
     try:
-        r = await client.get(f"https://api.github.com/repos/{gh_repo}/contents/{path}", headers=gh_headers)
+        r = await client.get(
+            f"https://api.github.com/repos/{gh_repo}/contents/{path}",
+            headers=_gh_raw_accept_headers(gh_headers),
+        )
         if r.status_code != 200:
             return None
-        return json.loads(base64.b64decode(r.json()["content"]).decode())
+        return json.loads(r.text)
     except Exception:
         return None
 
@@ -2597,11 +2621,11 @@ async def _load_eraring_cache_from_github():
     GH_PATH = "data/eraring_daily.json"
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get(f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}", headers=GH_HEADERS)
+            r = await client.get(f"https://api.github.com/repos/{GH_REPO}/contents/{GH_PATH}", headers=_gh_raw_accept_headers(GH_HEADERS))
             if r.status_code != 200:
                 logger.info("eraring-daily: no persisted cache yet")
                 return
-            saved = json.loads(base64.b64decode(r.json()["content"]).decode())
+            saved = json.loads(r.text)
             for date_str, variants in saved.items():
                 _eraring_daily_cache.setdefault(date_str, variants)
             logger.info(f"eraring-daily: restored {len(saved)} days from cache")
@@ -2641,7 +2665,7 @@ async def _run_eraring_backfill(days: int = 30):
         if GH_TOKEN and GH_REPO:
             GH_HEADERS = {"Authorization": f"token {GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
             import httpx
-            async with httpx.AsyncClient(timeout=15) as client:
+            async with httpx.AsyncClient(timeout=30) as client:
                 sem = asyncio.Semaphore(6)
 
                 async def _load(date_str):
@@ -2792,12 +2816,12 @@ async def historical_day_prices(date: str):
             return {"error": "GitHub not configured"}
         headers = {"Authorization": f"token {GH_TOKEN}", "Accept": "application/vnd.github.v3+json"}
         path = f"data/prices/{date}.json"
-        r = _req.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=headers, timeout=10)
+        r = _req.get(f"https://api.github.com/repos/{GH_REPO}/contents/{path}", headers=_gh_raw_accept_headers(headers), timeout=10)
         if r.status_code == 404:
             return {"error": "no data for this date"}
         if r.status_code != 200:
             return {"error": f"GitHub error {r.status_code}"}
-        day_data = _json.loads(base64.b64decode(r.json()["content"]).decode())
+        day_data = _json.loads(r.text)
         day_data.pop("date", None)
         return day_data
     try:
