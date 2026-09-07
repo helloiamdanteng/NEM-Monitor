@@ -2671,14 +2671,36 @@ async def _load_eraring_cache_from_github():
         logger.warning(f"eraring-daily: GitHub load failed: {e}")
 
 
+def _eraring_cache_entry_stale(date_str: str) -> bool:
+    """
+    True if date_str needs (re-)computing: either wholly absent from
+    _eraring_daily_cache, or present but written by an older code version
+    that didn't persist the raw weighted-sum components (sum_mw,
+    sum_mw_price, sum_price) that monthly aggregation needs — a schema
+    upgrade, not just a missing-data check. A confirmed-unavailable entry
+    (None) is not stale; there's nothing more to fetch for it.
+    """
+    if date_str not in _eraring_daily_cache:
+        return True
+    entry = _eraring_daily_cache[date_str]
+    if entry is None:
+        return False
+    full = entry.get("full")
+    return bool(full) and "sum_mw" not in full
+
+
 async def _run_eraring_backfill(days: int = 30):
     """
     Fill _eraring_daily_cache for the last `days` calendar days (excluding
     today), preferring our own persisted daily snapshots and falling back to
     a direct AEMO archive fetch for whatever's still missing (i.e. days that
-    predate the gen-history persistence pipeline). Runs as a background
-    task — can take minutes given the SCADA archive fetch is one HTTP
-    request per 5-min interval per day.
+    predate the gen-history persistence pipeline). Also recomputes any
+    already-cached day whose stored stats predate a schema change (see
+    _eraring_cache_entry_stale) — e.g. days cached before sum_mw/
+    sum_mw_price/sum_price were added, which would otherwise silently
+    corrupt monthly aggregation. Runs as a background task — can take
+    minutes given the SCADA archive fetch is one HTTP request per 5-min
+    interval per day.
     """
     global _eraring_backfill_running
     if _eraring_backfill_running:
@@ -2691,7 +2713,7 @@ async def _run_eraring_backfill(days: int = 30):
 
         now_aest   = datetime.now(AEST)
         past_dates = [(now_aest - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, days)]
-        missing    = [d for d in past_dates if d not in _eraring_daily_cache]
+        missing    = [d for d in past_dates if _eraring_cache_entry_stale(d)]
         if not missing:
             logger.info("eraring-backfill: cache already complete, nothing to do")
             return
@@ -2728,7 +2750,7 @@ async def _run_eraring_backfill(days: int = 30):
                         logger.warning(f"eraring-backfill: Pass 1 failed for {date_str}: {e}")
 
                 await asyncio.gather(*[_load(d) for d in still_missing])
-            still_missing = [d for d in still_missing if d not in _eraring_daily_cache]
+            still_missing = [d for d in still_missing if _eraring_cache_entry_stale(d)]
             logger.info(f"eraring-backfill: {len(missing) - len(still_missing)} days from our own store, "
                         f"{len(still_missing)} still need AEMO archives")
             # Persist now — Pass 1 is fast and cheap, but Pass 2 (AEMO
@@ -2887,9 +2909,10 @@ async def eraring_daily_summary(days: int = 14, cap300: bool = False):
 
     past_dates = [(now_aest - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(1, days)]
 
-    # Kick off a background backfill for anything still missing — cheap to
-    # call repeatedly, it no-ops while already running or already complete.
-    if any(d not in _eraring_daily_cache for d in past_dates[:30]):
+    # Kick off a background backfill for anything still missing or stale
+    # (old schema) — cheap to call repeatedly, it no-ops while already
+    # running or already complete.
+    if any(_eraring_cache_entry_stale(d) for d in past_dates[:30]):
         asyncio.create_task(_run_eraring_backfill(30))
 
     for d in past_dates:
@@ -2945,7 +2968,7 @@ async def eraring_monthly_summary(months: int = 12, cap300: bool = False):
             if d < today:
                 all_dates.append(d.strftime("%Y-%m-%d"))
 
-    if any(d not in _eraring_daily_cache for d in all_dates):
+    if any(_eraring_cache_entry_stale(d) for d in all_dates):
         oldest_y, oldest_mo = month_keys[-1]
         span_days = (today - datetime(oldest_y, oldest_mo, 1).date()).days + 2
         asyncio.create_task(_run_eraring_backfill(max(31, span_days)))
