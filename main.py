@@ -2753,6 +2753,74 @@ async def eraring_backfill_trigger(days: int = 30):
     return {"status": "backfill started", "days": days}
 
 
+@app.get("/api/eraring/archive-debug")
+async def eraring_archive_debug(days_ago: int = 15):
+    """
+    Diagnose why Pass 2 (AEMO archive backfill) isn't recovering older days:
+    lists what AEMO's SCADA and TradingIS archives actually contain, without
+    fetching/parsing any files, so we can tell 'AEMO doesn't retain this far
+    back' apart from 'our filtering logic is wrong' without needing direct
+    server log access.
+    """
+    from scraper import SCADA_URL, SCADA_ARCHIVE, TRADING_ARCHIVE, _list_hrefs, AEST
+    from datetime import datetime, timedelta
+
+    loop = asyncio.get_running_loop()
+    target_date = (datetime.now(AEST) - timedelta(days=days_ago)).date()
+    target_compact = target_date.strftime("%Y%m%d")
+
+    def _scada_summary(urls, label):
+        scada_urls = [u for u in urls if "PUBLIC_DISPATCHSCADA" in u.upper()]
+        dates_found = set()
+        for u in scada_urls:
+            fname = u.split('/')[-1]
+            for tok in fname.replace('.zip', '').split('_'):
+                if len(tok) >= 8 and tok[:8].isdigit():
+                    dates_found.add(tok[:8])
+                    break
+        return {
+            "source": label,
+            "total_hrefs": len(urls),
+            "scada_hrefs": len(scada_urls),
+            "distinct_dates_found": len(dates_found),
+            "oldest_date_found": min(dates_found) if dates_found else None,
+            "newest_date_found": max(dates_found) if dates_found else None,
+            "target_date_present": target_compact in dates_found,
+            "sample_filenames": [u.split('/')[-1] for u in scada_urls[:3]],
+        }
+
+    def _fetch():
+        result = {"target_date": str(target_date), "target_compact": target_compact}
+        try:
+            current_urls = _list_hrefs(SCADA_URL)
+            result["scada_current"] = _scada_summary(current_urls, "CURRENT")
+        except Exception as e:
+            result["scada_current"] = {"error": str(e)}
+        try:
+            archive_urls = _list_hrefs(SCADA_ARCHIVE)
+            result["scada_archive"] = _scada_summary(archive_urls, "ARCHIVE")
+        except Exception as e:
+            result["scada_archive"] = {"error": str(e)}
+        try:
+            trading_urls = _list_hrefs(TRADING_ARCHIVE)
+            weekly_ranges = []
+            for u in trading_urls[:5]:
+                weekly_ranges.append(u.split('/')[-1])
+            result["trading_archive"] = {
+                "total_hrefs": len(trading_urls),
+                "sample_filenames": weekly_ranges,
+            }
+        except Exception as e:
+            result["trading_archive"] = {"error": str(e)}
+        return result
+
+    try:
+        data = await asyncio.wait_for(loop.run_in_executor(None, _fetch), timeout=30.0)
+        return JSONResponse(content=data)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.get("/api/eraring/daily_summary")
 async def eraring_daily_summary(days: int = 30, cap300: bool = False):
     """
