@@ -3261,11 +3261,17 @@ _ERARING_ARCHIVE_DUIDS = ("ER01", "ER02", "ER03", "ER04")
 
 def scrape_eraring_price_archive(dates: set) -> dict:
     """
-    Fetch NSW1 30-min settlement prices for a set of specific past dates
-    (YYYY-MM-DD strings) from AEMO's TradingIS weekly archive (zip-of-zips —
-    same source/pattern as scrape_historical_price_averages, but keeping the
-    raw per-interval series instead of only aggregate stats).
-    Returns { "YYYY-MM-DD": { "HH:MM": rrp } }.
+    Fetch NSW1 settlement prices for a set of specific past dates (YYYY-MM-DD
+    strings) from AEMO's TradingIS weekly archive (zip-of-zips — same
+    source/pattern as scrape_historical_price_averages, but keeping the raw
+    per-interval series instead of only aggregate stats). AEMO's TradingIS
+    only publishes a 30-min settlement price, not a 5-min one, but Eraring's
+    SCADA output (scrape_eraring_scada_archive) is 5-min resolution — each
+    30-min price is broadcast across all six 5-min labels it covers so a
+    DWAP computed against it is weighted by the full day's production
+    instead of only the 1-in-6 samples that happen to land on a half-hour
+    boundary.
+    Returns { "YYYY-MM-DD": { "HH:MM": rrp } } at 5-min label resolution.
     """
     from concurrent.futures import ThreadPoolExecutor as _TPE
     from calendar import monthrange
@@ -3325,11 +3331,21 @@ def scrape_eraring_price_archive(dates: set) -> dict:
             if not dt_str or not rrp_str:
                 continue
             try:
-                dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
-                day_str = dt.strftime("%Y-%m-%d")
+                rrp = round(float(rrp_str), 2)
+                period_start = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                day_str = period_start.strftime("%Y-%m-%d")
                 if day_str not in date_set:
                     continue
-                results.setdefault(day_str, {})[dt.strftime("%H:%M")] = round(float(rrp_str), 2)
+                # TradingIS only gives a 30-min settlement price, but SCADA
+                # (see scrape_eraring_scada_archive) gives 5-min production —
+                # broadcast this price across all six 5-min sub-intervals it
+                # actually covers, so DWAP is weighted by the full day's
+                # output instead of just the 1-in-6 samples that happen to
+                # land exactly on a half-hour boundary.
+                bucket = results.setdefault(day_str, {})
+                for i in range(6):
+                    label = (period_start + timedelta(minutes=5 * i)).strftime("%H:%M")
+                    bucket[label] = rrp
             except (ValueError, TypeError):
                 continue
 
