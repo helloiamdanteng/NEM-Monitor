@@ -2711,9 +2711,10 @@ async def _run_eraring_backfill(days: int = 30):
                 logger.warning(f"eraring-backfill: price archive fetch failed: {e}")
                 prices = {}
             try:
-                # Generous timeout — this is one HTTP fetch per 5-min interval
-                # per day (~288/day), so a full 29-day backfill can genuinely
-                # take several minutes.
+                # ARCHIVE bundles a whole day per zip, so this is one HTTP
+                # fetch per requested day, not per interval — generous
+                # timeout mainly as a safety margin against a slow AEMO
+                # response, not because this is inherently a huge job.
                 scada = await asyncio.wait_for(
                     loop.run_in_executor(None, scrape_eraring_scada_archive, date_set), timeout=600
                 )
