@@ -3657,37 +3657,80 @@ async def gbb_data(refresh: bool = False):
 
 @app.get("/api/gas-debug")
 async def gas_debug():
-    """Inspect STTM and VicGas CSV contents in detail."""
-    import zipfile as _zf, io as _io, csv as _csv
-    from scraper import STTM_BASE, VICGAS_BASE, _get
+    """
+    Inspect STTM and VicGas CSV contents in detail — and unlike the old
+    version of this endpoint, actually surface *why* a fetch failed
+    (status code, response snippet, exception) instead of silently
+    dropping it via scraper._get(), which swallows errors and returns
+    None. That silent-drop is exactly why this endpoint was returning {}
+    with zero diagnostic value.
+    """
+    import zipfile as _zf, io as _io, csv as _csv, re as _re
+    from scraper import STTM_BASE, VICGAS_BASE, SESSION
 
     loop = asyncio.get_running_loop()
 
+    def _probe(url: str, binary: bool = False):
+        """GET url directly (bypassing _get's error-swallowing) and report
+        exactly what happened — status, headers, and either a content
+        summary (success) or the raw error (failure)."""
+        entry = {"url": url}
+        try:
+            r = SESSION.get(url, timeout=20)
+            entry["status"] = r.status_code
+            entry["content_type"] = r.headers.get("content-type")
+            entry["content_length"] = len(r.content)
+            if r.status_code >= 400:
+                entry["error_body"] = r.text[:500]
+                return entry, None
+            return entry, (r.content if binary else r.text)
+        except Exception as e:
+            entry["exception"] = f"{type(e).__name__}: {e}"
+            return entry, None
+
     def _inspect():
-        out = {}
-        # STTM CURRENTDAY — int676 all rows, int678 all rows
-        url = f"{STTM_BASE}/CURRENTDAY.ZIP"
-        r = _get(url, timeout=30)
-        if r:
-            with _zf.ZipFile(_io.BytesIO(r.content)) as z:
-                out["sttm_files"] = z.namelist()
-                for prefix, key in [("int676", "int676_rows"), ("int678", "int678_rows"), ("int651", "int651_rows")]:
-                    matches = [n for n in z.namelist() if prefix in n.lower()]
-                    if matches:
-                        with z.open(matches[0]) as f:
-                            out[key] = list(_csv.DictReader(_io.TextIOWrapper(f, errors="replace")))
-        # VicGas INT041 all rows
-        r041 = _get(f"{VICGAS_BASE}/INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", timeout=15)
-        if r041:
-            out["vicgas_int041_rows"] = list(_csv.DictReader(_io.StringIO(r041.text)))
-        # VicGas INT037B first 5 lines
-        r037 = _get(f"{VICGAS_BASE}/INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV", timeout=15)
-        if r037:
-            out["vicgas_int037b_first5"] = r037.text.splitlines()[:5]
-        # VicGas INT050 all rows
-        r050 = _get(f"{VICGAS_BASE}/INT050_V4_SCHED_WITHDRAWALS_1.CSV", timeout=15)
-        if r050:
-            out["vicgas_int050_rows"] = list(_csv.DictReader(_io.StringIO(r050.text)))
+        out = {"probes": []}
+
+        # Directory listings first — tells us straight away whether the
+        # base path itself resolves, independent of any specific filename.
+        for label, base_url in [("sttm_dir", STTM_BASE + "/"), ("vicgas_dir", VICGAS_BASE + "/")]:
+            entry, text = _probe(base_url)
+            entry["label"] = label
+            if text:
+                entry["sample_hrefs"] = _re.findall(r'href="([^"]+)"', text)[:15]
+            out["probes"].append(entry)
+
+        # STTM CURRENTDAY.ZIP
+        entry, content = _probe(f"{STTM_BASE}/CURRENTDAY.ZIP", binary=True)
+        entry["label"] = "sttm_currentday_zip"
+        out["probes"].append(entry)
+        if content:
+            try:
+                with _zf.ZipFile(_io.BytesIO(content)) as z:
+                    out["sttm_files"] = z.namelist()
+                    for prefix, key in [("int676", "int676_rows"), ("int678", "int678_rows"), ("int651", "int651_rows")]:
+                        matches = [n for n in z.namelist() if prefix in n.lower()]
+                        if matches:
+                            with z.open(matches[0]) as f:
+                                out[key] = list(_csv.DictReader(_io.TextIOWrapper(f, errors="replace")))[:5]
+            except Exception as e:
+                out["sttm_zip_error"] = f"{type(e).__name__}: {e}"
+
+        # VicGas CSVs
+        for filename, key in [
+            ("INT041_V4_MARKET_AND_REFERENCE_PRICES_1.CSV", "vicgas_int041_rows"),
+            ("INT037B_V4_INDICATIVE_MKT_PRICE_1.CSV", "vicgas_int037b_first5"),
+            ("INT050_V4_SCHED_WITHDRAWALS_1.CSV", "vicgas_int050_rows"),
+        ]:
+            entry, text = _probe(f"{VICGAS_BASE}/{filename}")
+            entry["label"] = key
+            out["probes"].append(entry)
+            if text:
+                if key == "vicgas_int037b_first5":
+                    out[key] = text.splitlines()[:5]
+                else:
+                    out[key] = list(_csv.DictReader(_io.StringIO(text)))[:5]
+
         return out
 
     result = await loop.run_in_executor(None, _inspect)
