@@ -2499,6 +2499,16 @@ ERARING_PRICE_CAP = 300.0
 _eraring_daily_cache: dict = {}
 _eraring_backfill_running = False
 
+# Bump whenever _compute_eraring_day_stats' output shape OR the inputs that
+# feed it change in a way that makes previously-cached days wrong or
+# incomplete (not just "missing a new field") — e.g. schema 2 fixed
+# scrape_eraring_price_archive silently discarding 5/6 of a day's SCADA
+# production by matching 5-min output against 30-min settlement prices on
+# exact label only. Stamped onto every computed day; _eraring_cache_entry_stale
+# treats anything below this as needing a full recompute, not just a
+# missing-field patch.
+_ERARING_SCHEMA_VERSION = 2
+
 
 def _compute_eraring_day_stats(date_str: str, duid_hist: dict, nsw_prices: dict, cap300: bool = False):
     """
@@ -2533,7 +2543,8 @@ def _compute_eraring_day_stats(date_str: str, duid_hist: dict, nsw_prices: dict,
     if not common:
         return {"date": date_str, "production_mwh": round(production_mwh, 1),
                 "twp": None, "dwap": None, "ratio": None, "intervals": 0,
-                "sum_mw": 0.0, "sum_mw_price": 0.0, "sum_price": 0.0}
+                "sum_mw": 0.0, "sum_mw_price": 0.0, "sum_price": 0.0,
+                "_schema": _ERARING_SCHEMA_VERSION}
 
     sum_mw = sum_mw_price = sum_price = 0.0
     for l in common:
@@ -2562,6 +2573,7 @@ def _compute_eraring_day_stats(date_str: str, duid_hist: dict, nsw_prices: dict,
         "sum_mw": sum_mw,
         "sum_mw_price": sum_mw_price,
         "sum_price": sum_price,
+        "_schema": _ERARING_SCHEMA_VERSION,
     }
 
 
@@ -2674,11 +2686,13 @@ async def _load_eraring_cache_from_github():
 def _eraring_cache_entry_stale(date_str: str) -> bool:
     """
     True if date_str needs (re-)computing: either wholly absent from
-    _eraring_daily_cache, or present but written by an older code version
-    that didn't persist the raw weighted-sum components (sum_mw,
-    sum_mw_price, sum_price) that monthly aggregation needs — a schema
-    upgrade, not just a missing-data check. A confirmed-unavailable entry
-    (None) is not stale; there's nothing more to fetch for it.
+    _eraring_daily_cache, or present but stamped with an older
+    _ERARING_SCHEMA_VERSION than the currently-running code produces —
+    covers both "missing a newly-added field" and "computed with since-
+    fixed logic" schema bumps, not just a missing-data check. A confirmed-
+    unavailable entry (None) is not stale; there's nothing more to fetch
+    for it. An entry with no "_schema" at all predates the field itself,
+    so it's always stale.
     """
     if date_str not in _eraring_daily_cache:
         return True
@@ -2686,7 +2700,7 @@ def _eraring_cache_entry_stale(date_str: str) -> bool:
     if entry is None:
         return False
     full = entry.get("full")
-    return bool(full) and "sum_mw" not in full
+    return bool(full) and full.get("_schema", 0) < _ERARING_SCHEMA_VERSION
 
 
 async def _run_eraring_backfill(days: int = 30):
