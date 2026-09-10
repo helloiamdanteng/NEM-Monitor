@@ -1265,7 +1265,16 @@ def scrape_predispatch_demand(text: str) -> dict:
             if row.get("INTERVENTION", "0") not in ("0", ""):
                 continue
             dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
-            demand_str = row.get("DEMAND_AND_NONSCHEDGEN", row.get("TOTALDEMAND", row.get("DEMAND", "")))
+            # AEMO only backfills TOTALDEMAND/DEMAND_AND_NONSCHEDGEN for a
+            # short near-term window of predispatch periods (confirmed live:
+            # 15 of ~63 future periods) — DEMANDFORECAST is the field
+            # actually populated across the full predispatch horizon, so
+            # try it first. `or`-chained rather than nested .get(k, default)
+            # calls: a field that's *present but empty* (as TOTALDEMAND
+            # commonly is here) must still fall through to the next
+            # candidate, which nested .get() defaults don't do.
+            demand_str = (row.get("DEMANDFORECAST") or row.get("DEMAND_AND_NONSCHEDGEN")
+                          or row.get("TOTALDEMAND") or row.get("DEMAND") or "")
             if not dt_str or not demand_str:
                 continue
             try:
@@ -1459,7 +1468,12 @@ def scrape_tomorrow_demand(text: str, stpasa: dict) -> dict:
             if row.get("INTERVENTION", "0") not in ("0", ""):
                 continue
             dt_str = row.get("DATETIME", row.get("SETTLEMENTDATE", ""))
-            demand_str = row.get("DEMAND_AND_NONSCHEDGEN", row.get("TOTALDEMAND", row.get("DEMAND", "")))
+            # Same AEMO field-backfill quirk as scrape_predispatch_demand —
+            # DEMANDFORECAST is populated across the full horizon,
+            # TOTALDEMAND/DEMAND_AND_NONSCHEDGEN only for a near-term
+            # window (and often present-but-empty, hence `or`-chained).
+            demand_str = (row.get("DEMANDFORECAST") or row.get("DEMAND_AND_NONSCHEDGEN")
+                          or row.get("TOTALDEMAND") or row.get("DEMAND") or "")
             if not dt_str or not demand_str:
                 continue
             try:
