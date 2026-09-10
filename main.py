@@ -3848,6 +3848,87 @@ async def pd_debug():
     return results
 
 
+@app.get("/api/predispatch-demand-debug")
+async def predispatch_demand_debug():
+    """
+    Diagnose why the Demand+Non-Sched-Gen chart's predispatch (dashed)
+    series is empty while the Wind+Solar chart's predispatch series (same
+    source file, same PREDISPATCH_REGION_SOLUTION table, same INTERVENTION
+    filter) renders fine — so the difference has to be in the demand-
+    specific field lookup or date filter, not general predispatch fetch
+    health. Dumps the real column names + a sample row, row counts before/
+    after each filtering step, and what scrape_predispatch_demand /
+    scrape_predispatch_generation actually return right now.
+    """
+    from scraper import (
+        _fetch_predispatch, _parse_aemo, scrape_predispatch_demand,
+        scrape_predispatch_generation, AEST,
+    )
+    from datetime import datetime, timedelta
+
+    loop = asyncio.get_running_loop()
+
+    def _inspect():
+        out = {}
+        text = _fetch_predispatch()
+        out["text_length"] = len(text or "")
+        if not text:
+            out["error"] = "predispatch fetch returned empty text"
+            return out
+
+        now_aest = datetime.now(AEST).replace(tzinfo=None)
+        today = now_aest.date()
+        out["now_aest"] = now_aest.isoformat()
+
+        for tk in ["PREDISPATCH_REGION_SOLUTION", "PREDISPATCH_REGIONSOLUTION"]:
+            rows = _parse_aemo(text, tk)
+            if not rows:
+                out[tk] = {"row_count": 0}
+                continue
+            sample = rows[0]
+            nsw_today_future = [
+                r for r in rows
+                if r.get("REGIONID") == "NSW1"
+                and r.get("INTERVENTION", "0") in ("0", "")
+            ]
+            intervention_values = sorted(set(r.get("INTERVENTION", "<missing>") for r in rows))
+            parsed_dates = []
+            for r in nsw_today_future[:5]:
+                dt_str = r.get("DATETIME", r.get("SETTLEMENTDATE", ""))
+                entry = {"raw_datetime": dt_str}
+                try:
+                    dt = datetime.fromisoformat(dt_str.replace("/", "-")) - timedelta(minutes=30)
+                    entry["shifted"] = dt.isoformat()
+                    entry["is_today"] = (dt.date() == today)
+                    entry["is_future"] = (dt > now_aest)
+                except Exception as e:
+                    entry["parse_error"] = str(e)
+                parsed_dates.append(entry)
+            out[tk] = {
+                "row_count": len(rows),
+                "all_keys": sorted(sample.keys()),
+                "sample_row_nsw1": next((r for r in rows if r.get("REGIONID") == "NSW1"), sample),
+                "intervention_values_seen": intervention_values,
+                "nsw1_non_intervention_rows": len(nsw_today_future),
+                "sample_parsed_dates": parsed_dates,
+            }
+            break  # scrape_predispatch_demand/_generation only use the first table that has rows
+
+        out["scrape_predispatch_demand_result"] = {
+            r: len(v) for r, v in scrape_predispatch_demand(text).items()
+        }
+        out["scrape_predispatch_generation_result"] = {
+            r: len(v) for r, v in scrape_predispatch_generation(text).items()
+        }
+        return out
+
+    try:
+        result = await asyncio.wait_for(loop.run_in_executor(None, _inspect), timeout=30.0)
+        return JSONResponse(content=result)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"{type(e).__name__}: {e}"})
+
+
 @app.get("/api/station-debug")
 async def station_debug():
     from scraper import _duid_history
