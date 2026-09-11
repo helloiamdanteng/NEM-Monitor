@@ -3924,6 +3924,17 @@ async def predispatch_demand_debug():
 
     try:
         result = await asyncio.wait_for(loop.run_in_executor(None, _inspect), timeout=30.0)
+        # Also report what the LIVE fast_cache (what /api/data actually
+        # serves to the frontend right now) currently holds for
+        # predispatch_demand — a fresh on-demand fetch above proving the
+        # function works doesn't prove the periodic fast_loop cycle that
+        # populates the live cache is seeing the same result.
+        live_pd = (fast_cache.get("data") or {}).get("predispatch_demand", {})
+        result["live_cache"] = {
+            "fast_cache_last_updated": fast_cache.get("last_updated"),
+            "fast_cache_error": fast_cache.get("error"),
+            "predispatch_demand_counts": {r: len(v) for r, v in live_pd.items()},
+        }
         return JSONResponse(content=result)
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"{type(e).__name__}: {e}"})
